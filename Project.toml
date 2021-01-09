@@ -1,0 +1,13 @@
+name = "Bolt"
+uuid = "d94d39b4-3f51-4e5a-bfd8-f3b08e8f2b62"
+authors = ["Zack Li"]
+version = "0.1.0"
+
+[compat]
+julia = "1.5"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
