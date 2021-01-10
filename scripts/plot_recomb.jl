@@ -2,20 +2,23 @@ using Bolt
 using PyPlot
 using Unitful, UnitfulAstro, NaturallyUnitful
 
+import Bolt: z2a
+
 par = Cosmo()
 
 # integrate saha to some transition redshift, we choose 1587.4
 z_transition = 1587.4
+a_transition = z2a(z_transition)
 saha_z_grid = 1800:-10:z_transition
-saha_a_grid = 1.0 ./ (saha_z_grid .+ 1)
-saha_Xₑ_grid = Bolt.saha_Xₑ(saha_a_grid, par)
+peebles_z_grid = z_transition:-10:100
 
-peebles_a_grid, peebles_Xₑ_grid = Bolt.peebles_Xₑ(
-    par, saha_Xₑ_grid[end], saha_a_grid[end], 0.01)
+early_time_Xₑ = Bolt.saha_Xₑ(par)
+late_time_Xₑ = Bolt.peebles_Xₑ(
+    par, early_time_Xₑ(a_transition), a_transition, 0.01)
 
 clf()
-plot(saha_z_grid, saha_Xₑ_grid, "-", label="Saha")
-plot(1 ./ peebles_a_grid .- 1, peebles_Xₑ_grid, "-", label="Peebles")
+plot(saha_z_grid, [early_time_Xₑ(z2a(z)) for z in saha_z_grid], "-", label="Saha")
+plot(peebles_z_grid, [late_time_Xₑ(z2a(z)) for z in peebles_z_grid], "-", label="Peebles")
 ylabel(raw"$X_e$")
 xlim(1800,0)
 ylim(2e-4, 2)
