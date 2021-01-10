@@ -5,11 +5,10 @@ export Cosmo
 using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
 using NLsolve
-using OrdinaryDiffEq
+using DifferentialEquations
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
-
 
 abstract type AbstractCosmo{T} end
 
@@ -25,17 +24,23 @@ abstract type AbstractCosmo{T} end
     n = 1.0  # spectral index
     Y_p = 0.0  # primordial helium fraction
     T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
+
+    # derived parameters
     H₀ = ustrip(natural(h * 100.0u"km/s/Mpc"))  # Hubble constant [s^-1]
     ρ_c = (3 / 8π) * H₀^2 /
         ustrip(natural(float(NewtonianConstantOfGravitation))) # critical density [eV⁴]
 
-    # recombination parameters
-    Λ_2s_to_1s = ustrip(natural(8.227u"s^-1"))  # rate of hydrogen double transition from 2s to 1s
-    ε₀_H = ustrip(natural(13.605698u"eV"))  # ionization energy of hydrogen
-    m_e = ustrip(natural(float(ElectronMass)))
-    m_H = ustrip(natural(float(ProtonMass)))
-    α = ustrip(natural(float(FineStructureConstant)))
 end
+
+# Hubble parameter ȧ/a in Friedmann background
+H(a, par) = par.H₀ * √((par.Ω_m + par.Ω_b) * a^(-3) + par.Ω_r * a^(-4) + par.Ω_Λ)
+
+# conformal time Hubble parameter, (1/a) * da/dη
+ℋ(a, par) = par.H₀ * √((par.Ω_m + par.Ω_b) * a^(-1) + par.Ω_r * a^(-2) + par.Ω_Λ * a^2)
+
+# note: x ≡ ln a
+
+
 
 include("recombination.jl")
 
