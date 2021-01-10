@@ -1,10 +1,3 @@
-# recombination parameters for Saha/Peebles
-const Λ_2s_to_1s = ustrip(natural(8.227u"s^-1"))  # rate of hydrogen double transition from 2s to 1s
-const ε₀_H = ustrip(natural(13.605698u"eV"))  # ionization energy of hydrogen
-const m_e = ustrip(natural(float(ElectronMass)))
-const m_H = ustrip(natural(float(ProtonMass)))
-const α = ustrip(natural(float(FineStructureConstant)))
-
 # Saha Equation
 # Useful for high ionization fractions.
 
@@ -46,29 +39,34 @@ saha_Xₑ(a⃗::Vector{T}, par) where T = T[saha_Xₑ(a, par) for a in a⃗]
 # Peebles Equation
 # Use this for Xₑ < 0.99, i.e. z < 1587.4
 
+# recombination parameters for Saha/Peebles
+const Λ_2s_to_1s = ustrip(natural(8.227u"s^-1"))  # rate of hydrogen double transition from 2s to 1s
+const ε₀_H = ustrip(natural(13.605698u"eV"))  # ionization energy of hydrogen
+const m_e = ustrip(natural(float(ElectronMass)))
+const m_H = ustrip(natural(float(ProtonMass)))
+const α = ustrip(natural(float(FineStructureConstant)))
+
 # auxillary equations
 ϕ₂(T_b) = 0.448 * log(ε₀_H / T_b)
 α⁽²⁾(T_b) = (64π / √(27π)) * (α^2 / m_e^2) * √(ε₀_H / T_b) * ϕ₂(T_b)
 β(T_b) = α⁽²⁾(T_b) * (m_e * T_b / (2π))^(3/2) * exp(-ε₀_H / T_b)
-β⁽²⁾(T_b) = β(T_b) * exp(ε₀_H / 4T_b)
+β⁽²⁾(T_b) = β(T_b) * exp(3ε₀_H / 4T_b)
 n₁ₛ(a, Xₑ, par) = (1 - Xₑ) * n_H(a, par)
 Λ_α(a, Xₑ, par) = H(a, par) * (3ε₀_H)^3 / ((8π)^2 * n₁ₛ(a, Xₑ, par))
 Cᵣ(a, Xₑ, T_b, par) = (Λ_2s_to_1s + Λ_α(a, Xₑ, par)) / (
     Λ_2s_to_1s + Λ_α(a, Xₑ, par) + β⁽²⁾(T_b))
 
 # RHS of Callin06 eq. 13
-function peebles_rhs(Xₑ, a, par)
+function peebles_Xₑ′(Xₑ, par, x)
+    a = exp(x)
     T_b_a = T_b(a, par)
     return Cᵣ(a, Xₑ, T_b_a, par) / H(a, par) * (
         β(T_b_a) * (1 - Xₑ) - n_H(a, par) * α⁽²⁾(T_b_a) * Xₑ^2)
 end
 
-function peebles_Xₑ(par, Xₑ₀, a_start, a_end) where T
-    function peebles_eq(u,p,t)
-        # return Bolt.peebles_rhs(u, t, par)
-        return 0.1
-    end
-    prob = ODEProblem(peebles_eq, Xₑ₀, (a_start, a_end))
+function peebles_Xₑ(par, Xₑ₀, a_start, a_end)
+    # integrate dXₑ/dx = peebles_Xₑ′
+    prob = ODEProblem(peebles_Xₑ′, Xₑ₀, (log(a_start), log(a_end)), par)
     sol = solve(prob, Tsit5(), reltol=1e-8, abstol=1e-8)
-    return sol
+    return exp.(sol.t), sol.u
 end
