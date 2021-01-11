@@ -9,6 +9,9 @@ using NLsolve
 using OrdinaryDiffEq
 using NumericalIntegration
 using Interpolations
+using ForwardDiff
+using OffsetArrays
+using QuadGK
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
@@ -24,7 +27,17 @@ abstract type AbstractCosmo{T, DT} end
     n = 1.0  # spectral index
     Y_p = 0.0  # primordial helium fraction
     T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
+
+    lmax::Int = 10
+    ℓᵧ::Int = 6  # Boltzmann hierarchy cutoff
 end
+
+# # utility function to make scalar interpolators
+# function differentiable_interpolator(xgrid, ygrid)
+#     itp = interpolate((xgrid,), ygrid, Gridded(Linear()))
+#     f(c) = Zygote.forwarddiff(c -> itp(c), c)
+#     return f
+# end
 
 # derived quantities (make sure to convert to natural units)
 const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [eV]
@@ -34,13 +47,22 @@ const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation)))
 Ω_Λ(par::AbstractCosmo) = 1 - (par.Ω_r + par.Ω_b + par.Ω_m)  # dark energy density
 
 # Hubble parameter ȧ/a in Friedmann background
-H(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3) + par.Ω_r * a^(-4) + Ω_Λ(par))
+H_a(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3) + par.Ω_r * a^(-4) + Ω_Λ(par))
+H(x, par) = H_a(x2a(x),par)
 
-# conformal time Hubble parameter, (1/a) * da/dη
-ℋ(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-1) + par.Ω_r * a^(-2) + Ω_Λ(par) * a^2)
+# conformal time Hubble parameter, aH
+ℋ_a(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-1) + par.Ω_r * a^(-2) + Ω_Λ(par) * a^2)
+ℋ(x, par) = ℋ_a(x2a(x), par)
 
 # conformal time
-η(a::T, par) where T = quadgk(a′ -> one(T) / (a′ * ℋ(a′, par)), zero(T), a)[1]
+function η_function(xgrid, par::AbstractCosmo{T,DT}) where {T, DT}
+    agrid = x2a.(xgrid)
+    η_integrands = [one(T) / (a * ℋ_a(a, par)) for a in agrid]
+    η = cumul_integrate(xgrid, η_integrands)
+    return interpolate((xgrid,), η, Gridded(Linear()))
+end
+
+
 
 # utilities for x ↔ scale factor ↔ redshift
 a2z(a::T) where T = one(T)/a - one(T)

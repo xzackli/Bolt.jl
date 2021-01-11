@@ -5,17 +5,12 @@
 n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
 n_H(a, par) = n_b(a, par)  # ignoring helium for now
 T_b(a, par) = par.T₀ / a
-saha_rhs(a::T, par) where T = (m_e * T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
+saha_rhs(a, par) = (m_e * T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
     exp(-ε₀_H / T_b(a, par))  # rhs of Callin06 eq. 12
 
-
-function saha_Xₑ(x::T, par::AbstractCosmo{T, DT}) where {T, DT}
+function saha_Xₑ(x, par::AbstractCosmo)
     rhs = saha_rhs(x2a(x), par)
-    function f!(F, Xe)
-        F[1] = Xe[1]^2 / (one(DT) - Xe[1]) - rhs
-    end
-    res = nlsolve(f!, [0.99 * one(DT)], autodiff = :forward)
-    return res.zero[1]
+    return  (√(rhs^2 + 4rhs) - rhs) / 2  # solve Xₑ² / (1-Xₑ) = RHS, it's a polynomial
 end
 
 
@@ -58,7 +53,7 @@ const σ_T = ustrip(natural(float(ThomsonCrossSection)))
 β(T_b) = α⁽²⁾(T_b) * (m_e * T_b / (2π))^(3/2) * exp(-ε₀_H / T_b)
 β⁽²⁾(T_b) = β(T_b) * exp(3ε₀_H / 4T_b)
 n₁ₛ(a, Xₑ, par) = (1 - Xₑ) * n_H(a, par)
-Λ_α(a, Xₑ, par) = H(a, par) * (3ε₀_H)^3 / ((8π)^2 * n₁ₛ(a, Xₑ, par))
+Λ_α(a, Xₑ, par) = H_a(a, par) * (3ε₀_H)^3 / ((8π)^2 * n₁ₛ(a, Xₑ, par))
 Cᵣ(a, Xₑ, T_b, par) = (Λ_2s_to_1s + Λ_α(a, Xₑ, par)) / (
     Λ_2s_to_1s + Λ_α(a, Xₑ, par) + β⁽²⁾(T_b))
 
@@ -66,7 +61,7 @@ Cᵣ(a, Xₑ, T_b, par) = (Λ_2s_to_1s + Λ_α(a, Xₑ, par)) / (
 function peebles_Xₑ′(Xₑ, par, x)
     a = exp(x)
     T_b_a = BigFloat(T_b(a, par))  # handle overflows by switching to bigfloat
-    return float(Cᵣ(a, Xₑ, T_b_a, par) / H(a, par) * (
+    return float(Cᵣ(a, Xₑ, T_b_a, par) / H_a(a, par) * (
         β(T_b_a) * (1 - Xₑ) - n_H(a, par) * α⁽²⁾(T_b_a) * Xₑ^2))
 end
 
@@ -90,7 +85,7 @@ ionization fraction.
 function peebles_Xₑ(par, Xₑ₀, x_start, x_end)
     # set up problem and integrate dXₑ/dx = peebles_Xₑ′
     prob = ODEProblem(peebles_Xₑ′, Xₑ₀, (x_start, x_end), par)
-    sol = solve(prob, Tsit5(), reltol=1e-8, abstol=1e-8)
+    sol = solve(prob, Tsit5(), reltol=1e-11, abstol=1e-11)
     return sol  # ode solutions work as interpolator
 end
 
@@ -117,15 +112,18 @@ end
 
 function τ_integrand_x(x, Xₑ_function, par)
     a = x2a(x)
-    return Xₑ_function(x) * n_H(a, par) * σ_T * a / ℋ(a, par)
+    return Xₑ_function(x) * n_H(a, par) * σ_T * a / ℋ_a(a, par)
 end
 # τ_x(x::Real, Xₑ_function, par) = quadgk(x->τ_integrand_x(x, Xₑ_function, par), x, 0.0)[1]
 
-function τ_x(x::Vector, Xₑ_function, par::AbstractCosmo)
-    @assert x[1] > x[2]
-    τ_integrands = [-τ_integrand_x(x_, Xₑ_function, par) for x_ in x]
-    τ = cumul_integrate(x, τ_integrands)
-    return interpolate((reverse(x),),reverse(τ),Gridded(Linear()))
+# optical depth to reionization
+function τ_function(x::Vector, Xₑ_function, par::AbstractCosmo)
+    @assert x[2] > x[1]  # CONVENTION: x increasing always
+    # do a reverse cumulative integrate
+    rx = reverse(x)
+    τ_integrands = [-τ_integrand_x(x_, Xₑ_function, par) for x_ in rx]
+    τ = reverse(cumul_integrate(rx, τ_integrands))
+    return interpolate((x,),τ,Gridded(Linear()))
 end
 
 function τ̇(x, Xₑ_function, par)
@@ -135,11 +133,13 @@ end
 
 function τ′(x, Xₑ_function, par)
     a = x2a(x)
-    return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ(a, par)
+    return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_a(a, par)
 end
 
-function g̃(par, Xₑ_function, τ_x_function)
+function g̃_function(par, Xₑ_function, τ_x_function)
     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x))
 end
 
-# need τ(x) and g̃(x) for source function
+# function g_function(par, Xₑ_function, τ_x_function)
+#     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x)) * ℋ(x, par)
+# end
