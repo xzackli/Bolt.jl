@@ -1,11 +1,14 @@
 module Bolt
 
-export Cosmo, AbstractCosmo, z2a, a2z
+export Cosmo, AbstractCosmo
+export z2a, a2z, x2a, a2x, z2x, x2z
 
 using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
 using NLsolve
 using OrdinaryDiffEq
+using NumericalIntegration
+using Interpolations
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
@@ -36,11 +39,16 @@ H(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3) + par.Ω_r * a^(-4) +
 # conformal time Hubble parameter, (1/a) * da/dη
 ℋ(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-1) + par.Ω_r * a^(-2) + Ω_Λ(par) * a^2)
 
+# conformal time
+η(a::T, par) where T = quadgk(a′ -> one(T) / (a′ * ℋ(a′, par)), zero(T), a)[1]
 
-# # utilities
+# utilities for x ↔ scale factor ↔ redshift
 a2z(a::T) where T = one(T)/a - one(T)
-z2a(z::T) where T = one(T)/(z+one(T))
-
+z2a(z::T) where T = one(T)/(z + one(T))
+a2x(a) = log(a)
+x2a(x) = exp(x)
+z2x(z) = a2x(z2a(z))
+x2z(x) = a2z(x2a(x))
 
 include("recombination.jl")
 include("perturbations.jl")

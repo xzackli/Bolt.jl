@@ -1,3 +1,5 @@
+# test that the ionization history is differentiable
+
 using Bolt
 using Parameters
 using PyPlot
@@ -18,11 +20,12 @@ end
 function f(Ω_b)
     par = GradientCosmo(Ω_b=Ω_b)
     z_transition = 1587.4
-    a_transition = z2a(z_transition)
-    saha_z_grid = 1800:-10:z_transition
-    peebles_z_grid = z_transition:-10:100
-    early_time_Xₑ = Bolt.saha_Xₑ(par)
-    return early_time_Xₑ(a_transition)
+    x_transition = z2x(z_transition)
+
+    Xₑ = Bolt.saha_peebles_recombination(par)
+    # return Xₑ(a_transition * 1.2)
+    xgrid = collect(0.0:-0.05:-18)
+    return (Bolt.τ_x(xgrid, Xₑ, par))[end]
 end
 
 
