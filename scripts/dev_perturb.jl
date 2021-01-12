@@ -11,7 +11,7 @@ using ForwardDiff
 ∂ₓ(f, x) = ForwardDiff.derivative(f, x)
 
 par = Cosmo()
-xgrid = collect(-18.5:0.01:0.0)
+xgrid = collect(-18.5:0.001:0.0)
 zgrid = x2z.(xgrid)
 Xₑ = Bolt.saha_peebles_recombination(par)
 τ, τ′, τ′′ = Bolt.τ_functions(xgrid, Xₑ, par)
@@ -35,10 +35,10 @@ function hierarchy!(du, u, p::AbstractCosmo, x)
     R = 4Ω_r / (3Ω_b * a)
 
     # get array views of photon perturbations
-    Θ = @views OffsetVector(u[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θ′ = @views  OffsetVector(du[1:(ℓᵧ+1)], 0:ℓᵧ)
-    Θᵖ = @views  OffsetVector(u[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ′ = @views OffsetVector(du[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)
+    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θ′ = OffsetVector(view(du, 1:(ℓᵧ+1)), 0:ℓᵧ)
+    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θᵖ′ = OffsetVector(view(du, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)
     Φ, δ, v, δ_b, v_b = u[(2ℓᵧ+3):(2ℓᵧ+7)]
 
     # metric perturbations
@@ -51,32 +51,27 @@ function hierarchy!(du, u, p::AbstractCosmo, x)
     v′ = -v - k / ℋₓ * Ψ
     δ_b′ = k / ℋₓ * v_b - 3Φ′
 
-    # TCA photons
-    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
     if TCA_condition(k, ℋₓ, τₓ′)
         Θ′[2] = 0.0  # could be solved for
-        for i in 1:10
-            term_3Θ′_vb′ = (
-                -((1-R)*τₓ′ + (1+R)*τₓ′′) * (3Θ[1] + v_b) - k * Ψ / ℋₓ
-                + (1 - ℋₓ′ / ℋₓ) * (k / ℋₓ) * (-Θ[0] + 2Θ[2]) + k / ℋₓ * (-Θ′[0] + 2Θ′[2])
-            ) / ((1+R)*τₓ′ + ℋₓ′ / ℋₓ - 1)
-            v_b′ = (-v_b - k * Ψ / ℋₓ + R * (
-                term_3Θ′_vb′ + k / ℋₓ * (-Θ[0] + 2Θ[2]) - k / ℋₓ * Ψ
-            )) / (1+R)
-            Θ′[1] = (term_3Θ′_vb′ - v_b′) / 3
-            Θ′[2] = 2k / (5ℋₓ) * Θ[1] - 3k / (5 * ℋₓ) * Θ[3] + τₓ′ * (Θ[2] - Π / 10)
-        end
+        term_3Θ′_vb′ = (
+            -((1-R)*τₓ′ + (1+R)*τₓ′′) * (3Θ[1] + v_b) - k * Ψ / ℋₓ
+            + (1 - ℋₓ′ / ℋₓ) * (k / ℋₓ) * (-Θ[0] + 2Θ[2]) + k / ℋₓ * (-Θ′[0] + 2Θ′[2])
+        ) / ((1+R)*τₓ′ + ℋₓ′ / ℋₓ - 1)
+        v_b′ = (-v_b - k * Ψ / ℋₓ + R * (
+            term_3Θ′_vb′ + k / ℋₓ * (-Θ[0] + 2Θ[2]) - k / ℋₓ * Ψ
+        )) / (1+R)
+        Θ′[1] = (term_3Θ′_vb′ - v_b′) / 3
     else
         v_b′ = -v_b - k / ℋₓ * Ψ + τₓ′ * R * (3Θ[1] + v_b)
         Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
-        Θ′[2] = 2k / (5ℋₓ) * Θ[1] - 3k / (5 * ℋₓ) * Θ[3] + τₓ′ * (Θ[2] - Π / 10)
     end
 
     # photons
-    for ℓ in 3:(ℓᵧ-1)
+    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+    for ℓ in 2:(ℓᵧ-1)
         Θ′[ℓ] = ℓ * k / ((2ℓ+1) * ℋₓ) * Θ[ℓ-1] -
-            (ℓ+1) * k / ((2ℓ+1) * ℋₓ) * Θ[ℓ+1] + τₓ′ * Θ[ℓ]
+            (ℓ+1) * k / ((2ℓ+1) * ℋₓ) * Θ[ℓ+1] + τₓ′ * (Θ[ℓ] - Π * δ_kron(ℓ, 2) / 10)
     end
     # polarized photons
     Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
@@ -88,19 +83,18 @@ function hierarchy!(du, u, p::AbstractCosmo, x)
     Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * η(x)) + τₓ′ * Θ[ℓᵧ]
     Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * η(x)) + τₓ′ * Θᵖ[ℓᵧ]
 
-    du[(2ℓᵧ+3):(2ℓᵧ+7)] .= Φ′, δ, v′, δ_b′, v_b′
-    # du[1:(ℓᵧ+1)] .= Θ′.parent
-    # du[(ℓᵧ+2):(2ℓᵧ+2)] .= Θᵖ′.parent
+    du[(2ℓᵧ+3):(2ℓᵧ+7)] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
     return nothing
 end
 
+##
 function adiabatic_initial_conditions(par::AbstractCosmo{T,DT}, xᵢ) where {T,DT}
     ℓᵧ = par.ℓᵧ
     u = zeros(DT, 2ℓᵧ+7)
     ℋₓ = Bolt.ℋ(xᵢ, par)
     τₓ′ = Bolt.τ′(xᵢ, Xₑ, par)
-    Θ = OffsetVector(u[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ = OffsetVector(u[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
 
     # metric and matter perturbations
     Φ = 1.0
@@ -122,20 +116,17 @@ function adiabatic_initial_conditions(par::AbstractCosmo{T,DT}, xᵢ) where {T,D
     end
 
     u[(2ℓᵧ+3):(2ℓᵧ+7)] .= Φ, δ, v, δ_b, v_b  # pack back in
-    u[1:(ℓᵧ+1)] .= Θ.parent
-    u[(ℓᵧ+2):(2ℓᵧ+2)] .= Θᵖ.parent
     return u
 end
 
 xᵢ = log(1e-8)
 u₀ = adiabatic_initial_conditions(par, xᵢ)
 prob = ODEProblem(hierarchy!, u₀, (xᵢ , 0.0), par)
-@time sol = solve(prob, Rodas4P(), reltol=1e-10, abstol=1e-10)
+sol = solve(prob, Rodas4P(), reltol=1e-10, abstol=1e-10)
 
 ##
 clf()
-xx = xᵢ:0.01:0.0
-plot(x2a.(xx), [abs(sol(x)[3]) for x in xx], "-", label=raw"$|\Theta^p_{\ell=2}|$ photon mode for $k=340H_0$")
+plot(x2a.(xgrid), [abs(sol(x)[8]) for x in xgrid], "-", label=raw"$|\Theta^p_{\ell=2}|$ photon mode for $k=340H_0$")
 xlabel(raw"$a$")
 yscale("log")
 xscale("log")
@@ -183,6 +174,10 @@ function source_function(sol, k, x, par)
     term2 = (-1/k) * (ℋₓ′ * g̃ₓ * v_b + ℋₓ * g̃ₓ′ * v_b + ℋₓ * g̃ₓ * v_b′)
     Π′′ = 2k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * Θ[1] + Θ′[1]) + (3/10) * (τₓ′′ * Π + τₓ′ * Π′) -
         3k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * (Θ[3] + Θᵖ[1] + Θᵖ[3]) + (Θ′[3] + Θᵖ′[1] + Θᵖ′[3]))
+
+    Θ′′ = OffsetVector(u′[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θᵖ′′ = OffsetVector(u′[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+
     term3 = (3/(4k^2)) * (
         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
         ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′)
@@ -208,7 +203,7 @@ plot(xx, [S̃(x) * sphericalbesselj(ℓ̂, k*(η₀ - η(x))) for x in xx], "-",
 
 
 # xlim(-8, 1)
-# ylim(-6e3, 10e3)
+ylim(-6e3, 10e3)
 gcf()
 
 ##
