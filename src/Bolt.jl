@@ -31,7 +31,7 @@ abstract type AbstractCosmo{T, DT} end
     T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
 
     lmax::Int = 10
-    ℓᵧ::Int = 6  # Boltzmann hierarchy cutoff
+    ℓᵧ::Int = 8  # Boltzmann hierarchy cutoff
 end
 
 # # utility function to make scalar interpolators
