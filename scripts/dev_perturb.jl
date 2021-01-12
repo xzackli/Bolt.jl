@@ -11,7 +11,7 @@ using ForwardDiff
 ∂ₓ(f, x) = ForwardDiff.derivative(f, x)
 
 par = Cosmo()
-xgrid = collect(-18.5:0.001:0.0)
+xgrid = collect(-20.0:0.001:0.0)
 zgrid = x2z.(xgrid)
 Xₑ = Bolt.saha_peebles_recombination(par)
 τ, τ′, τ′′ = Bolt.τ_functions(xgrid, Xₑ, par)
@@ -87,7 +87,7 @@ function hierarchy!(du, u, p::AbstractCosmo, x)
     return nothing
 end
 
-##
+
 function adiabatic_initial_conditions(par::AbstractCosmo{T,DT}, xᵢ) where {T,DT}
     ℓᵧ = par.ℓᵧ
     u = zeros(DT, 2ℓᵧ+7)
@@ -122,11 +122,12 @@ end
 xᵢ = log(1e-8)
 u₀ = adiabatic_initial_conditions(par, xᵢ)
 prob = ODEProblem(hierarchy!, u₀, (xᵢ , 0.0), par)
-sol = solve(prob, Rodas4P(), reltol=1e-10, abstol=1e-10)
+@time sol = solve(prob, Rodas4P(), reltol=1e-10)
 
 ##
 clf()
-plot(x2a.(xgrid), [abs(sol(x)[8]) for x in xgrid], "-", label=raw"$|\Theta^p_{\ell=2}|$ photon mode for $k=340H_0$")
+sol_x = sol.t
+plot(x2a.(sol_x), [abs(sol(x)[1]) for x in sol_x], "-", label=raw"$|\Theta_{\ell=0}|$ photon mode for $k=340H_0$")
 xlabel(raw"$a$")
 yscale("log")
 xscale("log")
@@ -145,7 +146,6 @@ gcf()
 
 ##
 function source_function(sol, k, x, par)
-
     u = sol(x)
     u′ = similar(u)
     hierarchy!(u′, u, par, x)
@@ -175,9 +175,6 @@ function source_function(sol, k, x, par)
     Π′′ = 2k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * Θ[1] + Θ′[1]) + (3/10) * (τₓ′′ * Π + τₓ′ * Π′) -
         3k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * (Θ[3] + Θᵖ[1] + Θᵖ[3]) + (Θ′[3] + Θᵖ′[1] + Θᵖ′[3]))
 
-    Θ′′ = OffsetVector(u′[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ′′ = OffsetVector(u′[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-
     term3 = (3/(4k^2)) * (
         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
         ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′)
@@ -185,25 +182,23 @@ function source_function(sol, k, x, par)
     return term1 + term2 + term3
 end
 
-source_function(sol, k, -5.0, par)
+@time source_function(sol, k, -5.0, par)
 
 ##
-S̃(x) = source_function(sol, k, x, par)
-
 using SpecialFunctions
 
+S̃(x) = source_function(sol, k, x, par)
 η₀ = η(0.0)
 
 clf()
 xx = -7.5:0.01:-0.2
 plot(xx, [S̃(x) * sphericalbesselj(ℓ̂, k*(η₀ - η(x))) for x in xx], "-", lw=0.5)
-# plot(xx, [S̃(x) for x in xx], "-", lw=0.5)
-
-# plot(xx, [S̃(x) * sphericalbesselj(6, k*(η₀ - η(x))) for x in xx], "-", lw=1)
 
 
-# xlim(-8, 1)
-ylim(-6e3, 10e3)
 gcf()
+
+##
+using QuadGK
+@time quadgk(x -> S̃(x) * sphericalbesselj(ℓ̂, k*(η₀ - η(x))) , xᵢ, 0.0, rtol=1e-5)
 
 ##
