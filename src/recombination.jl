@@ -110,10 +110,10 @@ end
 
 # visibility functions (OPTIMIZATION OPPORTUNITY) ----------
 
-function τ_integrand_x(x, Xₑ_function, par)
-    a = x2a(x)
-    return Xₑ_function(x) * n_H(a, par) * σ_T * a / ℋ_a(a, par)
-end
+# function τ_integrand_x(x, Xₑ_function, par)
+#     a = x2a(x)
+#     return -Xₑ_function(x) * n_H(a, par) * σ_T * a / ℋ_a(a, par)
+# end
 # τ_x(x::Real, Xₑ_function, par) = quadgk(x->τ_integrand_x(x, Xₑ_function, par), x, 0.0)[1]
 
 # optical depth to reionization
@@ -121,10 +121,28 @@ function τ_function(x::Vector, Xₑ_function, par::AbstractCosmo)
     @assert x[2] > x[1]  # CONVENTION: x increasing always
     # do a reverse cumulative integrate
     rx = reverse(x)
-    τ_integrands = [-τ_integrand_x(x_, Xₑ_function, par) for x_ in rx]
+    τ_integrands = [τ′(x_, Xₑ_function, par) for x_ in rx]
     τ = reverse(cumul_integrate(rx, τ_integrands))
     return interpolate((x,),τ,Gridded(Linear()))
 end
+
+
+function τ_functions(x::Vector, Xₑ_function, par::AbstractCosmo)
+    @assert x[2] > x[1]  # CONVENTION: x increasing always
+    # do a reverse cumulative integrate
+    rx = reverse(x)
+    τ_primes = [τ′(x_, Xₑ_function, par) for x_ in x]
+    τ_integrated = reverse(cumul_integrate(rx, reverse(τ_primes)))
+
+    τ̂ = interpolate((x,),τ_integrated,Gridded(Linear()))
+    τ̂′ = interpolate((x,),τ_primes,Gridded(Linear()))
+
+    xmid = [(x[i] + x[i+1]) / 2 for i in 1:length(x)-1]
+    τ̂′′ = interpolate((xmid,),diff(τ_primes) ./ diff(x),Gridded(Linear()))
+    τ̂′′ = extrapolate(τ̂′′, Flat())
+    return τ̂, τ̂′, τ̂′′
+end
+
 
 function τ̇(x, Xₑ_function, par)
     a = x2a(x)
@@ -136,9 +154,23 @@ function τ′(x, Xₑ_function, par)
     return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_a(a, par)
 end
 
-function g̃_function(par, Xₑ_function, τ_x_function)
-    return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x))
+function g̃_function(τ_x_function, τ′_x_function)
+    return x -> -τ′_x_function(x) * exp(-τ_x_function(x))
 end
+
+function g̃′_function(τ_x_function, τ′_x_function, τ′′_x_function)
+    return x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
+end
+
+function g̃_functions(τ_x_function, τ′_x_function, τ′′_x_function)
+    g̃_ = x -> -τ′_x_function(x) * exp(-τ_x_function(x))
+    g̃′_ = x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
+    return g̃_, g̃′_
+end
+
+# function g̃′_function(par, Xₑ_function, τ_x_function)
+#     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x))
+# end
 
 # function g_function(par, Xₑ_function, τ_x_function)
 #     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x)) * ℋ(x, par)

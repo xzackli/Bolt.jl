@@ -12,6 +12,8 @@ using Interpolations
 using ForwardDiff
 using OffsetArrays
 using QuadGK
+using SpecialFunctions
+# using Zygote
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
@@ -51,14 +53,20 @@ H_a(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3) + par.Ω_r * a^(-4)
 H(x, par) = H_a(x2a(x),par)
 
 # conformal time Hubble parameter, aH
-ℋ_a(a, par) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-1) + par.Ω_r * a^(-2) + Ω_Λ(par) * a^2)
+ℋ_a(a, par) = a * H_a(a, par)
 ℋ(x, par) = ℋ_a(x2a(x), par)
+
+function ℋ′(x, par)
+    a = x2a(x)
+    return -H₀(par) * (2par.Ω_r + (par.Ω_b + par.Ω_m) * a - 2Ω_Λ(par) * a^4) /
+        (2 * a * √(par.Ω_r + (par.Ω_b + par.Ω_m) * a + Ω_Λ(par) * a^4))
+end
+
 
 # conformal time
 function η_function(xgrid, par::AbstractCosmo{T,DT}) where {T, DT}
     agrid = x2a.(xgrid)
-    η_integrands = [one(T) / (a * ℋ_a(a, par)) for a in agrid]
-    η = cumul_integrate(xgrid, η_integrands)
+    η = [quadgk(ap -> 1.0 / (ap * Bolt.ℋ_a(ap, par)), 0.0, a)[1] for a in agrid]
     return interpolate((xgrid,), η, Gridded(Linear()))
 end
 
