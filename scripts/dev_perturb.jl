@@ -11,6 +11,9 @@ using ForwardDiff
 ∂ₓ(f, x) = ForwardDiff.derivative(f, x)
 
 par = Cosmo()
+
+
+k = 340H₀(par)
 xgrid = collect(-20.0:0.001:0.0)
 zgrid = x2z.(xgrid)
 Xₑ = Bolt.saha_peebles_recombination(par)
@@ -20,8 +23,6 @@ g̃′′ = x -> ∂ₓ(g̃′, x)
 η = Bolt.η_function(xgrid, par)
 ℋ, ℋ′ = x -> Bolt.ℋ(x, par), x -> Bolt.ℋ′(x, par)
 
-k = 340H₀(par)
-ℓ̂ = 100
 
 TCA_condition(k, ℋₓ, τₓ′) = (abs(k / (ℋₓ * τₓ′)) < 0.1) & (abs(τₓ′) > 10.0)
 
@@ -122,12 +123,13 @@ end
 xᵢ = log(1e-8)
 u₀ = adiabatic_initial_conditions(par, xᵢ)
 prob = ODEProblem(hierarchy!, u₀, (xᵢ , 0.0), par)
-@time sol = solve(prob, Rodas4P(), reltol=1e-10)
+@time sol = solve(prob, AutoTsit5(Rodas5()), reltol=1e-10)
 
 ##
+figure()
 clf()
 sol_x = sol.t
-plot(x2a.(sol_x), [abs(sol(x)[1]) for x in sol_x], "-", label=raw"$|\Theta_{\ell=0}|$ photon mode for $k=340H_0$")
+plot(x2a.(sol_x), [abs(sol(x)[3]) for x in sol_x], "-", label=raw"$|\Theta_{\ell=3}|$ photon mode for $k=340H_0$")
 xlabel(raw"$a$")
 yscale("log")
 xscale("log")
@@ -138,10 +140,13 @@ gcf()
 
 ##
 clf()
-plot(xgrid, [TCA_condition(k, ℋ(x), τ′(x)) for x in xgrid], "-")
-xlabel(raw"$x$")
+plot(x2a.(xgrid), [TCA_condition(k, ℋ(x), τ′(x)) for x in xgrid], "-", label="TCA yes no")
+axvline(1/1101, ls="dashed", label="recombination")
+xscale("log")
+xlabel(raw"$a$")
 legend()
 gcf()
+
 ##
 
 ##
@@ -192,9 +197,11 @@ S̃(x) = source_function(sol, k, x, par)
 
 clf()
 xx = -7.5:0.01:-0.2
+ℓ̂ = 100
 plot(xx, [S̃(x) * sphericalbesselj(ℓ̂, k*(η₀ - η(x))) for x in xx], "-", lw=0.5)
 
-
+ylabel(raw"Source function $\times$ bessel")
+xlabel(raw"$x$")
 gcf()
 
 ##

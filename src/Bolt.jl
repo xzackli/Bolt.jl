@@ -13,6 +13,7 @@ using ForwardDiff
 using OffsetArrays
 using QuadGK
 using SpecialFunctions
+using ThreadPools
 # using Zygote
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
@@ -30,8 +31,8 @@ abstract type AbstractCosmo{T, DT} end
     Y_p = 0.0  # primordial helium fraction
     T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
 
-    lmax::Int = 10
-    ℓᵧ::Int = 8  # Boltzmann hierarchy cutoff
+    lmax::Int = 3
+    ℓᵧ::Int = 30  # Boltzmann hierarchy cutoff
 end
 
 # # utility function to make scalar interpolators

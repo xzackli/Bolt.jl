@@ -63,6 +63,11 @@ git-tree-sha1 = "15081c431bb25848ad9b0d172a65794f3a3e197a"
 uuid = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 version = "0.9.24"
 
+[[Combinatorics]]
+git-tree-sha1 = "08c8b6831dc00bfea825826be0bc8336fc369860"
+uuid = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+version = "1.0.2"
+
 [[CommonSubexpressions]]
 deps = ["MacroTools", "Test"]
 git-tree-sha1 = "7b8a93dba8af7e3b42fecabf646260105ac373f7"
@@ -193,6 +198,12 @@ deps = ["LinearAlgebra"]
 git-tree-sha1 = "62909c3eda8a25b5673a367d1ad2392ebb265211"
 uuid = "01680d73-4ee2-5a08-a1aa-533608c188bb"
 version = "0.3.0"
+
+[[HCubature]]
+deps = ["Combinatorics", "DataStructures", "LinearAlgebra", "QuadGK", "StaticArrays"]
+git-tree-sha1 = "134af3b940d1ca25b19bc9740948157cee7ff8fa"
+uuid = "19dc6840-f33b-545b-b366-655c7e3ffd49"
+version = "1.5.0"
 
 [[IRTools]]
 deps = ["InteractiveUtils", "MacroTools", "Test"]
@@ -519,6 +530,12 @@ version = "1.2.2"
 [[Test]]
 deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[ThreadPools]]
+deps = ["Printf", "RecipesBase", "Statistics"]
+git-tree-sha1 = "705ccc29d575b87cceb359dfea19f4653d06df8f"
+uuid = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
+version = "1.2.1"
 
 [[TreeViews]]
 deps = ["Test"]
