@@ -19,7 +19,7 @@ f(x::Vector) = sum(sin, x) + prod(tan, x) * sum(sqrt, x)
 
 
 function test()
-    par = Cosmo()
+    par = CosmoParams()
     xgrid = collect(-18:0.01:0.0)
     zgrid = x2z.(xgrid)
     Xₑ = Bolt.saha_peebles_recombination(par)

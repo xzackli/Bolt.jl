@@ -2,7 +2,7 @@ using Bolt
 using PyPlot
 using Unitful, UnitfulAstro, NaturallyUnitful
 
-par = Cosmo()
+par = CosmoParams()
 
 # integrate saha to some transition redshift, we choose 1587.4
 z_transition = 1587.4

@@ -6,7 +6,7 @@ using PyPlot
 using Unitful, UnitfulAstro, NaturallyUnitful
 using ForwardDiff
 
-@with_kw struct GradientCosmo{T, DT} <: Bolt.AbstractCosmo{T, DT} @deftype T
+@with_kw struct GradientCosmo{T, DT} <: Bolt.AbstractCosmoParams{T, DT} @deftype T
     h = 0.7
     Ω_r = 5.042e-5  # radiation density
     Ω_b::DT = 0.046  # baryon density

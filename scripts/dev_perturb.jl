@@ -10,7 +10,7 @@ using ForwardDiff
 δ_kron(i, j) = (i == j) ? 1 : 0
 ∂ₓ(f, x) = ForwardDiff.derivative(f, x)
 
-par = Cosmo()
+par = CosmoParams()
 
 
 k = 340H₀(par)
@@ -27,7 +27,7 @@ g̃′′ = x -> ∂ₓ(g̃′, x)
 TCA_condition(k, ℋₓ, τₓ′) = (abs(k / (ℋₓ * τₓ′)) < 0.1) & (abs(τₓ′) > 10.0)
 
 # NOTE: NO NEUTRINOS 𝒩
-function hierarchy!(du, u, p::AbstractCosmo, x)
+function hierarchy!(du, u, p::AbstractCosmoParams, x)
     ℓᵧ, Ω_r, Ω_b, Ω_m = p.ℓᵧ, p.Ω_r, p.Ω_b, p.Ω_m
     H₀² = H₀(p)^2
     ℋₓ, ℋₓ′ = ℋ(x), ℋ′(x)
@@ -89,7 +89,7 @@ function hierarchy!(du, u, p::AbstractCosmo, x)
 end
 
 
-function adiabatic_initial_conditions(par::AbstractCosmo{T,DT}, xᵢ) where {T,DT}
+function adiabatic_initial_conditions(par::AbstractCosmoParams{T,DT}, xᵢ) where {T,DT}
     ℓᵧ = par.ℓᵧ
     u = zeros(DT, 2ℓᵧ+7)
     ℋₓ = Bolt.ℋ(xᵢ, par)

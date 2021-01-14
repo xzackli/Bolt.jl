@@ -8,7 +8,7 @@ T_b(a, par) = par.T₀ / a
 saha_rhs(a, par) = (m_e * T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
     exp(-ε₀_H / T_b(a, par))  # rhs of Callin06 eq. 12
 
-function saha_Xₑ(x, par::AbstractCosmo)
+function saha_Xₑ(x, par::AbstractCosmoParams)
     rhs = saha_rhs(x2a(x), par)
     return  (√(rhs^2 + 4rhs) - rhs) / 2  # solve Xₑ² / (1-Xₑ) = RHS, it's a polynomial
 end
@@ -91,12 +91,12 @@ end
 
 
 """
-    saha_peebles_recombination(par::AbstractCosmo)
+    saha_peebles_recombination(par::AbstractCosmoParams)
 
 Utility function for generating a decent approximation to Xₑ in ΛCDM recombination,
 using the Saha equation until z=1587.4 and then the Peebles equation for the rest.
 """
-function saha_peebles_recombination(par::AbstractCosmo{T,DT}) where {T, DT}
+function saha_peebles_recombination(par::AbstractCosmoParams{T,DT}) where {T, DT}
     z_transition = 1587.4
     x_transition = z2x(z_transition)
     saha_z_grid = 1800:-10:z_transition
@@ -117,7 +117,7 @@ end
 # τ_x(x::Real, Xₑ_function, par) = quadgk(x->τ_integrand_x(x, Xₑ_function, par), x, 0.0)[1]
 
 # optical depth to reionization
-function τ_function(x::Vector, Xₑ_function, par::AbstractCosmo)
+function τ_function(x::Vector, Xₑ_function, par::AbstractCosmoParams)
     @assert x[2] > x[1]  # CONVENTION: x increasing always
     # do a reverse cumulative integrate
     rx = reverse(x)
@@ -127,7 +127,7 @@ function τ_function(x::Vector, Xₑ_function, par::AbstractCosmo)
 end
 
 
-function τ_functions(x::Vector, Xₑ_function, par::AbstractCosmo)
+function τ_functions(x::Vector, Xₑ_function, par::AbstractCosmoParams)
     @assert x[2] > x[1]  # CONVENTION: x increasing always
     # do a reverse cumulative integrate
     rx = reverse(x)

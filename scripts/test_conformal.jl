@@ -4,7 +4,7 @@ using Unitful, UnitfulAstro, NaturallyUnitful
 using QuadGK
 
 
-par = Cosmo()
+par = CosmoParams()
 ℋ = x -> Bolt.ℋ(x, par)
 ℋ′ = x -> Bolt.ℋ′(x, par)
 # quadgk( ap -> 1.0 / (ap * Bolt.ℋ_a(ap, par)), 0.0, 1.0)

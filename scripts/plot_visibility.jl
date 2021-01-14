@@ -2,7 +2,7 @@ using Bolt
 using PyPlot
 using Unitful, UnitfulAstro, NaturallyUnitful
 
-par = Cosmo()
+par = CosmoParams()
 xgrid = collect(-18:0.01:-0.0)
 zgrid = x2z.(xgrid)
 Xₑ = Bolt.saha_peebles_recombination(par)

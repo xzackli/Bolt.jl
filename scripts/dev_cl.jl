@@ -23,7 +23,7 @@ function source_x_grid(k, xgrid, par)
     TCA_condition(k, ℋₓ, τₓ′) = (abs(k / (ℋₓ * τₓ′)) < 0.1) & (abs(τₓ′) > 10.0)
 
     # NOTE: NO NEUTRINOS 𝒩
-    function hierarchy!(du, u, p::AbstractCosmo, x)
+    function hierarchy!(du, u, p::AbstractCosmoParams, x)
         ℓᵧ, Ω_r, Ω_b, Ω_m = p.ℓᵧ, p.Ω_r, p.Ω_b, p.Ω_m
         H₀² = H₀(p)^2
         ℋₓ, ℋₓ′ = ℋ(x), ℋ′(x)
@@ -85,7 +85,7 @@ function source_x_grid(k, xgrid, par)
     end
 
 
-    function adiabatic_initial_conditions(par::AbstractCosmo{T,DT}, xᵢ) where {T,DT}
+    function adiabatic_initial_conditions(par::AbstractCosmoParams{T,DT}, xᵢ) where {T,DT}
         ℓᵧ = par.ℓᵧ
         u = zeros(DT, 2ℓᵧ+7)
         ℋₓ = Bolt.ℋ(xᵢ, par)
@@ -165,7 +165,7 @@ end
 
 ##
 
-par = Cosmo()
+par = CosmoParams()
 xᵢ = log(1e-8)
 xgridᵧ = collect(-20:0.005:0.0)
 H₀_ = H₀(par)
@@ -179,7 +179,7 @@ kgridᵧ = [kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
 ##
 using ThreadPools
 
-function generate_s_grid(par::AbstractCosmo{T,DT}, xgrid, kgrid) where {T,DT}
+function generate_s_grid(par::AbstractCosmoParams{T,DT}, xgrid, kgrid) where {T,DT}
     grid = zeros(DT, length(xgrid), length(kgrid))
     @qthreads for k_i in eachindex(kgrid)
         grid[:,k_i] .= source_x_grid(kgrid[k_i], xgrid, par)
@@ -216,7 +216,7 @@ ylim(-1, 3.5)
 gcf()
 
 ##
-function Θl(k, s_itp, bes, xgrid, par::AbstractCosmo{T,DT}, η, η₀) where {T, DT}
+function Θl(k, s_itp, bes, xgrid, par::AbstractCosmoParams{T,DT}, η, η₀) where {T, DT}
     s = zero(DT)
     for i in 1:length(xgrid)-1
         x = xgrid[i]
@@ -242,7 +242,7 @@ xlim(20,120)
 gcf()
 
 ##
-function Cl(ℓ, s_itp, xgrid, kgrid, par::AbstractCosmo{T,DT}, η, η₀) where {T,DT}
+function Cl(ℓ, s_itp, xgrid, kgrid, par::AbstractCosmoParams{T,DT}, η, η₀) where {T,DT}
     bessel_argmin = 0.0
     bessel_argmax = kgrid[end] * η₀
     Δg = bessel_argmax / 5000
