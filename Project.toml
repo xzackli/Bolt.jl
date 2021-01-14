@@ -26,6 +26,22 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
 OrdinaryDiffEq = "5.49"
+PhysicalConstants = "0.2"
+ForwardDiff = "0.10"
+NumericalIntegration = "0.2"
+Interpolations = "0.13"
+NaturallyUnitful = "0.3"
+Parameters = "0.12"
+DataStructures = "0.18"
+NLsolve = "4.5"
+Unitful = "1.5"
+UnitfulAstro = "1.0"
+BenchmarkTools = "0.5"
+UnPack = "1.0"
+SpecialFunctions = "1.2"
+OffsetArrays = "1.5"
+Zygote = "0.6"
+ThreadPools = "1, 1.2"
 julia = "1.5"
 
 [extras]
