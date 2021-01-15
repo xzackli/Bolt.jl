@@ -85,7 +85,7 @@ function source_x_grid(k, xgrid, par)
     end
 
 
-    function adiabatic_initial_conditions(par::AbstractCosmoParams{T,DT}, xᵢ) where {T,DT}
+    function adiabatic_initial_conditions(par::AbstractCosmoParams{T, Tconst}, xᵢ) where {T, Tconst}
         ℓᵧ = par.ℓᵧ
         u = zeros(DT, 2ℓᵧ+7)
         ℋₓ = Bolt.ℋ(xᵢ, par)
@@ -179,8 +179,8 @@ kgridᵧ = [kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
 ##
 using ThreadPools
 
-function generate_s_grid(par::AbstractCosmoParams{T,DT}, xgrid, kgrid) where {T,DT}
-    grid = zeros(DT, length(xgrid), length(kgrid))
+function generate_s_grid(par::AbstractCosmoParams{T,Tconst}, xgrid, kgrid) where {T,Tconst}
+    grid = zeros(T, length(xgrid), length(kgrid))
     @qthreads for k_i in eachindex(kgrid)
         grid[:,k_i] .= source_x_grid(kgrid[k_i], xgrid, par)
     end
@@ -216,8 +216,8 @@ ylim(-1, 3.5)
 gcf()
 
 ##
-function Θl(k, s_itp, bes, xgrid, par::AbstractCosmoParams{T,DT}, η, η₀) where {T, DT}
-    s = zero(DT)
+function Θl(k, s_itp, bes, xgrid, par::AbstractCosmoParams{T,Tconst}, η, η₀) where {T, Tconst}
+    s = zero(T)
     for i in 1:length(xgrid)-1
         x = xgrid[i]
         sb = bes(k*(η₀ - η(x)))::DT

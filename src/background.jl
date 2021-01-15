@@ -16,11 +16,12 @@ H_a(a, par::AbstractCosmoParams) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3
 H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
 ℋ(x, par::AbstractCosmoParams) = ℋ_a(x2a(x), par)
 
-function ℋ′(x, par::AbstractCosmoParams)
-    a = x2a(x)
-    return -H₀(par) * (2par.Ω_r + (par.Ω_b + par.Ω_m) * a - 2Ω_Λ(par) * a^4) /
-        (2 * a * √(par.Ω_r + (par.Ω_b + par.Ω_m) * a + Ω_Λ(par) * a^4))
-end
+## hand-written ℋ derivative for testing
+# function ℋ′(x, par::AbstractCosmoParams)
+#     a = x2a(x)
+#     return -H₀(par) * (2par.Ω_r + (par.Ω_b + par.Ω_m) * a - 2Ω_Λ(par) * a^4) /
+#         (2 * a * √(par.Ω_r + (par.Ω_b + par.Ω_m) * a + Ω_Λ(par) * a^4))
+# end
 
 # conformal time
 function η(x, par::AbstractCosmoParams)
@@ -48,15 +49,14 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     η′′::IT
 end
 
-
-function Background(par::CP; x_grid=-20.0:0.01:0.0) where CP<:AbstractCosmoParams
+function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0) where T
     ℋ_ = spline(x_grid, [ℋ(x, par) for x in x_grid])
     η_ = spline(x_grid, [η(x, par) for x in x_grid])
 
     return Background(
-        H₀(par),
-        ρ_crit(par),
-        Ω_Λ(par),
+        T(H₀(par)),
+        T(ρ_crit(par)),
+        T(Ω_Λ(par)),
         x_grid,
 
         ℋ_,

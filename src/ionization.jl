@@ -44,9 +44,10 @@ end
 # Useful for high ionization fractions.
 
 # auxillary equations for saha_rhs
+const T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]  # TODO: make this a parameter of the ionization
 n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
 n_H(a, par) = n_b(a, par)  # ignoring helium for now
-T_b(a, par) = par.T₀ / a
+T_b(a, par) = T₀ / a
 saha_rhs(a, par) = (m_e * T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
     exp(-ε₀_H / T_b(a, par))  # rhs of Callin06 eq. 12
 
@@ -138,7 +139,7 @@ end
 Utility function for generating a decent approximation to Xₑ in ΛCDM recombination,
 using the Saha equation until z=1587.4 and then the Peebles equation for the rest.
 """
-function saha_peebles_recombination(par::AbstractCosmoParams{T,DT}) where {T, DT}
+function saha_peebles_recombination(par::AbstractCosmoParams{T}) where {T}
     z_transition = 1587.4
     x_transition = z2x(z_transition)
     saha_z_grid = 1800:-10:z_transition

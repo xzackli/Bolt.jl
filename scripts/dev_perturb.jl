@@ -82,9 +82,9 @@ function hierarchy!(du, u, p::AbstractCosmoParams, x)
 end
 
 
-function adiabatic_initial_conditions(par::AbstractCosmoParams{T,DT}, xᵢ) where {T,DT}
+function adiabatic_initial_conditions(par::AbstractCosmoParams{T}, xᵢ) where {T}
     ℓᵧ = par.ℓᵧ
-    u = zeros(DT, 2ℓᵧ+7)
+    u = zeros(T, 2ℓᵧ+7)
     ℋₓ = bg.ℋ(xᵢ)
     τₓ′ = ih.τ′(xᵢ)
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
