@@ -2,7 +2,10 @@ module Bolt
 
 export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
-export SahaPeeblesHistory, AbstractIonizationHistory
+export IonizationHistory, AbstractIonizationHistory
+export SahaPeebles
+export Hierarchy, solve, BasicNewtonian
+
 export z2a, a2z, x2a, a2x, z2x, x2z
 
 using Parameters
@@ -31,11 +34,11 @@ abstract type AbstractCosmoParams{T, Tconst} end
     Ω_b = 0.046  # baryon density
     Ω_m = 0.224  # matter density
     n = 1.0  # spectral index
-    Y_p = 0.0  # primordial helium fraction
-    T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
+    Y_p = 0.0  # primordial helium fraction, currently unused
 
-    lmax::Int = 3
-    ℓᵧ::Int = 8  # Boltzmann hierarchy cutoff
+    # TO MOVE
+    T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
+    ℓᵧ::Int = 8  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
 end
 
 include("util.jl")
