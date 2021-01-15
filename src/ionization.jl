@@ -151,25 +151,6 @@ function saha_peebles_recombination(par::AbstractCosmoParams{T}) where {T}
     return Xₑ
 end
 
-# visibility functions (OPTIMIZATION OPPORTUNITY) ----------
-
-# function τ_integrand_x(x, Xₑ_function, par)
-#     a = x2a(x)
-#     return -Xₑ_function(x) * n_H(a, par) * σ_T * a / ℋ_a(a, par)
-# end
-# τ_x(x::Real, Xₑ_function, par) = quadgk(x->τ_integrand_x(x, Xₑ_function, par), x, 0.0)[1]
-
-# # optical depth to reionization
-# function τ_function(x::Vector, Xₑ_function, par::AbstractCosmoParams)
-#     @assert x[2] > x[1]  # CONVENTION: x increasing always
-#     # do a reverse cumulative integrate
-#     rx = reverse(x)
-#     τ_integrands = [τ′(x_, Xₑ_function, par) for x_ in rx]
-#     τ = reverse(cumul_integrate(rx, τ_integrands))
-#     return interpolate((x,),τ,Gridded(Linear()))
-# end
-
-
 function τ_functions(x, Xₑ_function, par::AbstractCosmoParams)
     @assert x[2] > x[1]  # CONVENTION: x increasing always
     # do a reverse cumulative integrate
@@ -181,7 +162,6 @@ function τ_functions(x, Xₑ_function, par::AbstractCosmoParams)
     τ̂′ = interpolate((x,),τ_primes,Gridded(Linear()))
     return τ̂, τ̂′
 end
-
 
 function τ̇(x, Xₑ_function, par)
     a = x2a(x)
@@ -196,21 +176,3 @@ end
 function g̃_function(τ_x_function, τ′_x_function)
     return x -> -τ′_x_function(x) * exp(-τ_x_function(x))
 end
-
-# function g̃′_function(τ_x_function, τ′_x_function, τ′′_x_function)
-#     return x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
-# end
-
-# function g̃_functions(τ_x_function, τ′_x_function, τ′′_x_function)
-#     g̃_ = x -> -τ′_x_function(x) * exp(-τ_x_function(x))
-#     g̃′_ = x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
-#     return g̃_, g̃′_
-# end
-
-# function g̃′_function(par, Xₑ_function, τ_x_function)
-#     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x))
-# end
-
-# function g_function(par, Xₑ_function, τ_x_function)
-#     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x)) * ℋ(x, par)
-# end
