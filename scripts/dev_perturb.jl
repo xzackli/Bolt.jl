@@ -11,27 +11,20 @@ using ForwardDiff
 ∂ₓ(f, x) = ForwardDiff.derivative(f, x)
 
 par = CosmoParams()
+bg = Background(par)
+ih = SahaPeeblesHistory(par, bg)
+x_grid = bg.x_grid
 
-
-k = 340H₀(par)
-xgrid = collect(-20.0:0.001:0.0)
-zgrid = x2z.(xgrid)
-Xₑ = Bolt.saha_peebles_recombination(par)
-τ, τ′, τ′′ = Bolt.τ_functions(xgrid, Xₑ, par)
-g̃, g̃′ = Bolt.g̃_functions(τ, τ′, τ′′)
-g̃′′ = x -> ∂ₓ(g̃′, x)
-η = Bolt.η_function(xgrid, par)
-ℋ, ℋ′ = x -> Bolt.ℋ(x, par), x -> Bolt.ℋ′(x, par)
-
+k = 340bg.H₀
 
 TCA_condition(k, ℋₓ, τₓ′) = (abs(k / (ℋₓ * τₓ′)) < 0.1) & (abs(τₓ′) > 10.0)
 
 # NOTE: NO NEUTRINOS 𝒩
 function hierarchy!(du, u, p::AbstractCosmoParams, x)
     ℓᵧ, Ω_r, Ω_b, Ω_m = p.ℓᵧ, p.Ω_r, p.Ω_b, p.Ω_m
-    H₀² = H₀(p)^2
-    ℋₓ, ℋₓ′ = ℋ(x), ℋ′(x)
-    τₓ′, τₓ′′ = τ′(x), τ′′(x)
+    H₀² = bg.H₀^2
+    ℋₓ, ℋₓ′ = bg.ℋ(x), bg.ℋ′(x)
+    τₓ′, τₓ′′ = ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
 
@@ -81,8 +74,8 @@ function hierarchy!(du, u, p::AbstractCosmoParams, x)
             (ℓ+1) * k / ((2ℓ+1) * ℋₓ) * Θᵖ[ℓ+1] + τₓ′ * (Θᵖ[ℓ] - Π * δ_kron(ℓ, 2) / 10)
     end
     # photon hierarchy boundary conditions
-    Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * η(x)) + τₓ′ * Θ[ℓᵧ]
-    Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * η(x)) + τₓ′ * Θᵖ[ℓᵧ]
+    Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * bg.η(x)) + τₓ′ * Θ[ℓᵧ]
+    Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * bg.η(x)) + τₓ′ * Θᵖ[ℓᵧ]
 
     du[(2ℓᵧ+3):(2ℓᵧ+7)] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
     return nothing
@@ -92,8 +85,8 @@ end
 function adiabatic_initial_conditions(par::AbstractCosmoParams{T,DT}, xᵢ) where {T,DT}
     ℓᵧ = par.ℓᵧ
     u = zeros(DT, 2ℓᵧ+7)
-    ℋₓ = Bolt.ℋ(xᵢ, par)
-    τₓ′ = Bolt.τ′(xᵢ, Xₑ, par)
+    ℋₓ = bg.ℋ(xᵢ)
+    τₓ′ = ih.τ′(xᵢ)
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
     Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
 
@@ -123,7 +116,7 @@ end
 xᵢ = log(1e-8)
 u₀ = adiabatic_initial_conditions(par, xᵢ)
 prob = ODEProblem(hierarchy!, u₀, (xᵢ , 0.0), par)
-@time sol = solve(prob, AutoTsit5(Rodas5()), reltol=1e-10)
+@time sol = solve(prob, Rodas5(), reltol=1e-10)
 
 ##
 figure()
@@ -140,7 +133,7 @@ gcf()
 
 ##
 clf()
-plot(x2a.(xgrid), [TCA_condition(k, ℋ(x), τ′(x)) for x in xgrid], "-", label="TCA yes no")
+plot(x2a.(bg.x_grid), [TCA_condition(k, bg.ℋ(x), ih.τ′(x)) for x in bg.x_grid], "-", label="TCA yes no")
 axvline(1/1101, ls="dashed", label="recombination")
 xscale("log")
 xlabel(raw"$a$")

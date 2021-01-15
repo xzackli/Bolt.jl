@@ -4,7 +4,11 @@ abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T}} end
 struct SahaPeeblesHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     Xₑ::IT
     τ::IT
+    τ′::IT
+    τ′′::IT
     g̃::IT
+    g̃′::IT
+    g̃′′::IT
 end
 
 function SahaPeeblesHistory(par::ACP, bg::AB) where
@@ -17,15 +21,21 @@ function SahaPeeblesHistory(par::ACP, bg::AB) where
     # s1 = spline(x_grid, Xₑ_function.(x_grid))
     # s2 = spline(x_grid, g̃.(x_grid))
     # return s1, s2
-    Xₑ_spline = spline(x_grid, Xₑ_function.(x_grid))
-    IT = typeof(Xₑ_spline)
+    Xₑ_ = spline(x_grid, Xₑ_function.(x_grid))
+    τ_ = spline(x_grid, τ.(x_grid))
+    g̃_ = spline(x_grid, g̃.(x_grid))
+    IT = typeof(Xₑ_)
 
     # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE THIS IT TYPE?
 
     return SahaPeeblesHistory{T, IT}(
-        Xₑ_spline,
-        spline(x_grid, τ.(x_grid)),
-        spline(x_grid, g̃.(x_grid))
+        Xₑ_,
+        τ_,
+        spline_∂ₓ(τ_, x_grid),
+        spline_∂ₓ²(τ_, x_grid),
+        g̃_,
+        spline_∂ₓ(g̃_, x_grid),
+        spline_∂ₓ²(g̃_, x_grid),
     )
 end
 

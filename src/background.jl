@@ -40,25 +40,31 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     Ω_Λ::T
 
     x_grid::GT
-    H::IT
     ℋ::IT
+    ℋ′::IT
+    ℋ′′::IT
     η::IT
+    η′::IT
+    η′′::IT
 end
 
-function Background(par::CP; x_grid=-18.0:0.01:0.0) where CP<:AbstractCosmoParams
-    a_grid = x2a.(x_grid)
-    H_grid = [H(x, par) for x in x_grid]
-    ℋ_grid = [ℋ(x, par) for x in x_grid]
-    η_grid = [η(x, par) for x in x_grid]
+
+function Background(par::CP; x_grid=-20.0:0.01:0.0) where CP<:AbstractCosmoParams
+    ℋ_ = spline(x_grid, [ℋ(x, par) for x in x_grid])
+    η_ = spline(x_grid, [η(x, par) for x in x_grid])
 
     return Background(
         H₀(par),
         ρ_crit(par),
         Ω_Λ(par),
-
         x_grid,
-        spline(x_grid, H_grid),
-        spline(x_grid, ℋ_grid),
-        spline(x_grid, η_grid)
+
+        ℋ_,
+        spline_∂ₓ(ℋ_, x_grid),
+        spline_∂ₓ²(ℋ_, x_grid),
+
+        η_,
+        spline_∂ₓ(η_, x_grid),
+        spline_∂ₓ²(η_, x_grid),
     )
 end

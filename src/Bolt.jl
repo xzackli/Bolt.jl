@@ -35,7 +35,7 @@ abstract type AbstractCosmoParams{T, Tconst} end
     T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
 
     lmax::Int = 3
-    ℓᵧ::Int = 30  # Boltzmann hierarchy cutoff
+    ℓᵧ::Int = 8  # Boltzmann hierarchy cutoff
 end
 
 include("util.jl")
