@@ -1,3 +1,34 @@
+
+abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T}} end
+
+struct SahaPeeblesHistory{T, IT} <: AbstractIonizationHistory{T, IT}
+    Xₑ::IT
+    τ::IT
+    g̃::IT
+end
+
+function SahaPeeblesHistory(par::ACP, bg::AB) where
+                           {T, ACP<:AbstractCosmoParams{T}, AB<:AbstractBackground}
+    x_grid = bg.x_grid
+    Xₑ_function = Bolt.saha_peebles_recombination(par)
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
+    g̃ = g̃_function(τ, τ′)
+
+    # s1 = spline(x_grid, Xₑ_function.(x_grid))
+    # s2 = spline(x_grid, g̃.(x_grid))
+    # return s1, s2
+    Xₑ_spline = spline(x_grid, Xₑ_function.(x_grid))
+    IT = typeof(Xₑ_spline)
+
+    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE THIS IT TYPE?
+
+    return SahaPeeblesHistory{T, IT}(
+        Xₑ_spline,
+        spline(x_grid, τ.(x_grid)),
+        spline(x_grid, g̃.(x_grid))
+    )
+end
+
 # Saha Equation
 # Useful for high ionization fractions.
 
@@ -85,7 +116,7 @@ ionization fraction.
 function peebles_Xₑ(par, Xₑ₀, x_start, x_end)
     # set up problem and integrate dXₑ/dx = peebles_Xₑ′
     prob = ODEProblem(peebles_Xₑ′, Xₑ₀, (x_start, x_end), par)
-    sol = solve(prob, Tsit5(), reltol=1e-11, abstol=1e-11)
+    sol = solve(prob, Tsit5(), reltol=1e-11, abstol=1e-11, dense=true)
     return sol  # ode solutions work as interpolator
 end
 
@@ -116,18 +147,18 @@ end
 # end
 # τ_x(x::Real, Xₑ_function, par) = quadgk(x->τ_integrand_x(x, Xₑ_function, par), x, 0.0)[1]
 
-# optical depth to reionization
-function τ_function(x::Vector, Xₑ_function, par::AbstractCosmoParams)
-    @assert x[2] > x[1]  # CONVENTION: x increasing always
-    # do a reverse cumulative integrate
-    rx = reverse(x)
-    τ_integrands = [τ′(x_, Xₑ_function, par) for x_ in rx]
-    τ = reverse(cumul_integrate(rx, τ_integrands))
-    return interpolate((x,),τ,Gridded(Linear()))
-end
+# # optical depth to reionization
+# function τ_function(x::Vector, Xₑ_function, par::AbstractCosmoParams)
+#     @assert x[2] > x[1]  # CONVENTION: x increasing always
+#     # do a reverse cumulative integrate
+#     rx = reverse(x)
+#     τ_integrands = [τ′(x_, Xₑ_function, par) for x_ in rx]
+#     τ = reverse(cumul_integrate(rx, τ_integrands))
+#     return interpolate((x,),τ,Gridded(Linear()))
+# end
 
 
-function τ_functions(x::Vector, Xₑ_function, par::AbstractCosmoParams)
+function τ_functions(x, Xₑ_function, par::AbstractCosmoParams)
     @assert x[2] > x[1]  # CONVENTION: x increasing always
     # do a reverse cumulative integrate
     rx = reverse(x)
@@ -136,11 +167,7 @@ function τ_functions(x::Vector, Xₑ_function, par::AbstractCosmoParams)
 
     τ̂ = interpolate((x,),τ_integrated,Gridded(Linear()))
     τ̂′ = interpolate((x,),τ_primes,Gridded(Linear()))
-
-    xmid = [(x[i] + x[i+1]) / 2 for i in 1:length(x)-1]
-    τ̂′′ = interpolate((xmid,),diff(τ_primes) ./ diff(x),Gridded(Linear()))
-    τ̂′′ = extrapolate(τ̂′′, Flat())
-    return τ̂, τ̂′, τ̂′′
+    return τ̂, τ̂′
 end
 
 
@@ -158,15 +185,15 @@ function g̃_function(τ_x_function, τ′_x_function)
     return x -> -τ′_x_function(x) * exp(-τ_x_function(x))
 end
 
-function g̃′_function(τ_x_function, τ′_x_function, τ′′_x_function)
-    return x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
-end
+# function g̃′_function(τ_x_function, τ′_x_function, τ′′_x_function)
+#     return x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
+# end
 
-function g̃_functions(τ_x_function, τ′_x_function, τ′′_x_function)
-    g̃_ = x -> -τ′_x_function(x) * exp(-τ_x_function(x))
-    g̃′_ = x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
-    return g̃_, g̃′_
-end
+# function g̃_functions(τ_x_function, τ′_x_function, τ′′_x_function)
+#     g̃_ = x -> -τ′_x_function(x) * exp(-τ_x_function(x))
+#     g̃′_ = x -> (τ′_x_function(x)^2 - τ′′_x_function(x) )* exp(-τ_x_function(x))
+#     return g̃_, g̃′_
+# end
 
 # function g̃′_function(par, Xₑ_function, τ_x_function)
 #     return x -> -τ′(x, Xₑ_function, par) * exp(-τ_x_function(x))

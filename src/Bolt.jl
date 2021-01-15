@@ -1,6 +1,8 @@
 module Bolt
 
 export CosmoParams, AbstractCosmoParams
+export Background, AbstractBackground
+export SahaPeeblesHistory, AbstractIonizationHistory
 export z2a, a2z, x2a, a2x, z2x, x2z
 
 using Parameters
@@ -20,7 +22,7 @@ import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
 
 
-abstract type AbstractCosmoParams{T, DT} end
+abstract type AbstractCosmoParams{T, Tconst} end
 
 # natural units, stripped eV
 @with_kw struct CosmoParams{T} <: AbstractCosmoParams{T, T} @deftype T
@@ -36,18 +38,9 @@ abstract type AbstractCosmoParams{T, DT} end
     ℓᵧ::Int = 30  # Boltzmann hierarchy cutoff
 end
 
-
-# # utility function to make scalar interpolators
-# function differentiable_interpolator(xgrid, ygrid)
-#     itp = interpolate((xgrid,), ygrid, Gridded(Linear()))
-#     f(c) = Zygote.forwarddiff(c -> itp(c), c)
-#     return f
-# end
-
-
-
+include("util.jl")
 include("background.jl")
-include("recombination.jl")
+include("ionization.jl")
 include("perturbations.jl")
 
 end

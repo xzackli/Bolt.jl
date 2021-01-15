@@ -119,7 +119,7 @@ function source_x_grid(k, xgrid, par)
     xᵢ = first(xgrid)
     u₀ = adiabatic_initial_conditions(par, xᵢ)
     prob = ODEProblem(hierarchy!, u₀, (xᵢ , 0.0), par)
-    sol = solve(prob, AutoTsit5(Rodas5()), reltol=1e-10)
+    sol = solve(prob, AutoTsit5(Rodas5()), reltol=1e-10, dense=true)
 
     function source_function(sol, k, x, par)
         u = sol(x)

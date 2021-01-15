@@ -6,27 +6,49 @@ using PyPlot
 using Unitful, UnitfulAstro, NaturallyUnitful
 using ForwardDiff
 
-@with_kw struct GradientCosmo{T, DT} <: Bolt.AbstractCosmoParams{T, DT} @deftype T
-    h = 0.7
-    Ω_r = 5.042e-5  # radiation density
-    Ω_b::DT = 0.046  # baryon density
-    Ω_m = 0.224  # matter density
-    n = 1.0  # spectral index
-    Y_p = 0.0  # primordial helium fraction
-    T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]
-end
+par = CosmoParams()
+xgrid = collect(-18:0.001:-0.0)
+zgrid = x2z.(xgrid)
+Xₑ = Bolt.saha_peebles_recombination(par)
+τ, τ′, τ′′ = Bolt.τ_functions(xgrid, Xₑ, par)
+g̃, g̃′ = Bolt.g̃_functions(τ, τ′, τ′′)
+
+clf()
+fig, axes = subplots(1, 2,figsize=(10,5))
+axes[1].plot(xgrid, τ.(xgrid), "-", label=raw"$\tau$")
+axes[1].plot(xgrid, [-1 * τ′(x) for x in xgrid], "--", label=raw"$|\tau^\prime|$")
+axes[1].set_yscale("log")
+axes[1].legend()
+axes[1].set_xlabel(raw"$x$")
+
+using ForwardDiff
+∂ₓ(f, x) = ForwardDiff.derivative(f, x)
+g̃′′ = x -> ∂ₓ(g̃′, x)
+
+axes[2].plot(xgrid, g̃.(xgrid), "-", label=raw"$\tilde{g}$")
+axes[2].plot(xgrid, g̃′.(xgrid) / 10, "--", label=raw"$\tilde{g}\prime$")
+axes[2].plot(xgrid, g̃′′.(xgrid) / 300, ":", label=raw"$\tilde{g}\prime$")
+
+axes[2].set_xlim(-8.0, -6.0)
+axes[2].set_ylim(-3.5, 5.5)
+axes[2].legend()
+axes[2].set_xlabel(raw"$x$")
+tight_layout()
+gcf()
 
 ##
-function f(Ω_b)
-    par = GradientCosmo(Ω_b=Ω_b)
-    z_transition = 1587.4
-    x_transition = z2x(z_transition)
+# ∂ₓ²(f, x::T) where T <: Real = ForwardDiff.hessian(x -> f(x[1]), [x])[1]
+∂ₓ²(f,x) = ∂ₓ(x->∂ₓ(f,x),x)
+# numdiff(f,x) = (f(x+1e-3) - f(x-1e-3)) / 2e-3
 
-    Xₑ = Bolt.saha_peebles_recombination(par)
-    # return Xₑ(a_transition * 1.2)
-    xgrid = collect(0.0:-0.05:-18)
-    return (Bolt.τ_x(xgrid, Xₑ, par))[end]
-end
+clf()
+using Zygote
+ddx = [∂ₓ(g̃,x) for x in xgrid]
 
+h = x -> ∂ₓ(g̃,x)
 
-ForwardDiff.derivative(f, 0.046)
+plot(xgrid[1:end], ddx, "-", label=raw"$\tilde{g}$")
+# plot(xgrid, [h'(x) for x in xgrid], "-", label=raw"$\tilde{g}$")
+plot(xgrid, [∂ₓ(g̃,x) for x in xgrid], "--", label=raw"$\tilde{g}$")
+xlim(-8,-6)
+gcf()
