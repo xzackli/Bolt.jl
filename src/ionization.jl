@@ -1,7 +1,6 @@
 
 abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T}} end
 
-
 abstract type IonizationIntegrator end
 struct Peebles <: IonizationIntegrator end
 
@@ -15,7 +14,8 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     g̃′′::IT
 end
 
-
+# this Peebles history comes from Callin+06, peep the plots from examples/
+# which match that paper perfectly
 function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
                            {T, ACP<:AbstractCosmoParams{T}, AB<:AbstractBackground}
     x_grid = bg.x_grid
@@ -55,27 +55,6 @@ function saha_Xₑ(x, par::AbstractCosmoParams)
     rhs = saha_rhs(x2a(x), par)
     return  (√(rhs^2 + 4rhs) - rhs) / 2  # solve Xₑ² / (1-Xₑ) = RHS, it's a polynomial
 end
-
-
-"""
-    saha_Xₑ(par) where T
-
-Construct an interpolator for mapping scale factor to the ionization fraction
-predicted by the Saha equation.
-
-# Arguments:
-- `x::T`: log scale factor
-- `par`: cosmological parameters structure
-
-# Returns:
-- `T`: ionization fraction
-
-# Examples
-```julia-repl
-julia> f = Bolt.saha_Xₑ(Cosmo()); f(0.00062956)
-0.9899574622791693
-```
-"""
 saha_Xₑ(par) = (x -> saha_Xₑ(x, par))
 
 
