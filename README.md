@@ -7,11 +7,14 @@
 
 ⚡ Bolt is a pure-Julia integrator for the Boltzmann equations in cosmology. It can accurately compute the gradient of the CMB power spectrum, with respect to cosmological parameters, using forward-mode automatic differentiation.
 
-It's currently implementing the simplest possible hierarchy (photons, baryons, dark matter) with only hydrogen Peebles recombination. It needs a fair bit more physics before it can be applied to modern data. There are some examples showing accurate reproduction of some figures in `examples/`.
+It's currently implementing the simplest possible hierarchy (photons, baryons, dark matter) with only hydrogen Peebles recombination. It needs a fair bit more physics before it can be applied to modern data. There are some examples showing accurate reproduction of some figures in `examples/`. 
+
+I haven't spent any time optimizing Bolt for performance yet, and in particular the naively implemented source function integrations currently dominate the spectrum cost.
 
 <p align="center">
 <img width=60% src="docs/assets/example_spectrum.png">
 </p>
+
 *A CMB temperature power spectrum and gradient from Bolt.jl.*
 
 ## Example / Performance
