@@ -10,7 +10,7 @@
 It's currently implementing the simplest possible hierarchy (photons, baryons, dark matter) with only hydrogen Peebles recombination. It needs a fair bit more physics before it can be applied to modern data. There are some examples showing accurate reproduction of some figures in `examples/`.
 
 <p align="center">
-<img width=60% src="docs/src/assets/example_spectrum.png">
+<img width=60% src="docs/assets/example_spectrum.png">
 </p>
 *A CMB temperature power spectrum and gradient from Bolt.jl.*
 
