@@ -10,7 +10,7 @@
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
 function sourcefunction(par::AbstractCosmoParams{T}, bg, ih, k_grid,
-        integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-10) where T
+        integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
     @qthreads for (i_k, k) in enumerate(k_grid)
@@ -29,7 +29,7 @@ end
 
 # we make the assumption that shifting the coordinates upon which we integrate
 # does not affect our result. that is, we choose coordinates where the integral converges
-assume_nondual(x::ForwardDiff.Dual) = x.value
+assume_nondual(x::ForwardDiff.Dual) = ForwardDiff.value(x)
 assume_nondual(x::Real) = x
 
 function bessel_interpolator(ℓ, kmax_η₀)
@@ -75,4 +75,9 @@ end
 function cltt(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
     dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
     cltt(ℓ, sf, dense_kgrid, par, bg)
+end
+
+function cltt(ℓ⃗, par::AbstractCosmoParams, bg, ih, sf)
+    dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
+    return qmap(ℓ->cltt(ℓ, par, bg, ih, sf), ℓ⃗)
 end
