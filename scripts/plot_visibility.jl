@@ -5,7 +5,7 @@ using Interpolations
 
 par = CosmoParams()
 bg = Background(par)
-ih = IonizationHistory(SahaPeebles(), par, bg)
+ih = IonizationHistory(Peebles(), par, bg)
 x_grid = bg.x_grid
 
 clf()

@@ -12,7 +12,7 @@ using ForwardDiff
 
 par = CosmoParams()
 bg = Background(par)
-ih = SahaPeeblesHistory(par, bg)
+ih = PeeblesHistory(par, bg)
 x_grid = bg.x_grid
 
 k = 340bg.H₀

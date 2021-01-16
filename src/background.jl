@@ -16,18 +16,10 @@ H_a(a, par::AbstractCosmoParams) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3
 H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
 ℋ(x, par::AbstractCosmoParams) = ℋ_a(x2a(x), par)
 
-## hand-written ℋ derivative for testing
-# function ℋ′(x, par::AbstractCosmoParams)
-#     a = x2a(x)
-#     return -H₀(par) * (2par.Ω_r + (par.Ω_b + par.Ω_m) * a - 2Ω_Λ(par) * a^4) /
-#         (2 * a * √(par.Ω_r + (par.Ω_b + par.Ω_m) * a + Ω_Λ(par) * a^4))
-# end
-
 # conformal time
 function η(x, par::AbstractCosmoParams)
     return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x))[1]
 end
-
 
 # now build a Background with these functions
 
@@ -37,6 +29,7 @@ abstract type AbstractBackground{T, IT<:AbstractInterpolation{T,1}, GT} end
 
 struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     H₀::T
+    η₀::T
     ρ_crit::T
     Ω_Λ::T
 
@@ -55,6 +48,7 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0) where T
 
     return Background(
         T(H₀(par)),
+        T(η(0.0, par)),
         T(ρ_crit(par)),
         T(Ω_Λ(par)),
         x_grid,

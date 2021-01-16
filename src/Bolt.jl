@@ -3,8 +3,9 @@ module Bolt
 export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory
-export SahaPeebles
+export Peebles
 export Hierarchy, boltsolve, BasicNewtonian
+export sourcefunction, quadratic_k, cltt
 
 export z2a, a2z, x2a, a2x, z2x, x2z
 
@@ -14,11 +15,11 @@ using NLsolve
 using OrdinaryDiffEq
 using NumericalIntegration
 using Interpolations
-using ForwardDiff
 using OffsetArrays
 using QuadGK
 using SpecialFunctions
 using ThreadPools
+using ForwardDiff, DiffResults
 # using Zygote
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
@@ -41,5 +42,6 @@ include("util.jl")
 include("background.jl")
 include("ionization.jl")
 include("perturbations.jl")
+include("spectra.jl")
 
 end

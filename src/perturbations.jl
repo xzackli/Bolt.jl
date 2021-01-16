@@ -3,30 +3,27 @@ abstract type PerturbationIntegrator end
 struct BasicNewtonian <: PerturbationIntegrator end
 
 # purely for packing together everything needed to integrate a hierarchy at wavenumber k
-struct Hierarchy{T<:Real, CP<:AbstractCosmoParams, BG<:AbstractBackground, IH<:AbstractIonizationHistory}
-    k::T
+struct Hierarchy{T<:Real, Tk<:Real, CP<:AbstractCosmoParams{T},
+                 BG<:AbstractBackground, IH<:AbstractIonizationHistory}
+    k::Tk
     ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
     par::CP
     bg::BG
     ih::IH
 end
 
-# # convenience caller
-# solve(k, par::AbstractCosmoParams, bg::AbstractBackground, ih::AbstractIonizationHistory,
-#     integrator::PerturbationIntegrator) = solve(Hierarchy(k, par, bg, ih), integrator)
-
-
 # basic newtonian gauge integrator
-function boltsolve(hierarchy::Hierarchy, integrator::BasicNewtonian, ode_alg; reltol=1e-10)
+function boltsolve(hierarchy::Hierarchy{T}, integrator::BasicNewtonian,
+                   ode_alg; reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
-    u₀ = basic_newtonian_adiabatic_initial(hierarchy.par, xᵢ, hierarchy)
-    prob = ODEProblem(basic_newtonian_hierarchy!, u₀, (xᵢ , 0.0), hierarchy)
+    u₀ = initial_conditions(hierarchy.par, xᵢ, hierarchy, integrator)
+    prob = ODEProblem(basic_newtonian_hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol, dense=true)
     return sol
 end
 
 # specify a default integrator
-boltsolve(hierarchy::Hierarchy, integrator::BasicNewtonian; reltol=1e-10) = boltsolve(
+boltsolve(hierarchy::Hierarchy, integrator::BasicNewtonian; reltol=1e-11) = boltsolve(
     hierarchy, integrator, Rodas5(); reltol=reltol)
 
 function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
@@ -81,7 +78,8 @@ function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
 end
 
 # TO IMPROVE: make hierarchy dispatch on solution eltype
-function basic_newtonian_adiabatic_initial(par::AbstractCosmoParams{T}, xᵢ, hierarchy) where {T}
+function initial_conditions(par::AbstractCosmoParams{T}, xᵢ, hierarchy,
+        integrator::BasicNewtonian) where {T}
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     u = zeros(T, 2ℓᵧ+7)
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
@@ -111,39 +109,35 @@ function basic_newtonian_adiabatic_initial(par::AbstractCosmoParams{T}, xᵢ, hi
     return u
 end
 
+function source_function(du, u, hierarchy, x, par, integrator::BasicNewtonian)
+    # compute some quantities
+    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
+    H₀² = bg.H₀^2
+    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
+    τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
+    g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
 
-# function basic_newtonian_source_function(du, u, hierarchy, x, par)
-#     # u = sol(x)
-#     # u′ = similar(u)
-#     # hierarchy!(u′, u, par, x)
+    # unpack variables from solution
+    Θ = OffsetVector(u[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θᵖ = OffsetVector(u[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θ′ = OffsetVector(du[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θᵖ′ = OffsetVector(du[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+    Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
+    Φ, δ, v, δ_b, v_b = u[(2ℓᵧ+3):(2ℓᵧ+7)]
+    Φ′, δ′, v′, δ_b′, v_b′ = du[(2ℓᵧ+3):(2ℓᵧ+7)]
 
-#     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
-#     H₀² = bg.H₀^2
-#     ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
-#     τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
-#     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
+    a = x2a(x)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ω_r * Θ[2]
+    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ω_r * (Θ′[2] - 2 * Θ[2])
 
-#     # unpack variables from solution
-#     Θ = OffsetVector(u[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-#     Θᵖ = OffsetVector(u[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-#     Θ′ = OffsetVector(du[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-#     Θᵖ′ = OffsetVector(du[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-#     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-#     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
-#     Φ, δ, v, δ_b, v_b = u[(2ℓᵧ+3):(2ℓᵧ+7)]
-#     Φ′, δ′, v′, δ_b′, v_b′ = du[(2ℓᵧ+3):(2ℓᵧ+7)]
-
-#     a = x2a(x)
-#     Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ω_r * Θ[2]
-#     Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ω_r * (Θ′[2] - 2 * Θ[2])
-
-#     term1 =  g̃ₓ * (Θ[0] + Ψ + Π/4) + exp(-τₓ) * (Ψ′ - Φ′)
-#     term2 = (-1/k) * (ℋₓ′ * g̃ₓ * v_b + ℋₓ * g̃ₓ′ * v_b + ℋₓ * g̃ₓ * v_b′)
-#     Π′′ = 2k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * Θ[1] + Θ′[1]) + (3/10) * (τₓ′′ * Π + τₓ′ * Π′) -
-#         3k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * (Θ[3] + Θᵖ[1] + Θᵖ[3]) + (Θ′[3] + Θᵖ′[1] + Θᵖ′[3]))
-#     term3 = (3/(4k^2)) * (
-#         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
-#         ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′)
-#     )
-#     return term1 + term2 + term3
-# end
+    term1 =  g̃ₓ * (Θ[0] + Ψ + Π/4) + exp(-τₓ) * (Ψ′ - Φ′)
+    term2 = (-1/k) * (ℋₓ′ * g̃ₓ * v_b + ℋₓ * g̃ₓ′ * v_b + ℋₓ * g̃ₓ * v_b′)
+    Π′′ = 2k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * Θ[1] + Θ′[1]) + (3/10) * (τₓ′′ * Π + τₓ′ * Π′) -
+        3k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * (Θ[3] + Θᵖ[1] + Θᵖ[3]) + (Θ′[3] + Θᵖ′[1] + Θᵖ′[3]))
+    term3 = (3/(4k^2)) * (
+        (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
+        ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′)
+    )
+    return term1 + term2 + term3
+end

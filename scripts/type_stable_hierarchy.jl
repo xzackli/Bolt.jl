@@ -5,7 +5,7 @@ using Bolt
 
 par = CosmoParams()
 bg = Background(par)
-ih = IonizationHistory(SahaPeebles(), par, bg)
+ih = IonizationHistory(Peebles(), par, bg)
 hierarchy = Hierarchy(340bg.H₀, par, bg, ih)
 
 # using OrdinaryDiffEq

@@ -3,7 +3,7 @@ abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T}} end
 
 
 abstract type IonizationIntegrator end
-struct SahaPeebles <: IonizationIntegrator end
+struct Peebles <: IonizationIntegrator end
 
 struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     Xₑ::IT
@@ -16,7 +16,7 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
 end
 
 
-function IonizationHistory(integrator::SahaPeebles, par::ACP, bg::AB) where
+function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
                            {T, ACP<:AbstractCosmoParams{T}, AB<:AbstractBackground}
     x_grid = bg.x_grid
     Xₑ_function = Bolt.saha_peebles_recombination(par)
