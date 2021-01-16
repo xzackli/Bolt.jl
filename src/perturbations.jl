@@ -26,6 +26,8 @@ end
 boltsolve(hierarchy::Hierarchy, integrator::BasicNewtonian; reltol=1e-11) = boltsolve(
     hierarchy, integrator, Rodas5(); reltol=reltol)
 
+
+# this integrator comes from Callin+06 and the Dodelson textbook
 function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
@@ -52,7 +54,7 @@ function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
     δ′ = k / ℋₓ * v - 3Φ′
     v′ = -v - k / ℋₓ * Ψ
     δ_b′ = k / ℋₓ * v_b - 3Φ′
-        v_b′ = -v_b - k / ℋₓ * Ψ + τₓ′ * R * (3Θ[1] + v_b)
+    v_b′ = -v_b - k / ℋₓ * Ψ + τₓ′ * R * (3Θ[1] + v_b)
 
     # photons and polarized photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
