@@ -12,7 +12,7 @@ It's currently implementing the simplest possible hierarchy (photons, baryons, d
 I haven't spent any time optimizing Bolt for performance yet, and in particular the naively implemented source function integrations currently dominate the spectrum cost.
 
 <p align="center">
-<img width=60% src="docs/assets/example_spectrum.png">
+<img width=80% src="docs/assets/example_spectrum.png">
 </p>
 
 *A CMB temperature power spectrum and gradient from Bolt.jl.*
