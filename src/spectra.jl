@@ -10,7 +10,7 @@ function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
         hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ)
         perturb = boltsolve(hierarchy; reltol=reltol)
         for (i_x, x) in enumerate(x_grid)
-            u = perturb(x)
+            u = perturb(x)  # this can be optimized away, save timesteps at the grid!
             du = similar(u)
             Bolt.hierarchy!(du, u, hierarchy, x)
             grid[i_x,i_k] = Bolt.source_function(du, u, hierarchy, x)
@@ -36,9 +36,9 @@ function bessel_interpolator(ℓ, kmax_η₀)
     return bes
 end
 
-function quadratic_k(kmin, kmax, nk)
+function quadratic_k(kmin::T, kmax::T, nk) where T
     kmin, kmax, nk = assume_nondual(kmin), assume_nondual(kmax), assume_nondual(nk)
-    return [kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
+    return T[kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
 end
 
 function Θl(k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}

@@ -25,7 +25,7 @@ plot(ells, cl .* ells.^2, "-", label=raw"$C_{\ell}$")
 plot(ells, ∂cl .* ells.^2 / 10, "-",
     label=raw"$\partial C_{\ell}/\partial\Omega_b / 10$")
 
-## uncomment to see finite differences
+# uncomment to see finite differences
 # Δ = 1e-3
 # @time finitediff_∂cl = (f(0.046 + Δ) .- f(0.046 - Δ)) ./ 2Δ
 # plt.plot(ells, finitediff_∂cl .* ells.^2 / 10, "--",
@@ -36,5 +36,5 @@ xlabel(raw"$\ell$")
 legend()
 ylim(-0.3, 0.5)
 tight_layout()
-savefig("docs/assets/example_spectrum.png")
+# savefig("docs/assets/example_spectrum.png")
 gcf()
