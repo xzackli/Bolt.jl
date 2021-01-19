@@ -111,6 +111,8 @@ function initial_conditions(par::AbstractCosmoParams{T}, xᵢ, hierarchy,
     return u
 end
 
+# TODO: this can be extended to any Newtonian gauge integrator if we specify the
+# Bardeen potential Ψ and its derivative ψ′
 function source_function(du, u, hierarchy, x, par, integrator::BasicNewtonian)
     # compute some quantities
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih

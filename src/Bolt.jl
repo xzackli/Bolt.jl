@@ -20,7 +20,6 @@ using QuadGK
 using SpecialFunctions
 using ThreadPools
 using ForwardDiff, DiffResults
-# using Zygote
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
