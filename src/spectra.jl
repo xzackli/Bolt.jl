@@ -1,26 +1,19 @@
 
-# # compute source functions and spectra
-# struct SourceFunction{T, IT, AA<:AbstractArray}
-#     S_grid::AA{T,2}
-#     bessel::AA{IT,1}  # interpolator for bessel functions
-# end
-
-
 # OPTIMIZATION OPPORTUNITY
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
-function sourcefunction(par::AbstractCosmoParams{T}, bg, ih, k_grid,
+function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
         integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
     @qthreads for (i_k, k) in enumerate(k_grid)
-        hierarchy = Hierarchy(k, ℓᵧ, par, bg, ih)
-        perturb = boltsolve(hierarchy, integrator; reltol=reltol)
+        hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ)
+        perturb = boltsolve(hierarchy; reltol=reltol)
         for (i_x, x) in enumerate(x_grid)
             u = perturb(x)
             du = similar(u)
-            Bolt.basic_newtonian_hierarchy!(du, u, hierarchy, x)
-            grid[i_x,i_k] = Bolt.source_function(du, u, hierarchy, x, hierarchy.par, integrator)
+            Bolt.hierarchy!(du, u, hierarchy, x)
+            grid[i_x,i_k] = Bolt.source_function(du, u, hierarchy, x)
         end
     end
     itp = LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Line())

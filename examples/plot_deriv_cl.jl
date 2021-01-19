@@ -10,7 +10,7 @@ function clb(Ω_b::DT, ells) where DT
     bg = Background(par)
     ih = IonizationHistory(Peebles(), par, bg)
     k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 500)
-    sf = sourcefunction(par, bg, ih, k_grid, BasicNewtonian())
+    sf = source_grid(par, bg, ih, k_grid, BasicNewtonian())
     return cltt(ells, par, bg, ih, sf)
 end
 
@@ -35,5 +35,5 @@ ylabel(raw"$\ell^2 C_{\ell}^{TT}$")
 xlabel(raw"$\ell$")
 legend()
 ylim(-0.3, 0.5)
-savefig("docs/assets/example_spectrum.png")
+# savefig("docs/assets/example_spectrum.png")
 gcf()

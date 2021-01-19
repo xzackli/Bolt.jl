@@ -1,49 +1,49 @@
+# these types and functions integrate the Boltzmann hierarchy through time
 
 abstract type PerturbationIntegrator end
 struct BasicNewtonian <: PerturbationIntegrator end
 
-# purely for packing together everything needed to integrate a hierarchy at wavenumber k
-struct Hierarchy{T<:Real, Tk<:Real, CP<:AbstractCosmoParams{T},
-                 BG<:AbstractBackground, IH<:AbstractIonizationHistory}
-    k::Tk
-    ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
+# a container for everything needed to integrate a hierarchy at wavenumber k
+struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
+                 BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real}
+    integrator::PI
     par::CP
     bg::BG
     ih::IH
+    k::Tk
+    ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
 end
+Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
+    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ)
 
-# basic newtonian gauge integrator
-function boltsolve(hierarchy::Hierarchy{T}, integrator::BasicNewtonian,
-                   ode_alg; reltol=1e-10) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
-    u₀ = initial_conditions(hierarchy.par, xᵢ, hierarchy, integrator)
-    prob = ODEProblem(basic_newtonian_hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
+    u₀ = initial_conditions(xᵢ, hierarchy)
+    prob = ODEProblem(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol, dense=true)
     return sol
 end
 
-# specify a default integrator
-boltsolve(hierarchy::Hierarchy, integrator::BasicNewtonian; reltol=1e-11) = boltsolve(
-    hierarchy, integrator, Rodas5(); reltol=reltol)
+# basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
+function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
+    ℓᵧ = hierarchy.ℓᵧ
+    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
+    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
+    Φ, δ, v, δ_b, v_b = view(u, (2ℓᵧ+3):(2ℓᵧ+7))
+    return Θ, Θᵖ, Φ, δ, v, δ_b, v_b
+end
 
-
-# this integrator comes from Callin+06 and the Dodelson textbook
-function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
+# BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
+function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     Ω_r, Ω_b, Ω_m, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, bg.H₀^2
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
-
-    # get array views of photon perturbations. this could be sugar'd up probably
-    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θ′ = OffsetVector(view(du, 1:(ℓᵧ+1)), 0:ℓᵧ)
-    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ′ = OffsetVector(view(du, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)
-    Φ, δ, v, δ_b, v_b = u[(2ℓᵧ+3):(2ℓᵧ+7)]
-
-    # preliminary variables
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
+
+    Θ, Θᵖ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are views (see unpack)
+    Θ′, Θᵖ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
 
     # metric perturbations
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2])
@@ -56,7 +56,7 @@ function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
     δ_b′ = k / ℋₓ * v_b - 3Φ′
     v_b′ = -v_b - k / ℋₓ * Ψ + τₓ′ * R * (3Θ[1] + v_b)
 
-    # photons and polarized photons
+    # photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
     Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
@@ -65,6 +65,7 @@ function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
             (ℓ+1) * k / ((2ℓ+1) * ℋₓ) * Θ[ℓ+1] + τₓ′ * (Θ[ℓ] - Π * δ_kron(ℓ, 2) / 10)
     end
 
+    # polarized photons
     Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
     for ℓ in 1:(ℓᵧ-1)
         Θᵖ′[ℓ] = ℓ * k / ((2ℓ+1) * ℋₓ) * Θᵖ[ℓ-1] -
@@ -79,14 +80,12 @@ function basic_newtonian_hierarchy!(du, u, hierarchy::Hierarchy, x)
     return nothing
 end
 
-# TO IMPROVE: make hierarchy dispatch on solution eltype
-function initial_conditions(par::AbstractCosmoParams{T}, xᵢ, hierarchy,
-        integrator::BasicNewtonian) where {T}
+# BasicNewtonian Integrator (dispatches on hierarchy.integrator)
+function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     u = zeros(T, 2ℓᵧ+7)
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
-    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
+    Θ, Θᵖ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
 
     # metric and matter perturbations
     Φ = 1.0
@@ -107,33 +106,29 @@ function initial_conditions(par::AbstractCosmoParams{T}, xᵢ, hierarchy,
         Θᵖ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θᵖ[ℓ-1]
     end
 
-    u[(2ℓᵧ+3):(2ℓᵧ+7)] .= Φ, δ, v, δ_b, v_b  # pack back in
+    u[(2ℓᵧ+3):(2ℓᵧ+7)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
     return u
 end
 
-# TODO: this can be extended to any Newtonian gauge integrator if we specify the
-# Bardeen potential Ψ and its derivative ψ′
-function source_function(du, u, hierarchy, x, par, integrator::BasicNewtonian)
+# TODO: this could be extended to any Newtonian gauge integrator if we specify the
+# Bardeen potential Ψ and its derivative ψ′ for an integrator, or we saved them
+function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute some quantities
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     H₀² = bg.H₀^2
     ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
     τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
-
-    # unpack variables from solution
-    Θ = OffsetVector(u[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ = OffsetVector(u[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θ′ = OffsetVector(du[1:(ℓᵧ+1)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Θᵖ′ = OffsetVector(du[(ℓᵧ+2):(2ℓᵧ+2)], 0:ℓᵧ)  # indicies 0 through ℓᵧ
-    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-    Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
-    Φ, δ, v, δ_b, v_b = u[(2ℓᵧ+3):(2ℓᵧ+7)]
-    Φ′, δ′, v′, δ_b′, v_b′ = du[(2ℓᵧ+3):(2ℓᵧ+7)]
-
     a = x2a(x)
+
+    Θ, Θᵖ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    Θ′, Θᵖ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
+
+    # recalulate these since we didn't save them
     Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ω_r * Θ[2]
     Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ω_r * (Θ′[2] - 2 * Θ[2])
+    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+    Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 
     term1 =  g̃ₓ * (Θ[0] + Ψ + Π/4) + exp(-τₓ) * (Ψ′ - Φ′)
     term2 = (-1/k) * (ℋₓ′ * g̃ₓ * v_b + ℋₓ * g̃ₓ′ * v_b + ℋₓ * g̃ₓ * v_b′)
@@ -141,7 +136,6 @@ function source_function(du, u, hierarchy, x, par, integrator::BasicNewtonian)
         3k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * (Θ[3] + Θᵖ[1] + Θᵖ[3]) + (Θ′[3] + Θᵖ′[1] + Θᵖ′[3]))
     term3 = (3/(4k^2)) * (
         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
-        ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′)
-    )
+        ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′))
     return term1 + term2 + term3
 end

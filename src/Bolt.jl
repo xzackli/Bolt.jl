@@ -5,8 +5,7 @@ export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory
 export Peebles
 export Hierarchy, boltsolve, BasicNewtonian
-export sourcefunction, quadratic_k, cltt
-
+export source_grid, quadratic_k, cltt
 export z2a, a2z, x2a, a2x, z2x, x2z
 
 using Parameters
@@ -27,7 +26,6 @@ import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
 
 abstract type AbstractCosmoParams{T} end
 
-# natural units, stripped eV
 @with_kw struct CosmoParams{T} <: AbstractCosmoParams{T} @deftype T
     h = 0.7  # hubble factor
     Ω_r = 5.042e-5  # radiation density

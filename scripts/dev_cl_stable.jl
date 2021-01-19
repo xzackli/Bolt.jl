@@ -8,7 +8,7 @@ bg = Background(par)
 ih = IonizationHistory(Peebles(), par, bg)
 
 k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100)
-@time sf = sourcefunction(par, bg, ih, k_grid, BasicNewtonian())
+@time sf = source_function(par, bg, ih, k_grid, BasicNewtonian())
 
 ##
 clf()

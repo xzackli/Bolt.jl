@@ -7,7 +7,7 @@ function cl100(Ω_b::DT) where DT
     bg = Background(par)
     ih = IonizationHistory(Peebles(), par, bg)
     k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100)
-    sf = sourcefunction(par, bg, ih, k_grid, BasicNewtonian())
+    sf = source_function(par, bg, ih, k_grid, BasicNewtonian())
     return cltt(100, par, bg, ih, sf)
 end
 

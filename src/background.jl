@@ -1,4 +1,6 @@
 
+# NOTE: Bolt's background functions are in terms of x ≡ ln(a), the log scale factor
+
 # derived quantities (I've chosen natural units, possibly the wrong choice)
 const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [eV]
 const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation)))

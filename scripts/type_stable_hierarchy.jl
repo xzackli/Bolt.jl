@@ -1,15 +1,12 @@
 using Bolt
-# using PyPlot
-# using Unitful, UnitfulAstro, NaturallyUnitful
-# using Interpolations
+using BenchmarkTools
 
 par = CosmoParams()
 bg = Background(par)
 ih = IonizationHistory(Peebles(), par, bg)
-hierarchy = Hierarchy(340bg.H₀, par, bg, ih)
+hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, 340bg.H₀)
 
-# using OrdinaryDiffEq
 xᵢ = log(1e-8)
-u₀ = Bolt.basic_newtonian_adiabatic_initial(hierarchy.par, hierarchy.bg, hierarchy.ih, xᵢ, 340bg.H₀)
+u₀ = Bolt.initial_conditions(xᵢ, hierarchy)
 udummy = deepcopy(u₀)
-@btime Bolt.basic_newtonian_hierarchy!(udummy, u₀, hierarchy, xᵢ)
+@btime Bolt.hierarchy!(udummy, u₀, hierarchy, xᵢ)
