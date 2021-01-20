@@ -41,10 +41,10 @@ function quadratic_k(kmin::T, kmax::T, nk) where T
     return T[kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
 end
 
-function Θl(k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
+function Θl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
     s = zero(T)
     xgrid = bg.x_grid
-    for i in 1:length(xgrid)-1
+    for i in x_i:length(xgrid)-1
         x = xgrid[i]
         sb = bes(k*(bg.η₀ - bg.η(x)))
         source = s_itp(x, k)
@@ -55,11 +55,12 @@ end
 
 function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
+    x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
     s = zero(T)
     for i in 1:length(kgrid)-1
         k = kgrid[i]
         dk = kgrid[i+1] - kgrid[i]
-        th = Θl(k, s_itp, bes, par, bg)
+        th = Θl(x_i, k, s_itp, bes, par, bg)
         s += th^2 * dk / k
     end
     return s
