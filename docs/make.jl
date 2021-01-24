@@ -18,4 +18,5 @@ makedocs(;
 
 deploydocs(;
     repo="github.com/xzackli/Bolt.jl",
+    devbranch = "main"
 )
