@@ -1,9 +1,9 @@
 # Bolt
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://xzackli.github.io/Bolt.jl/stable)
+<!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://xzackli.github.io/Bolt.jl/stable) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://xzackli.github.io/Bolt.jl/dev)
 [![Build Status](https://github.com/xzackli/Bolt.jl/workflows/CI/badge.svg)](https://github.com/xzackli/Bolt.jl/actions)
-[![Coverage](https://codecov.io/gh/xzackli/Bolt.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/xzackli/Bolt.jl)
+[![codecov](https://codecov.io/gh/xzackli/Bolt.jl/branch/main/graph/badge.svg?token=NDj9hvOUkN)](https://codecov.io/gh/xzackli/Bolt.jl)
 
 ⚡ Bolt is a pure-Julia integrator for the Boltzmann equations in cosmology. It can accurately compute the gradient of the CMB power spectrum, with respect to cosmological parameters, using forward-mode automatic differentiation.
 
