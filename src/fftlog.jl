@@ -1,6 +1,8 @@
 
 # export plan_fftlog, mul!, fftlogfreq
 
+# TODO: ADD q BIAS
+
 struct FFTLogPlan{T, OT, AA<:AbstractArray{Complex{T},1}, PT<:Plan, IPT<:Plan}
     L::T
     N::Int

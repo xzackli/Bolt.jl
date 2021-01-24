@@ -19,6 +19,8 @@ using Hankel
 using ThreadPools
 using ForwardDiff, DiffResults
 using NumericalIntegration
+
+using FFTW
 import SpecialFunctions: gamma, lgamma
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!

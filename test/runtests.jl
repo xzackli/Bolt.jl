@@ -1,10 +1,24 @@
 using Bolt
 using Test
+using DelimitedFiles
+using LinearAlgebra
 
-@testset "Bolt.jl" begin
-    # Write your tests here.
-
-    # early_time_Xₑ(z2x(1587.4))
+@testset "FFTLog" begin
+    N = 64
+    μ = 0
+    q = 0.0
+    r₀ = 1.0
+    L = 8.0
+    Nhalf = N ÷ 2
+    n = range(-Nhalf,Nhalf,length=N)
+    r = r₀ .* 10 .^ (n .* L ./ N )
+    pl = Bolt.plan_fftlog(r, μ, q, 1.0; kropt=true)
+    aₙ = r .^ (μ + 1) .* exp.(-r.^2 / 2)
+    y = similar(r, ComplexF64)
+    fftdata = readdlm("data/fftlog_example.txt", ' ', Float64, '\n')
+    mul!(y, pl, aₙ)
+    f_ref = fftdata[:,2]
+    @test isapprox(y, f_ref)
 end
 
 ## hand-written ℋ derivative for testing
