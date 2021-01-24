@@ -1,9 +1,7 @@
+# utilities for applying an FFTLog transformation
 
-# export plan_fftlog, mul!, fftlogfreq
-
-# TODO: ADD q BIAS
-
-struct FFTLogPlan{T, OT, AA<:AbstractArray{Complex{T},1}, PT<:Plan, IPT<:Plan}
+struct FFTLogPlan{T, OT, AA<:AbstractArray{Complex{T},1},
+                  AAR<:AbstractArray{T,1}, PT<:Plan, IPT<:Plan}
     L::T
     N::Int
     μ::OT
@@ -11,9 +9,12 @@ struct FFTLogPlan{T, OT, AA<:AbstractArray{Complex{T},1}, PT<:Plan, IPT<:Plan}
     r₀::T
     k₀r₀::T
     uₘ::AA
+    r::AAR
+    k::AAR
     fftplan!::PT
     ifftplan!::IPT
 end
+
 
 function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
                      kropt=true) where {T, AA<:AbstractArray{T,1}}
@@ -26,6 +27,11 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
     if kropt
         k₀r₀ = k₀r₀_low_ringing(N, μ, q, L, k₀r₀)
     end
+    k₀ = k₀r₀ / r₀
+    Nhalf = N ÷ 2
+    n = range(-Nhalf,Nhalf,length=N)
+    k = reverse(k₀ .* exp.(n .* L / N))
+
     m = fftfreq(N, N)  # get indicies that go from [-N/2] to [N/2]
     uₘ_coeff = similar(r, Complex{T})
     for i in eachindex(m)
@@ -34,12 +40,15 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
     uₘ_coeff[N÷2+1] = real(uₘ_coeff[N÷2+1])  # eq 19
     fftplan! = plan_fft!(uₘ_coeff)
     ifftplan! = plan_ifft!(uₘ_coeff)
-    return FFTLogPlan(L, N, μ, q, r₀, k₀r₀, uₘ_coeff, fftplan!, ifftplan!)
+    return FFTLogPlan(L, N, μ, q, r₀, k₀r₀, uₘ_coeff, r, k, fftplan!, ifftplan!)
 end
 
 
-U_μ(μ, x) = 2^x * gamma((μ + 1 + x)/2) / gamma((μ + 1 - x)/2)
+U_μ(μ, x) = exp(
+    x * log(2.) - lgamma(0.5 * (μ + 1 - x)) + lgamma(0.5 * (μ + 1 + x))
+)
 uₘ(m, μ, q, L, k₀r₀) = (k₀r₀)^(-2π * im * m / L) * U_μ(μ, q + 2π * im * m / L)
+
 
 function k₀r₀_low_ringing(N, μ, q, L, k₀r₀=1.0)
     # from pyfftlog
@@ -56,21 +65,19 @@ end
 
 function mul!(Y, pl::FFTLogPlan, A)
     Y .= A
+    Y .*= (pl.r).^(-pl.q)
     pl.fftplan! * Y
     Y .*= pl.uₘ
     pl.ifftplan! * Y
+    Y .*= (pl.r).^(pl.q)
 end
+
 
 function ldiv!(Y, pl::FFTLogPlan, A)
     Y .= A
+    Y .*= (pl.r).^(-pl.q)
     pl.fftplan! * Y
     Y ./= pl.uₘ
     pl.ifftplan! * Y
-end
-
-function fftlogfreq(pl::FFTLogPlan)
-    k₀ = pl.k₀r₀ / pl.r₀
-    Nhalf = pl.N ÷ 2
-    n = range(-Nhalf,Nhalf,length=pl.N)
-    return reverse(k₀ .* exp.(n .* pl.L / pl.N))
+    Y .*= (pl.r).^(pl.q)
 end

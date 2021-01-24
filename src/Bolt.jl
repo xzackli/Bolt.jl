@@ -15,13 +15,12 @@ using OrdinaryDiffEq
 using Interpolations
 using OffsetArrays
 using QuadGK
-using Hankel
 using ThreadPools
 using ForwardDiff, DiffResults
 using NumericalIntegration
 
 using FFTW
-import SpecialFunctions: gamma, lgamma
+import SpecialFunctions: lgamma
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!
 
