@@ -24,6 +24,7 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
     @assert logrmin < logrmax
     N = length(r)
     L = logrmax - logrmin
+    dlnr = L / (N - 1)
     if kropt
         k₀r₀ = k₀r₀_low_ringing(N, μ, q, L, k₀r₀)
     end
@@ -35,7 +36,7 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
     m = fftfreq(N, N)  # get indicies that go from [-N/2] to [N/2]
     uₘ_coeff = similar(r, Complex{T})
     for i in eachindex(m)
-        uₘ_coeff[i] = uₘ(m[i], μ, q, L, k₀r₀)
+        uₘ_coeff[i] = uₘ(m[i], μ, q, dlnr, k₀r₀, N)
     end
     uₘ_coeff[N÷2+1] = real(uₘ_coeff[N÷2+1])  # eq 19
     fftplan! = plan_fft!(uₘ_coeff)
@@ -44,15 +45,13 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
 end
 
 
-U_μ(μ, x) = exp(
-    x * log(2.) - lgamma(0.5 * (μ + 1 - x)) + lgamma(0.5 * (μ + 1 + x))
-)
-uₘ(m, μ, q, L, k₀r₀) = (k₀r₀)^(-2π * im * m / L) * U_μ(μ, q + 2π * im * m / L)
+U_μ(μ, x) = exp(x * log(2.) - lgamma(0.5 * (μ + 1 - x)) + lgamma(0.5 * (μ + 1 + x)))
+uₘ(m, μ, q, dlnr, k₀r₀, N) = (k₀r₀)^(-2π * im * m / (dlnr * N)) * U_μ(μ, q + 2π * im * m / (dlnr * N) )
 
 
 function k₀r₀_low_ringing(N, μ, q, L, k₀r₀=1.0)
     # from pyfftlog
-    dlnr = L / (N)
+    dlnr = L / (N-1)
     xp = (μ + 1 + q) / 2
     xm = (μ + 1 - q) / 2
     y = π * im / 2 / dlnr

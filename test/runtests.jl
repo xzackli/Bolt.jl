@@ -20,12 +20,13 @@ using LinearAlgebra
     # test forward
     mul!(y, pl, aₙ)
     f_ref = fftdata[:,2]
+    @test all(abs.(y .- f_ref) .< 1e-15)
     @test isapprox(y, f_ref)
 
     # test backward
     y2 = similar(r, ComplexF64)
     ldiv!(y2, pl, y)
-    @test isapprox(y2, aₙ) atol=1e-12
+    @test all(abs.(y2 .- aₙ) .< 1e-15)
 
 end
 
