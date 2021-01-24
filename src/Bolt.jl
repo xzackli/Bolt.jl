@@ -12,13 +12,17 @@ using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
 using NLsolve
 using OrdinaryDiffEq
-using NumericalIntegration
 using Interpolations
 using OffsetArrays
 using QuadGK
-using SpecialFunctions
+using Hankel
 using ThreadPools
 using ForwardDiff, DiffResults
+using NumericalIntegration
+import SpecialFunctions: gamma, lgamma
+import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
+import LinearAlgebra: mul!, ldiv!
+
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
@@ -36,6 +40,7 @@ abstract type AbstractCosmoParams{T} end
 end
 
 include("util.jl")
+include("fftlog.jl")
 include("background.jl")
 include("ionization.jl")
 include("perturbations.jl")

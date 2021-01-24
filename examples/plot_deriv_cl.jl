@@ -38,3 +38,9 @@ ylim(-0.3, 0.5)
 tight_layout()
 # savefig("docs/assets/example_spectrum.png")
 gcf()
+
+##
+sf
+
+
+##
