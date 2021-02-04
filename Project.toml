@@ -29,6 +29,7 @@ UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
 
 [compat]
 BenchmarkTools = "0.5"
+DataInterpolations = "3.3"
 DataStructures = "0.18"
 DiffResults = "1.0"
 FFTW = "1.3"
