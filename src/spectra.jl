@@ -16,9 +16,9 @@ function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
             grid[i_x,i_k] = Bolt.source_function(du, u, hierarchy, x)
         end
     end
-    return grid
-    # itp = LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Line())
-    # return itp
+    # return grid
+    itp = LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Line())
+    return itp
 end
 
 # we make the assumption that shifting the coordinates upon which we integrate
@@ -56,25 +56,25 @@ end
 
 
 
-# function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
-#     bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
-#     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
-#     s = zero(T)
-#     for i in 1:length(kgrid)-1
-#         k = kgrid[i]
-#         dk = kgrid[i+1] - kgrid[i]
-#         th = Θl(x_i, k, s_itp, bes, par, bg)
-#         s += th^2 * dk / k
-#     end
-#     return s
-# end
+function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
+    bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
+    x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
+    s = zero(T)
+    for i in 1:length(kgrid)-1
+        k = kgrid[i]
+        dk = kgrid[i+1] - kgrid[i]
+        th = Θl(x_i, k, s_itp, bes, par, bg)
+        s += th^2 * dk / k
+    end
+    return s
+end
 
-# function cltt(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
-#     dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
-#     cltt(ℓ, sf, dense_kgrid, par, bg)
-# end
+function cltt(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
+    dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
+    cltt(ℓ, sf, dense_kgrid, par, bg)
+end
 
-# function cltt(ℓ⃗, par::AbstractCosmoParams, bg, ih, sf)
-#     dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
-#     return qmap(ℓ->cltt(ℓ, par, bg, ih, sf), ℓ⃗)
-# end
+function cltt(ℓ⃗, par::AbstractCosmoParams, bg, ih, sf)
+    dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
+    return qmap(ℓ->cltt(ℓ, par, bg, ih, sf), ℓ⃗)
+end

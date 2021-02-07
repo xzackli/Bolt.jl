@@ -20,7 +20,7 @@ using ForwardDiff, DiffResults
 using NumericalIntegration
 
 using FFTW
-import SpecialFunctions: lgamma
+import SpecialFunctions: lgamma, sphericalbesselj
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!
 

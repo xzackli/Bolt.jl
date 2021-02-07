@@ -9,7 +9,7 @@ ih = IonizationHistory(Peebles(), par, bg)
 k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100)
 sf = source_grid(par, bg, ih, k_grid, BasicNewtonian())
 
-ells = 100:20:1200
+ells = 100:50:1200
 cl = cltt(ells, par, bg, ih, sf)
 
 clf()
