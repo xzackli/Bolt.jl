@@ -1,6 +1,6 @@
 name = "Bolt"
 uuid = "d94d39b4-3f51-4e5a-bfd8-f3b08e8f2b62"
-authors = ["Zack Li"]
+authors = ["Zack Li", "Jamie Sullivan"]
 version = "0.1.0"
 
 [deps]
