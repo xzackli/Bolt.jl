@@ -173,8 +173,8 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     g̃ₓ, g̃ₓ′, g̃ₓ″ = ih.g̃(x), ih.g̃′(x), ih.g̃″(x)
     a = x2a(x)
 
-    Θ, Θᵖ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
-    Θ′, Θᵖ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
+    Θ, Θᵖ, 𝒩, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    Θ′, Θᵖ′, 𝒩′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
     # recalulate these since we didn't save them
     Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ωr * Θ[2]
