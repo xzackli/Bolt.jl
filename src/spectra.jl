@@ -2,11 +2,11 @@
 # OPTIMIZATION OPPORTUNITY
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
-function source_grid(par::Params{T}, bg, ih, k_grid,
+function source_grid(par::AbstractParams{T}, bg, ih, k_grid,
         integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
-    @qthreads for (i_k, k) in enumerate(k_grid)
+    for (i_k, k) in enumerate(k_grid)
         hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ)
         perturb = boltsolve(hierarchy; reltol=reltol)
         for (i_x, x) in enumerate(x_grid)
@@ -42,7 +42,7 @@ function quadratic_k(kmin::T, kmax::T, nk) where T
     return T[kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
 end
 
-function Θl(x_i, k, s_itp, bes, par::Params{T}, bg) where {T}
+function Θl(x_i, k, s_itp, bes, par::AbstractParams{T}, bg) where {T}
     s = zero(T)
     xgrid = bg.x_grid
     for i in x_i:length(xgrid)-1
@@ -56,7 +56,7 @@ end
 
 
 
-function cltt(ℓ, s_itp, kgrid, par::Params{T}, bg) where {T}
+function cltt(ℓ, s_itp, kgrid, par::AbstractParams{T}, bg) where {T}
     bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
     s = zero(T)
@@ -69,12 +69,12 @@ function cltt(ℓ, s_itp, kgrid, par::Params{T}, bg) where {T}
     return s
 end
 
-function cltt(ℓ::Int, par::Params, bg, ih, sf)
+function cltt(ℓ::Int, par::AbstractParams, bg, ih, sf)
     dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
     cltt(ℓ, sf, dense_kgrid, par, bg)
 end
 
-function cltt(ℓ⃗, par::Params, bg, ih, sf)
+function cltt(ℓ⃗, par::AbstractParams, bg, ih, sf)
     dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
     return qmap(ℓ->cltt(ℓ, par, bg, ih, sf), ℓ⃗)
 end

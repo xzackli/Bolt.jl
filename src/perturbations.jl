@@ -4,7 +4,7 @@ abstract type PerturbationIntegrator end
 struct BasicNewtonian <: PerturbationIntegrator end
 
 # a container for everything needed to integrate a hierarchy at wavenumber k
-struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:Params{T},
+struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractParams{T},
                  BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real}
     integrator::PI
     par::CP
@@ -13,7 +13,7 @@ struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:Params{T},
     k::Tk
     ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
 end
-Hierarchy(integrator::PerturbationIntegrator, par::Params, bg::AbstractBackground,
+Hierarchy(integrator::PerturbationIntegrator, par::AbstractParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ)
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
@@ -40,7 +40,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     Ωr, Ωb, Ωm, Nν, H₀² = par.Ωr, par.Ωb, par.Ωm, par.Nν, bg.H₀^2 #add Nν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ″ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ″(x)
     a = x2a(x)
     R = 4Ωr / (3Ωb * a)
     Ω_ν =  7Nν/8 *(4/11)^(4/3) *Ωr
@@ -111,7 +111,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     ℓ_ν = 10 #again, for now
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+5)
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ″ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ″(xᵢ)
     Θ, Θᵖ, 𝒩, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
 
@@ -168,9 +168,9 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     # compute some quantities
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     H₀² = bg.H₀^2
-    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ″(x)
-    τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
-    g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
+    ℋₓ, ℋₓ′, ℋₓ″ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ″(x)
+    τₓ, τₓ′, τₓ″ = ih.τ(x), ih.τ′(x), ih.τ″(x)
+    g̃ₓ, g̃ₓ′, g̃ₓ″ = ih.g̃(x), ih.g̃′(x), ih.g̃″(x)
     a = x2a(x)
 
     Θ, Θᵖ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
@@ -184,10 +184,10 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
 
     term1 =  g̃ₓ * (Θ[0] + Ψ + Π/4) + exp(-τₓ) * (Ψ′ - Φ′)
     term2 = (-1/k) * (ℋₓ′ * g̃ₓ * v_b + ℋₓ * g̃ₓ′ * v_b + ℋₓ * g̃ₓ * v_b′)
-    Π′′ = 2k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * Θ[1] + Θ′[1]) + (3/10) * (τₓ′′ * Π + τₓ′ * Π′) -
+    Π″ = 2k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * Θ[1] + Θ′[1]) + (3/10) * (τₓ″ * Π + τₓ′ * Π′) -
         3k / (5ℋₓ) * (-ℋₓ′ / ℋₓ * (Θ[3] + Θᵖ[1] + Θᵖ[3]) + (Θ′[3] + Θᵖ′[1] + Θᵖ′[3]))
     term3 = (3/(4k^2)) * (
-        (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
-        ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′))
+        (ℋₓ′^2 + ℋₓ * ℋₓ″) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
+        ℋₓ^2 * (g̃ₓ″ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π″))
     return term1 + term2 + term3
 end

@@ -18,7 +18,7 @@ end
 # which match that paper perfectly
 function IonizationHistory(
     integrator :: Peebles, 
-    𝕡 :: Params{T}, 
+    𝕡 :: AbstractParams{T}, 
     bg :: AbstractBackground
 ) where {T}
 
@@ -55,7 +55,7 @@ Tb(𝕡, a) = T₀ / a
 saha_rhs(𝕡, a) = (m_e * Tb(𝕡, a) / 2π)^(3/2) / n_H(𝕡, a) *
     exp(-ε₀_H / Tb(𝕡, a))  # rhs of Callin06 eq. 12
 
-function saha_Xₑ(𝕡::Params, x)
+function saha_Xₑ(𝕡::AbstractParams, x)
     rhs = saha_rhs(𝕡, x2a(x))
     return  (√(rhs^2 + 4rhs) - rhs) / 2  # solve Xₑ² / (1-Xₑ) = RHS, it's a polynomial
 end
@@ -115,7 +115,7 @@ end
 Utility function for generating a decent approximation to Xₑ in ΛCDM recombination,
 using the Saha equation until z=1587.4 and then the Peebles equation for the rest.
 """
-function saha_peebles_recombination(𝕡::Params{T}) where {T}
+function saha_peebles_recombination(𝕡::AbstractParams{T}) where {T}
     z_transition = 1587.4
     x_transition = z2x(z_transition)
     saha_z_grid = 1800:-10:z_transition

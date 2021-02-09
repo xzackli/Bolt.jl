@@ -20,7 +20,7 @@ using UnitfulAstro
 
 import LinearAlgebra: mul!, ldiv!
 
-export ΛCDMParams, Params,
+export ΛCDMParams, AbstractParams,
     Background, AbstractBackground,
     IonizationHistory, AbstractIonizationHistory,
     Peebles,
@@ -29,9 +29,9 @@ export ΛCDMParams, Params,
     z2a, a2z, x2a, a2x, z2x, x2z
 
 
-abstract type Params{T} end
+abstract type AbstractParams{T} end
 
-@with_kw struct ΛCDMParams{T} <: Params{T} @deftype T
+@with_kw struct ΛCDMParams{T} <: AbstractParams{T} @deftype T
     h  = 0.7       # hubble factor
     Ωr = 5.042e-5  # radiation density
     Ωb = 0.046     # baryon density
