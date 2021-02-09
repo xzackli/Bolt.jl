@@ -38,6 +38,7 @@ abstract type AbstractCosmoParams{T} end
     Ω_m = 0.224  # matter density
     n = 1.0  # spectral index
     Y_p = 0.0  # primordial helium fraction, currently unused
+    N_ν = 3.046 #effective number of relativisic species (PDG25 value)
 end
 
 include("util.jl")

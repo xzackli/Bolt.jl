@@ -7,10 +7,15 @@ const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation)))
 
 H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
 ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural  # [eV⁴]
-Ω_Λ(par::AbstractCosmoParams) = 1 - (par.Ω_r + par.Ω_b + par.Ω_m)  # dark energy density
+Ω_Λ(par::AbstractCosmoParams) = 1 - (par.Ω_r*(1+(7par.N_ν/8)*(4/11)^4/3)
+                                     + par.Ω_b + par.Ω_m)  # dark energy density
+
+#need to account for neutrinos
 
 # Hubble parameter ȧ/a in Friedmann background
-H_a(a, par::AbstractCosmoParams) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3) + par.Ω_r * a^(-4) + Ω_Λ(par))
+H_a(a, par::AbstractCosmoParams) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3)
+                                                + par.Ω_r*(1+(7par.N_ν/8)*(4/11)^4/3) * a^(-4)
+                                                + Ω_Λ(par))
 # conformal time Hubble parameter, aH
 ℋ_a(a, par::AbstractCosmoParams) = a * H_a(a, par)
 
