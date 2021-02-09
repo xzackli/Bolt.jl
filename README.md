@@ -24,8 +24,8 @@ using Bolt
 using ForwardDiff
 
 # Cₗ₌₁₀₀ function of baryon density
-function cl100(Ω_b::DT) where DT
-    par = CosmoParams{DT}(Ω_b=Ω_b)
+function cl100(Ωb::DT) where DT
+    par = CosmoParams{DT}(Ωb=Ωb)
     bg = Background(par)
     ih = IonizationHistory(Peebles(), par, bg)
     k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100)

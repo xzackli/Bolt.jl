@@ -4,7 +4,7 @@ abstract type PerturbationIntegrator end
 struct BasicNewtonian <: PerturbationIntegrator end
 
 # a container for everything needed to integrate a hierarchy at wavenumber k
-struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
+struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:Params{T},
                  BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real}
     integrator::PI
     par::CP
@@ -13,7 +13,7 @@ struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T}
     k::Tk
     ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
 end
-Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
+Hierarchy(integrator::PerturbationIntegrator, par::Params, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ)
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
@@ -39,21 +39,21 @@ end
 function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
-    Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
+    Ωr, Ωb, Ωm, Nν, H₀² = par.Ωr, par.Ωb, par.Ωm, par.Nν, bg.H₀^2 #add Nν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
-    R = 4Ω_r / (3Ω_b * a)
-    Ω_ν =  7N_ν/8 *(4/11)^(4/3) *Ω_r
+    R = 4Ωr / (3Ωb * a)
+    Ω_ν =  7Nν/8 *(4/11)^(4/3) *Ωr
     ℓ_ν = 10 #again, for now
 
     Θ, Θᵖ, 𝒩, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     Θ′, Θᵖ′, 𝒩′,_, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
 
     # metric perturbations
-    #Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2])
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2] + Ω_ν * 𝒩[2]) #add rel quadrupole
+    #Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ωr * Θ[2])
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ωr * Θ[2] + Ω_ν * 𝒩[2]) #add rel quadrupole
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
+        Ωm * a^(-1) * δ + Ωb * a^(-1) * δ_b + 4Ωr * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0]) #add rel monopole on this line
 
     # matter
@@ -137,7 +137,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
 
     # neutrino hierarchy
     # for now we assume xᵢ is before neutrinos decouple
-    f_ν = 1/(1 + 1/(7par.N_ν/8 *(4/11)^(4/3)))
+    f_ν = 1/(1 + 1/(7par.Nν/8 *(4/11)^(4/3)))
     𝒩[0] = Θ[0]
     𝒩[1] = Θ[1]
     𝒩[2] = - (k^2 *aᵢ²*Φ) / (12H₀²) * 1 / (1 + 5f_ν/2) #Callin06 (71)
@@ -168,7 +168,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     # compute some quantities
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     H₀² = bg.H₀^2
-    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
+    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ″(x)
     τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
     a = x2a(x)
@@ -177,8 +177,8 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     Θ′, Θᵖ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
     # recalulate these since we didn't save them
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ω_r * Θ[2]
-    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ω_r * (Θ′[2] - 2 * Θ[2])
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ωr * Θ[2]
+    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ωr * (Θ′[2] - 2 * Θ[2])
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 

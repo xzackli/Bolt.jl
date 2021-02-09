@@ -3,12 +3,12 @@ TCA_condition(k, ℋₓ, τₓ′) = (abs(k / (ℋₓ * τₓ′)) < 0.1) & (abs
 
 # NOTE: NO NEUTRINOS 𝒩
 function hierarchy!(du, u, p::AbstractCosmoParams, x)
-    ℓᵧ, Ω_r, Ω_b, Ω_m = p.ℓᵧ, p.Ω_r, p.Ω_b, p.Ω_m
+    ℓᵧ, Ωr, Ωb, Ωm = p.ℓᵧ, p.Ωr, p.Ωb, p.Ωm
     H₀² = bg.H₀^2
     ℋₓ, ℋₓ′ = bg.ℋ(x), bg.ℋ′(x)
     τₓ′, τₓ′′ = ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
-    R = 4Ω_r / (3Ω_b * a)
+    R = 4Ωr / (3Ωb * a)
 
     # get array views of photon perturbations
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indicies 0 through ℓᵧ
@@ -18,9 +18,9 @@ function hierarchy!(du, u, p::AbstractCosmoParams, x)
     Φ, δ, v, δ_b, v_b = u[(2ℓᵧ+3):(2ℓᵧ+7)]
 
     # metric perturbations
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2])
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ωr * Θ[2])
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0])
+        Ωm * a^(-1) * δ + Ωb * a^(-1) * δ_b + 4Ωr * a^(-2) * Θ[0])
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
