@@ -16,7 +16,7 @@ end
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ)
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
+@⌛ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
@@ -36,7 +36,7 @@ function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
 end
 
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
-function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
+@⌛ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     Ωr, Ωb, Ωm, Nν, H₀² = par.Ωr, par.Ωb, par.Ωm, par.Nν, bg.H₀^2 #add Nν≡N_eff
@@ -107,7 +107,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 end
 
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
-function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
+@⌛ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     ℓ_ν = 10 #again, for now
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+5)

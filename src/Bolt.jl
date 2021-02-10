@@ -4,6 +4,7 @@ using AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 using FFTW
 using ForwardDiff, DiffResults
 using Interpolations
+using MacroTools: @capture, combinedef, prewalk, rmlines, splitdef
 using NaturallyUnitful
 using NLsolve
 using NumericalIntegration
@@ -15,6 +16,7 @@ using PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
 using QuadGK
 using SpecialFunctions: lgamma, sphericalbesselj
 using ThreadPools
+using TimerOutputs
 using Unitful
 using UnitfulAstro
 
@@ -26,7 +28,8 @@ export ΛCDMParams, AbstractParams,
     Peebles,
     Hierarchy, boltsolve, BasicNewtonian,
     source_grid, quadratic_k, cltt,
-    z2a, a2z, x2a, a2x, z2x, x2z
+    z2a, a2z, x2a, a2x, z2x, x2z,
+    @show⌛
 
 
 abstract type AbstractParams{T} end
