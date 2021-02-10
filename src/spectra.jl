@@ -2,7 +2,7 @@
 # OPTIMIZATION OPPORTUNITY
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
-function source_grid(par::AbstractParams{T}, bg, ih, k_grid,
+@⌛ function source_grid(par::AbstractParams{T}, bg, ih, k_grid,
         integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))

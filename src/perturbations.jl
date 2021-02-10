@@ -164,7 +164,7 @@ end
 
 # TODO: this could be extended to any Newtonian gauge integrator if we specify the
 # Bardeen potential Ψ and its derivative ψ′ for an integrator, or we saved them
-function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
+@⌛ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute some quantities
     k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
     H₀² = bg.H₀^2
