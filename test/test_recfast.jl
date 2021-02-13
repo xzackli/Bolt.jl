@@ -1,6 +1,7 @@
 using Bolt
 include("../test/deps/deps.jl")
 
+##
 """
 Wrapper of RECFAST Fortran code with parameters as defined in that code.
 Returns tuple of (z's, xe's)
@@ -26,10 +27,10 @@ bg = Background(p)
 T_cmb = 2.7255
 z, xedat = get_xe(p.Ω_b, p.Ω_m, Bolt.Ω_Λ(p), p.h * 100, T_cmb, p.Y_p)
 
-clf()
-plt.plot(z, xedat, "-")
+# clf()
+# plt.plot(z, xedat, "-")
 # xscale("log")
-gcf()
+# gcf()
 
 
 ##
@@ -241,7 +242,7 @@ function ion_recfast(z, y, f)
 	dHdz = (HO^2 /2/Hz)*(4*(1+z)^3/(1+z_eq)*OmegaT + 3*OmegaT*(1+z)^2 + 2*OmegaK*(1+z) )
 
     # Get the radiative rates using PPQ fit (identical to Hummer's table)
-	Rdown=1 - 19*a_PPB*(Tmat/1e4)^b_PPB/(1. + c_PPB*(Tmat/1e4)^d_PPB)
+	Rdown=1e-19*a_PPB*(Tmat/1e4)^b_PPB/(1. + c_PPB*(Tmat/1e4)^d_PPB)
 	Rup = Rdown * (CR*Tmat)^(1.5)*exp(-CDB/Tmat)
 
     # calculate He using a fit to a Verner & Ferland type formula
@@ -385,11 +386,31 @@ z_TEST = 1400.0
 x_H0, x_He0, x0 = recfast_init(z_TEST)
 # print(x_H0, "\n")
 get_ion(z_TEST, [x_H0, x_He0, Tnow * (1+z_TEST)] )
+##
 
+function test_fort(z)
+    f_TEST = get_ion(z, [x_H0, x_He0, Tnow * (1+z_TEST)] )
+    return f_TEST[1]
+end
 
 ##
-f_TEST = zeros(3)
-ion_recfast(z_TEST, [x_H0, x_He0, Tnow * (1+z_TEST)], f_TEST)
-f_TEST
+function test(z)
+    f_TEST = zeros(3)
+    ion_recfast(z, [x_H0, x_He0, Tnow * (1+z_TEST)], f_TEST)
+    return f_TEST[1]
+end
+
+clf()
+plot([abs(test_fort(z)) for z in 10:100:2000])
+plot([abs(test(z)) for z in 10:100:2000])
+yscale("log")
+gcf()
+
+##
+clf()
+plot([test_fort(z) ./ test(z) for z in 10:100:2000])
+# plot([-test(z) for z in 10:100:2000])
+# yscale("log")
+gcf()
 
 ##
