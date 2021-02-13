@@ -33,15 +33,23 @@ gcf()
 
 
 ##
+
+
+
+##
+# using Parameters
+# @with_kw struct RECFASTParams @deftype Float64
 bigH = 100.0e3 / (1e6 * 3.0856775807e16)	 # H₀ in s-1
-C, k_B, h_P = 2.99792458e8, 1.380658e-23, 6.6260755e-34
-m_e, m_H = 9.1093897e-31, 1.673575e-27  #	av. H atom
+C  = 2.99792458e8  # Fundamental constants in SI units
+k_B = 1.380658e-23
+h_P = 6.6260755e-34
+m_e = 9.1093897e-31
+m_H = 1.673575e-27  #	av. H atom
 # note: neglecting deuterium, making an O(e-5) effect
-not4 = 3.9715e0  # mass He/H atom
-sigma, a = 6.6524616e-29, 7.565914e-16
+not4 = 3.9715e0  # mass He/H atom  ("not4" pointed out by Gary Steigman)
+sigma = 6.6524616e-29
+a = 7.565914e-16
 G = 6.6742e-11 	# new value
-# Fundamental constants in SI units
-# ("not4" pointed out by Gary Steigman)
 
 Lambda = 8.2245809e0
 Lambda_He = 51.3e0              # new value from Dalgarno
@@ -68,10 +76,12 @@ zGauss1 = 7.28e0                # ln(1+z) of 1st Gaussian
 zGauss2 = 6.73e0                # ln(1+z) of 2nd Gaussian
 wGauss1 = 0.18e0                # Width of 1st Gaussian
 wGauss2 = 0.33e0                # Width of 2nd Gaussian
+# end
+
+##
 # Gaussian fits for extra H physics (fit by Adam Moss, modified by
 # Antony Lewis)
 
-##
 OmegaB = p.Ω_b
 OmegaC = p.Ω_m
 OmegaL = Bolt.Ω_Λ(p)
@@ -139,3 +149,73 @@ y = zeros(3)  # array is x_H, x_He, Tmat (Hydrogen ionization, Helium ionization
 # x_H0, x_He0 = get_init(z, x0)
 # y[1] = x_H0
 # y[2] = x_He0
+
+##
+function get_init(z)
+    x_H0, x_He0, x0 = [0.0], [0.0], [0.0]
+    ccall(
+        (:get_init_, librecfast), Nothing,
+        (Ref{Float64}, Ref{Float64}, Ref{Float64}, Ref{Float64}),
+        z, x_H0, x_He0, x0
+    )
+    return x_H0[1], x_He0[1], x0[1]
+end
+
+function recfast_init(z)
+    if z > 8000.
+        x_H0 = 1.
+        x_He0 = 1.
+        x0 = 1. + 2fHe
+    elseif z > 3500.
+        x_H0 = 1.
+        x_He0 = 1.
+        rhs = exp( 1.5 * log(CR*Tnow/(1. + z)) - CB1_He2/(Tnow*(1. + z)) ) / Nnow
+	    rhs = rhs * 1.  #ratio of g's is 1 for He++ <-> He+
+	    x0 = 0.5 * ( sqrt( (rhs - 1. - fHe)^2 + 4. * (1. + 2fHe)*rhs) - (rhs - 1. - fHe) )
+    elseif z > 2000
+	    x_H0 = 1.
+	    rhs = exp( 1.5 * log(CR*Tnow/(1. + z)) - CB1_He1/(Tnow*(1. + z)) ) / Nnow
+	    rhs = rhs*4.    # ratio of g's is 4 for He+ <-> He0
+	    x_He0 = 0.5 * ( sqrt( (rhs-1.)^2 + 4*(1. + fHe)*rhs ) - (rhs-1.))
+	    x0 = x_He0
+	    x_He0 = (x0 - 1.)/fHe
+    else
+	    rhs = exp( 1.5 * log(CR*Tnow/(1. + z)) - CB1/(Tnow*(1. + z)) ) / Nnow
+	    x_H0 = 0.5 * (sqrt( rhs^2 + 4 * rhs ) - rhs )
+	    x_He0 = 0.
+	    x0 = x_H0
+    end
+
+    return x_H0, x_He0, x0
+end
+using Test
+@test all(get_init(9000.0) .≈ recfast_init(9000.0))
+@test all(get_init(4000.0) .≈ recfast_init(4000.0))
+@test all(get_init(3000.0) .≈ recfast_init(3000.0))
+@test all(get_init(1000.0) .≈ recfast_init(1000.0))
+@test all(get_init(500.0) .≈ recfast_init(500.0))
+@test all(get_init(100.0) .≈ recfast_init(100.0))
+
+##
+
+function get_ion(z, y)
+    # x_H0, x_He0, x0 = [0.0], [0.0], [0.0]
+    Ndim = 3
+    f = zeros(Ndim)
+    ccall(
+        (:ion_, librecfast), Nothing,
+        (Ref{Int64}, Ref{Float64}, Ref{Float64}, Ref{Float64}),
+        Ndim, z, y, f
+    )
+    return f
+end
+
+z_TEST = 1500.0
+x_H0, x_He0, x0 = recfast_init(z_TEST)
+print(x_H0, "\n")
+get_ion(z_TEST, [x_H0, x_He0, Tnow * (1+z_TEST)] )
+
+
+##
+
+##
