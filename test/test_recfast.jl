@@ -210,12 +210,186 @@ function get_ion(z, y)
     return f
 end
 
-z_TEST = 1500.0
+function ion_recfast(z, y, f)
+    # the Pequignot, Petitjean & Boisson fitting parameters for Hydrogen
+	a_PPB = 4.309
+	b_PPB = -0.6166
+	c_PPB = 0.6703
+	d_PPB = 0.5300
+    # the Verner and Ferland type fitting parameters for Helium
+    # fixed to match those in the SSS papers, and now correct
+	a_VF = 10^(-16.744)
+	b_VF = 0.711
+	T_0 = 10^(0.477121)	#!3K
+	T_1 = 10^(5.114)
+    # fitting parameters for HeI triplets
+    # (matches Hummer's table with <1% error for 10^2.8 < T/K < 10^4)
+	a_trip = 10^(-16.306)
+	b_trip = 0.761
+
+	x_H = y[1]
+	x_He = y[2]
+	x = x_H + fHe * x_He
+	Tmat = y[3]
+
+	n = Nnow * (1+z)^3
+	n_He = fHe * Nnow * (1+z)^3
+	Trad = Tnow * (1+z)
+	Hz = HO * sqrt((1+z)^4/(1+z_eq)*OmegaT + OmegaT*(1+z)^3 + OmegaK*(1+z)^2 + OmegaL)
+
+    # Also calculate derivative for use later
+	dHdz = (HO^2 /2/Hz)*(4*(1+z)^3/(1+z_eq)*OmegaT + 3*OmegaT*(1+z)^2 + 2*OmegaK*(1+z) )
+
+    # Get the radiative rates using PPQ fit (identical to Hummer's table)
+	Rdown=1 - 19*a_PPB*(Tmat/1e4)^b_PPB/(1. + c_PPB*(Tmat/1e4)^d_PPB)
+	Rup = Rdown * (CR*Tmat)^(1.5)*exp(-CDB/Tmat)
+
+    # calculate He using a fit to a Verner & Ferland type formula
+	sq_0 = sqrt(Tmat/T_0)
+	sq_1 = sqrt(Tmat/T_1)
+    # typo here corrected by Wayne Hu and Savita Gahlaut
+	Rdown_He = a_VF/(sq_0*(1+sq_0)^(1-b_VF))
+	Rdown_He = Rdown_He/(1+sq_1)^(1+b_VF)
+	Rup_He = Rdown_He*(CR*Tmat)^(1.5)*exp(-CDB_He/Tmat)
+	Rup_He = 4. * Rup_He # statistical weights factor for HeI
+    # Avoid overflow (pointed out by Jacques Roland)
+	if((Bfact/Tmat) > 680.)
+	  He_Boltz = exp(680.)
+	else
+	  He_Boltz = exp(Bfact/Tmat)
+	end
+
+    # now deal with H and its fudges
+	if (Hswitch == 0)
+	    K = CK/Hz # !Peebles coefficient K=lambda_a^3/8piH
+	else
+        # fit a double Gaussian correction function
+        K = CK/Hz*(1.0
+            + AGauss1*exp(-((log(1+z)-zGauss1)/wGauss1)^2)
+            + AGauss2*exp(-((log(1+z)-zGauss2)/wGauss2)^2))
+	end
+
+    # add the HeI part, using same T_0 and T_1 values
+	Rdown_trip = a_trip/(sq_0*(1+sq_0)^(1-b_trip))
+	Rdown_trip = Rdown_trip/((1+sq_1)^(1+b_trip))
+	Rup_trip = Rdown_trip*exp(-h_P*C*L_He2St_ion/(k_B*Tmat))
+	Rup_trip = Rup_trip*((CR*Tmat)^1.5)*(4/3)
+    # last factor here is the statistical weight
+
+    # try to avoid "NaN" when x_He gets too small
+	if ((x_He < 5.e-9) || (x_He > 0.980))
+        Heflag = 0
+	else
+	    Heflag = Heswitch
+	end
+	if (Heflag == 0)  # use Peebles coeff. for He
+	    K_He = CK_He/Hz
+	else # for Heflag>0 		!use Sobolev escape probability
+        tauHe_s = A2P_s*CK_He*3*n_He*(1-x_He)/Hz
+        pHe_s = (1 - exp(-tauHe_s))/tauHe_s
+        K_He = 1 / (A2P_s*pHe_s*3*n_He*(1-x_He))
+        # smoother criterion here from Antony Lewis & Chad Fendt
+	    if (((Heflag == 2) || (Heflag >= 5)) && (x_H < 0.9999999))
+            # use fitting formula for continuum opacity of H
+            # first get the Doppler width parameter
+            Doppler = 2*k_B*Tmat/(m_H*not4*C*C)
+            Doppler = C*L_He_2p*sqrt(Doppler)
+            gamma_2Ps = 3*A2P_s*fHe*(1-x_He)*C*C /(
+                sqrt(π)*sigma_He_2Ps*8π*Doppler*(1-x_H)) /((C*L_He_2p)^2)
+            pb = 0.36 # value from KIV (2007)
+            qb = b_He
+            # calculate AHcon, the value of A*p_(con,H) for H continuum opacity
+            AHcon = A2P_s/(1+pb*(gamma_2Ps^qb))
+            K_He = 1/((A2P_s*pHe_s+AHcon)*3*n_He*(1-x_He))
+	    end
+	    if (Heflag >= 3) # include triplet effects
+            tauHe_t = A2P_t*n_He*(1. - x_He)*3
+            tauHe_t = tauHe_t /(8π*Hz*L_He_2Pt^3)
+            pHe_t = (1 - exp(-tauHe_t))/tauHe_t
+            CL_PSt = h_P*C*(L_He_2Pt - L_He_2st)/k_B
+            if ((Heflag == 3) || (Heflag == 5) || (x_H > 0.99999))
+                # no H cont. effect
+                CfHe_t = A2P_t*pHe_t*exp(-CL_PSt/Tmat)
+                CfHe_t = CfHe_t/(Rup_trip+CfHe_t) # "C" factor for triplets
+            else # include H cont. effect
+                Doppler = 2*k_B*Tmat/(m_H*not4*C*C)
+                Doppler = C*L_He_2Pt*sqrt(Doppler)
+                gamma_2Pt = (3*A2P_t*fHe*(1-x_He)*C*C
+                    /(sqrt(π)*sigma_He_2Pt*8π*Doppler*(1-x_H))
+                    /((C*L_He_2Pt)^2))
+                # use the fitting parameters from KIV (2007) in this case
+                pb = 0.66
+                qb = 0.9
+                AHcon = A2P_t/(1+pb*gamma_2Pt^qb)/3
+                CfHe_t = (A2P_t*pHe_t+AHcon)*exp(-CL_PSt/Tmat)
+                CfHe_t = CfHe_t/(Rup_trip+CfHe_t)  # "C" factor for triplets
+            end
+	    end
+	end
+
+    # Estimates of Thomson scattering time and Hubble time
+	timeTh=(1/(CT*Trad^4))*(1+x+fHe)/x	#!Thomson time
+	timeH=2/(3*HO*(1+z)^1.5)		#!Hubble time
+
+    # calculate the derivatives
+    # turn on H only for x_H<0.99, and use Saha derivative for 0.98<x_H<0.99
+    # (clunky, but seems to work)
+	if (x_H > 0.99)  # don't change at all
+		f[1] = 0.
+    # else if ((x_H.gt.0.98d0).and.(Heflag.eq.0)) then	!don't modify
+	elseif (x_H > 0.985)  # !use Saha rate for Hydrogen
+		f[1] = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-CL/Tmat))/(Hz*(1+z))
+        # for interest, calculate the correction factor compared to Saha
+        # (without the fudge)
+		factor=(1 + K*Lambda*n*(1-x_H))/(Hz*(1+z)*(1+K*Lambda*n*(1-x)+K*Rup*n*(1-x)))
+    else  #!use full rate for H
+		f[1] = (((x*x_H*n*Rdown - Rup*(1.0-x_H)*exp(-CL/Tmat))
+			*(1.0 + K*Lambda*n*(1.0-x_H)))
+		    /(Hz*(1.0+z)*(1.0/fu+K*Lambda*n*(1.0-x_H)/fu
+		    +K*Rup*n*(1.0-x_H))))
+	end
+    # turn off the He once it is small
+	if (x_He < 1e-15)
+		f[2] = 0.
+	else
+		f[2] = (((x*x_He*n*Rdown_He - Rup_He*(1-x_He)*exp(-CL_He/Tmat))
+            *(1+ K_He*Lambda_He*n_He*(1-x_He)*He_Boltz))
+            / (Hz*(1+z)
+            * (1 + K_He*(Lambda_He+Rup_He)*n_He*(1-x_He)*He_Boltz)))
+        # Modification to HeI recombination including channel via triplets
+	    if (Heflag >= 3)
+		    f[2] = f[2] + (x*x_He*n*Rdown_trip
+                - (1-x_He)*3*Rup_trip*exp(-h_P*C*L_He_2st/(k_B*Tmat))
+                ) * CfHe_t/(Hz*(1+z))
+	    end
+	end
+
+    # follow the matter temperature once it has a chance of diverging
+
+	if (timeTh < H_frac*timeH)
+    # f(3)=Tmat/(1.d0+z)	!Tmat follows Trad
+    # additional term to smooth transition to Tmat evolution,
+    # (suggested by Adam Moss)
+		epsilon = Hz*(1+x+fHe)/(CT*Trad^3*x)
+		f[3] = Tnow + epsilon*((1+fHe)/(1+fHe+x))*(
+            (f[1]+fHe*f[2])/x) - epsilon* dHdz/Hz + 3*epsilon/(1+z)
+	else
+		f[3] = CT * (Trad^4) * x / (1+x+fHe)* (Tmat-Trad) / (Hz*(1+z)) + 2*Tmat/(1+z)
+	end
+
+	return
+end
+
+
+z_TEST = 1400.0
 x_H0, x_He0, x0 = recfast_init(z_TEST)
-print(x_H0, "\n")
+# print(x_H0, "\n")
 get_ion(z_TEST, [x_H0, x_He0, Tnow * (1+z_TEST)] )
 
 
 ##
+f_TEST = zeros(3)
+ion_recfast(z_TEST, [x_H0, x_He0, Tnow * (1+z_TEST)], f_TEST)
+f_TEST
 
 ##
