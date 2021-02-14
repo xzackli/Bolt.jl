@@ -1,7 +1,7 @@
 using Bolt
 include("../test/deps/deps.jl")
 
-##
+using OrdinaryDiffEq
 using Parameters
 @with_kw struct RECFASTIonization <: Bolt.IonizationIntegrator @deftype Float64
     bigH = 100.0e3 / (1e6 * 3.0856775807e16)	 # H₀ in s-1
@@ -109,6 +109,7 @@ using Parameters
 
     fu = (Hswitch == 0) ? 1.14 : 1.125
     b_He = 0.86  # Set the He fudge factor
+    tol = 1e-6
 end
 
 𝕚 = RECFASTIonization()
@@ -128,7 +129,6 @@ end
 
 ##
 
-
 """
 Wrapper of RECFAST Fortran code with parameters as defined in that code.
 Returns tuple of (z's, xe's)
@@ -147,7 +147,6 @@ function get_xe(OmegaB::Float64, OmegaC::Float64, OmegaL::Float64,
     )
     range(zstart,stop=zend,length=Nz+1)[2:end], xe
 end
-
 
 z, xedat = get_xe(𝕚.OmegaB, 𝕚.OmegaC, 𝕚.OmegaL, 𝕚.HOinp, 𝕚.Tnow, 𝕚.Yp)
 
@@ -217,7 +216,7 @@ function get_ion(z, y)
     return f
 end
 
-function ion_recfast(𝕚::RECFASTIonization, z, y, f)
+function ion_recfast!(f, y, 𝕚::RECFASTIonization, z)
 
 	x_H = y[1]
 	x_He = y[2]
@@ -272,48 +271,48 @@ function ion_recfast(𝕚::RECFASTIonization, z, y, f)
 	if ((x_He < 5.e-9) || (x_He > 0.980))
         Heflag = 0
 	else
-	    Heflag = Heswitch
+	    Heflag = 𝕚.Heswitch
 	end
 	if (Heflag == 0)  # use Peebles coeff. for He
 	    K_He = 𝕚.CK_He/Hz
 	else # for Heflag>0 		!use Sobolev escape probability
-        tauHe_s = A2P_s*𝕚.CK_He*3*n_He*(1-x_He)/Hz
+        tauHe_s = 𝕚.A2P_s*𝕚.CK_He*3*n_He*(1-x_He)/Hz
         pHe_s = (1 - exp(-tauHe_s))/tauHe_s
-        K_He = 1 / (A2P_s*pHe_s*3*n_He*(1-x_He))
+        K_He = 1 / (𝕚.A2P_s*pHe_s*3*n_He*(1-x_He))
         # smoother criterion here from Antony Lewis & Chad Fendt
 	    if (((Heflag == 2) || (Heflag >= 5)) && (x_H < 0.9999999))
             # use fitting formula for continuum opacity of H
             # first get the Doppler width parameter
-            Doppler = 2*k_B*Tmat/(m_H*not4*C*C)
-            Doppler = C*L_He_2p*sqrt(Doppler)
-            gamma_2Ps = 3*A2P_s*𝕚.fHe*(1-x_He)*C*C /(
-                sqrt(π)*sigma_He_2Ps*8π*Doppler*(1-x_H)) /((C*L_He_2p)^2)
+            Doppler = 2*𝕚.k_B*Tmat/(𝕚.m_H*𝕚.not4*𝕚.C*𝕚.C)
+            Doppler = 𝕚.C*𝕚.L_He_2p*sqrt(Doppler)
+            gamma_2Ps = 3*𝕚.A2P_s*𝕚.fHe*(1-x_He)*𝕚.C*𝕚.C /(
+                sqrt(π)*𝕚.sigma_He_2Ps*8π*Doppler*(1-x_H)) /((𝕚.C*𝕚.L_He_2p)^2)
             pb = 0.36 # value from KIV (2007)
-            qb = b_He
+            qb = 𝕚.b_He
             # calculate AHcon, the value of A*p_(con,H) for H continuum opacity
-            AHcon = A2P_s/(1+pb*(gamma_2Ps^qb))
-            K_He = 1/((A2P_s*pHe_s+AHcon)*3*n_He*(1-x_He))
+            AHcon = 𝕚.A2P_s/(1+pb*(gamma_2Ps^qb))
+            K_He = 1/((𝕚.A2P_s*pHe_s+AHcon)*3*n_He*(1-x_He))
 	    end
 	    if (Heflag >= 3) # include triplet effects
-            tauHe_t = A2P_t*n_He*(1. - x_He)*3
-            tauHe_t = tauHe_t /(8π*Hz*L_He_2Pt^3)
+            tauHe_t = 𝕚.A2P_t*n_He*(1. - x_He)*3
+            tauHe_t = tauHe_t /(8π*Hz*𝕚.L_He_2Pt^3)
             pHe_t = (1 - exp(-tauHe_t))/tauHe_t
-            CL_PSt = h_P*C*(L_He_2Pt - L_He_2st)/k_B
+            CL_PSt = 𝕚.h_P*𝕚.C*(𝕚.L_He_2Pt - 𝕚.L_He_2St)/𝕚.k_B
             if ((Heflag == 3) || (Heflag == 5) || (x_H > 0.99999))
                 # no H cont. effect
-                CfHe_t = A2P_t*pHe_t*exp(-CL_PSt/Tmat)
+                CfHe_t = 𝕚.A2P_t*pHe_t*exp(-CL_PSt/Tmat)
                 CfHe_t = CfHe_t/(Rup_trip+CfHe_t) # "C" factor for triplets
             else # include H cont. effect
-                Doppler = 2*k_B*Tmat/(m_H*not4*C*C)
-                Doppler = C*L_He_2Pt*sqrt(Doppler)
-                gamma_2Pt = (3*A2P_t*fHe*(1-x_He)*C*C
-                    /(sqrt(π)*sigma_He_2Pt*8π*Doppler*(1-x_H))
-                    /((C*L_He_2Pt)^2))
+                Doppler = 2*𝕚.k_B*Tmat/(𝕚.m_H*𝕚.not4*𝕚.C*𝕚.C)
+                Doppler = 𝕚.C*𝕚.L_He_2Pt*sqrt(Doppler)
+                gamma_2Pt = (3*𝕚.A2P_t*𝕚.fHe*(1-x_He)*𝕚.C*𝕚.C
+                    /(sqrt(π)*𝕚.sigma_He_2Pt*8π*Doppler*(1-x_H))
+                    /((𝕚.C*𝕚.L_He_2Pt)^2))
                 # use the fitting parameters from KIV (2007) in this case
                 pb = 0.66
                 qb = 0.9
-                AHcon = A2P_t/(1+pb*gamma_2Pt^qb)/3
-                CfHe_t = (A2P_t*pHe_t+AHcon)*exp(-CL_PSt/Tmat)
+                AHcon = 𝕚.A2P_t/(1+pb*gamma_2Pt^qb)/3
+                CfHe_t = (𝕚.A2P_t*pHe_t+AHcon)*exp(-CL_PSt/Tmat)
                 CfHe_t = CfHe_t/(Rup_trip+CfHe_t)  # "C" factor for triplets
             end
 	    end
@@ -330,7 +329,7 @@ function ion_recfast(𝕚::RECFASTIonization, z, y, f)
 		f[1] = 0.
     # else if ((x_H.gt.0.98d0).and.(Heflag.eq.0)) then	!don't modify
 	elseif (x_H > 0.985)  # !use Saha rate for Hydrogen
-		f[1] = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-CL/Tmat))/(Hz*(1+z))
+		f[1] = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-𝕚.CL/Tmat))/(Hz*(1+z))
         # for interest, calculate the correction factor compared to Saha
         # (without the fudge)
 		factor=(1 + K*𝕚.Lambda*n*(1-x_H))/(Hz*(1+z)*(1+K*𝕚.Lambda*n*(1-x)+K*Rup*n*(1-x)))
@@ -351,7 +350,7 @@ function ion_recfast(𝕚::RECFASTIonization, z, y, f)
         # Modification to HeI recombination including channel via triplets
 	    if (Heflag >= 3)
 		    f[2] = f[2] + (x*x_He*n*Rdown_trip
-                - (1-x_He)*3*Rup_trip*exp(-h_P*C*L_He_2st/(k_B*Tmat))
+                - (1-x_He)*3*Rup_trip*exp(-𝕚.h_P*𝕚.C*𝕚.L_He_2St/(𝕚.k_B*Tmat))
                 ) * CfHe_t/(Hz*(1+z))
 	    end
 	end
@@ -376,7 +375,7 @@ end
 z_TEST = 1400.0
 x_H0, x_He0, x0 = recfast_init(𝕚, z_TEST)
 f_TEST = zeros(3)
-ion_recfast(𝕚, z_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)], f_TEST)
+# ion_recfast!(𝕚, z_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)], f_TEST)
 
 # print(x_H0, "\n")
 # get_ion(z_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)] )
@@ -389,7 +388,7 @@ end
 
 function test(z)
     f_TEST = zeros(3)
-    ion_recfast(𝕚, z, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)], f_TEST)
+    ion_recfast!(f_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)], 𝕚, z)
     return f_TEST[1]
 end
 
@@ -409,16 +408,116 @@ gcf()
 
 ##
 
-##
-
-function recfast_xe(𝕚::RECFASTIonization, HOinp::T, Tnow::T, Yp::T;
+function recfast_xe(𝕚::RECFASTIonization;
     Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial::T=10000., zfinal::T=0.) where T
 
     z = zinitial
-    n = Nnow * (1 + z)^3
+    n = 𝕚.Nnow * (1 + z)^3
     y = zeros(3)  # array is x_H, x_He, Tmat (Hydrogen ionization, Helium ionization, matter temperature)
-    # y[3] = Tnow * (1 + z)
-    # x_H0, x_He0 = get_init(z, x0)
-    # y[1] = x_H0
-    # y[2] = x_He0
+
+    y[3] = 𝕚.Tnow * (1 + z)
+    Tmat = y[3]
+
+    x_H0, x_He0, x0 = recfast_init(𝕚, z)
+    y[1] = x_H0
+    y[2] = x_He0
+
+    out_xe = zeros(T, Nz)
+
+    for i in 1:Nz
+        # calculate the start and end redshift for the interval at each z
+        # or just at each z
+	    zstart = zinitial + float(i-1)*(zfinal-zinitial)/float(Nz)
+	    zend   = zinitial + float(i)*(zfinal-zinitial)/float(Nz)
+
+        # Use Saha to get x_e, using the equation for x_e for ionized helium
+        # and for neutral helium.
+        # Everyb_trip ionized above z=8000.  First ionization over by z=5000.
+        # Assume He all singly ionized down to z=3500, then use He Saha until
+        # He is 99% singly ionized, and *then* switch to joint H/He recombination.
+	    z = zend
+        if (zend > 8000.)
+            x_H0 = 1.
+            x_He0 = 1.
+            x0 = 1 + 2*𝕚.fHe
+            y[1] = x_H0
+            y[2] = x_He0
+            y[3] = 𝕚.Tnow*(1+z)
+        elseif (z > 5000.)
+            x_H0 = 1.
+            x_He0 = 1.
+            rhs = exp(1.5 * log(𝕚.CR*𝕚.Tnow/(1+z)) - 𝕚.CB1_He2/(𝕚.Tnow*(1+z)) ) / 𝕚.Nnow
+            rhs = rhs*1.  # ratio of g's is 1 for He++ <-> He+
+            x0 = 0.5 * (sqrt( (rhs-1-𝕚.fHe)^2 + 4*(1+2𝕚.fHe)*rhs) - (rhs-1-𝕚.fHe) )
+            y[1] = x_H0
+            y[2] = x_He0
+            y[3] = 𝕚.Tnow*(1+z)
+	    elseif (z > 3500.)
+            x_H0 = 1.
+            x_He0 = 1.
+            x0 = x_H0 + 𝕚.fHe*x_He0
+            y[1] = x_H0
+            y[2] = x_He0
+            y[3] = 𝕚.Tnow*(1+z)
+        elseif (y[2] > 0.99)
+            x_H0 = 1.
+            rhs = exp(1.5 * log(𝕚.CR*𝕚.Tnow/(1+z)) - 𝕚.CB1_He1/(𝕚.Tnow*(1+z)) ) / 𝕚.Nnow
+            rhs = rhs*4.  # ratio of g's is 4 for He+ <-> He0
+            x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕚.fHe)*rhs ) - (rhs-1))
+            x0 = x_He0
+            x_He0 = (x0 - 1) / 𝕚.fHe
+            y[1] = x_H0
+            y[2] = x_He0
+            y[3] = 𝕚.Tnow*(1+z)
+	    elseif (y[1] > 0.99)
+            rhs = exp(1.5 * log(𝕚.CR*𝕚.Tnow/(1+z)) - 𝕚.CB1/(𝕚.Tnow*(1+z))) / 𝕚.Nnow
+            x_H0 = 0.5 * (sqrt(rhs^2+4*rhs) - rhs)
+
+            prob = ODEProblem(ion_recfast!, y, (zstart, zend), 𝕚, save_everystep=false)
+            sol = solve(prob, Tsit5(), reltol=𝕚.tol)
+            y .= sol(zend)
+
+            y[1] = x_H0
+            x0 = y[1] + 𝕚.fHe*y[2]
+	    else
+            prob = ODEProblem(ion_recfast!, y, (zstart, zend), 𝕚, save_everystep=false)
+            sol = solve(prob, Tsit5(), reltol=𝕚.tol)
+            y .= sol(zend)
+            x0 = y[1] + 𝕚.fHe*y[2]
+        end
+
+        Trad = 𝕚.Tnow * (1+zend)
+        Tmat = y[3]
+        x_H = y[1]
+        x_He = y[2]
+        x = x0
+
+        out_xe[i] = x
+
+    end
+
+    return out_xe
 end
+
+##
+@time xe_bespoke = recfast_xe(𝕚);
+
+##
+clf()
+plot(z, xedat, "-")
+plot(z, xe_bespoke, "--")
+# ylim(0.95, 1.01)
+# xlim(1500,1600)
+gcf()
+
+##
+clf()
+plot(z, xe_bespoke ./ xedat, "-")
+# xlim(0, 2000)
+
+ylim(1 - 0.01^2, 1 + 0.01^2)
+# plot(z, xe_bespoke, "--")
+gcf()
+
+
+##
