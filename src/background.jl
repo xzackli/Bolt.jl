@@ -1,63 +1,59 @@
 
 # NOTE: Bolt's background functions are in terms of x ≡ ln(a), the log scale factor
 
-# derived quantities (I've chosen natural units, possibly the wrong choice)
-const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [eV]
-const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation)))
-
-H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
-ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural  # [eV⁴]
-Ω_Λ(par::AbstractCosmoParams) = 1 - (par.Ω_r*(1+(7par.N_ν/8)*(4/11)^4/3)
-                                     + par.Ω_b + par.Ω_m)  # dark energy density
+H₀(𝕡::AbstractParams) = 𝕡.h * km_s_Mpc_100
+ρ_crit(𝕡::AbstractParams) = (3 / 8π) * H₀(𝕡)^2 / G_natural  # [eV⁴]
+ΩΛ(𝕡::AbstractParams) = 1 - (𝕡.Ωr*(1+(7𝕡.Nν/8)*(4/11)^4/3) + 𝕡.Ωb + 𝕡.Ωm)  # dark energy density
 
 #need to account for neutrinos
 
-# Hubble parameter ȧ/a in Friedmann background
-H_a(a, par::AbstractCosmoParams) = H₀(par) * √((par.Ω_m + par.Ω_b) * a^(-3)
-                                                + par.Ω_r*(1+(7par.N_ν/8)*(4/11)^4/3) * a^(-4)
-                                                + Ω_Λ(par))
-# conformal time Hubble parameter, aH
-ℋ_a(a, par::AbstractCosmoParams) = a * H_a(a, par)
+# Hubble 𝕡ameter ȧ/a in Friedmann background
+Hₐ(𝕡::AbstractParams, a) = let 
+    H₀(𝕡) * √((𝕡.Ωm + 𝕡.Ωb) * a^(-3) + 𝕡.Ωr*(1+(7𝕡.Nν/8)*(4/11)^4/3) * a^(-4) + ΩΛ(𝕡))
+end
+
+# conformal time Hubble 𝕡ameter, aH
+ℋₐ(𝕡::AbstractParams, a) = a * Hₐ(𝕡, a)
 
 # functions in terms of x
-H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
-ℋ(x, par::AbstractCosmoParams) = ℋ_a(x2a(x), par)
+H(𝕡::AbstractParams, x) = Hₐ(𝕡, x2a(x))
+ℋ(𝕡::AbstractParams, x) = ℋₐ(𝕡, x2a(x))
 
 # conformal time
-function η(x, par::AbstractCosmoParams)
-    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x))[1]
-end
+η(𝕡::AbstractParams, x) = quadgk(a -> 1.0 / (a * ℋₐ(𝕡, a)), 0.0, x2a(x))[1]
+
 
 # now build a Background with these functions
 
-# a background is parametrized on the scalar type T, the interpolator type IT,
+# a background is 𝕡ametrized on the scalar type T, the interpolator type IT,
 # and a type for the grid GT
 abstract type AbstractBackground{T, IT<:AbstractInterpolation{T,1}, GT} end
 
 struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
-    H₀::T
-    η₀::T
-    ρ_crit::T
-    Ω_Λ::T
+    H₀     :: T
+    η₀     :: T
+    ρ_crit :: T
+    ΩΛ     :: T
 
-    x_grid::GT
-    ℋ::IT
-    ℋ′::IT
-    ℋ′′::IT
-    η::IT
-    η′::IT
-    η′′::IT
+    x_grid :: GT
+    ℋ      :: IT
+    ℋ′     :: IT
+    ℋ″     :: IT
+    η      :: IT
+    η′     :: IT
+    η″     :: IT
 end
 
-function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0) where T
-    ℋ_ = spline(x_grid, [ℋ(x, par) for x in x_grid])
-    η_ = spline(x_grid, [η(x, par) for x in x_grid])
+function Background(𝕡::AbstractParams{T}; x_grid=-20.0:0.01:0.0) where T
+
+    ℋ_ = spline(x_grid, [ℋ(𝕡, x) for x in x_grid])
+    η_ = spline(x_grid, [η(𝕡, x) for x in x_grid])
 
     return Background(
-        T(H₀(par)),
-        T(η(0.0, par)),
-        T(ρ_crit(par)),
-        T(Ω_Λ(par)),
+        T(H₀(𝕡)),
+        T(η(𝕡, 0.0)),
+        T(ρ_crit(𝕡)),
+        T(ΩΛ(𝕡)),
         x_grid,
 
         ℋ_,
