@@ -39,6 +39,7 @@ abstract type AbstractCosmoParams{T} end
     n = 1.0  # spectral index
     Y_p = 0.0  # primordial helium fraction, currently unused
     N_ν = 3.046 #effective number of relativisic species (PDG25 value)
+    Σm_ν = 0.06 #sum of neutrino masses (eV), Planck 15 default ΛCDM value
 end
 
 include("util.jl")
