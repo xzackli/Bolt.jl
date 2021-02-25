@@ -26,11 +26,7 @@ function H_a(a, par::AbstractCosmoParams)
     Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) #this is the same as 2.725 in eV for default Ω_r
     Tν = (4/11)^(1/3) * Tγ #assume instant decouple for now
     #^This is a bit backwards, should we put TCMB as input?
-    # nγ0 = ζ  * 2 / π^2 * Tγ^3 #photon number density today
-    # nν0 = 3/11 * nγ0 #neutrino number density (single species) today
-    #F = 1.
-    #νfac = (90*ζ /(11*π^4)) * (par.Ω_r * par.h^2/ Tγ)#the factor that goes into nr approx to neutrino energy density
-    ρ_ν,P_ν = ρP_0(a,par)#m,Tν,F,false)
+    ρ_ν,P_ν = ρP_0(a,par)
     ρ_νr = 3P_ν
     ρ_νnr = ρ_ν - ρ_νr
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
@@ -51,31 +47,17 @@ function η(x, par::AbstractCosmoParams)
 end
 
 #background FD phase space
-function f0(q,a,par::AbstractCosmoParams)
+function f0(q,par::AbstractCosmoParams)
     Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
     m = par.Σm_ν  #FIXME allow for multiple species
-    T_dec = 1e6 #assume decoupling of 1MeV - this is not quite right but for now
-    #Below is fine since if photons/ur are passed m=0, and if massive use neutrio temp as it should
-    a_dec= Tν/T_dec #factor of 3 in here somewhere? depends on how many neutrinos have mass?
-    (a<a_dec) ? (a_dec = a) : (a_dec= Tν/T_dec) # if we are early enough use the real scale factor
-    ϵ = √( q^2 + (a_dec *m)^2) #this is technically right but could just make it q for neutrinos
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
-    # if b    #temporary thing to check quadrature with photon integrals
-    #     return F* gs / (2π)^3 / ( exp(ϵ/T) -1)
-    # else
-    return gs / (2π)^3 / ( exp(ϵ/Tν) +1)
-    #end
-
+    return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
 
-function dlnf0dlnq(q,a,par::AbstractCosmoParams) #this is actually only used in perts
+function dlnf0dlnq(q,par::AbstractCosmoParams) #this is actually only used in perts
     Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
     m = par.Σm_ν  #FIXME allow for multiple species
-    T_dec = 1e6 #assume decoupling of 1MeV - this is not quite right but for now
-    a_dec= Tν/T_dec
-    (a<a_dec) ? (a_dec = a) : (a_dec= Tν/T_dec) # if we are early enough use the real scale factor
-    ϵ = √( q^2 + (a_dec * m)^2)
-    return q^2 /(ϵ * Tν) /(1 + exp(-ϵ/Tν))
+    return -q / Tν /(1 + exp(-q/Tν))
 end
 
 #in natural units, q should be 1 at c since c=1 no? will assume this here
@@ -87,8 +69,8 @@ function ρP_0(a,par::AbstractCosmoParams)
     qmin=1e-18 #numerical issue if qmin is smaller - how to choose?
     qmax=1e1 #how to determine qmax?
     #FIXME cheap rtol
-    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,a,par) ,qmin, qmax,rtol=1e-2)[1]
-    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,a,par), qmin, qmax,rtol=1e-2)[1]
+    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-2)[1]
+    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-2)[1]
     return ρ,P#,norm
 end
 # now build a Background with these functions
@@ -104,25 +86,36 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     Ω_Λ::T
 
     x_grid::GT
+    logq_grid::GT
+
     ℋ::IT
     ℋ′::IT
     ℋ′′::IT
     η::IT
     η′::IT
     η′′::IT
+
+
+    f0::IT
+    df0::IT
 end
 
-function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0) where T
-    ℋ_ = spline(x_grid, [ℋ(x, par) for x in x_grid])
-    η_ = spline(x_grid, [η(x, par) for x in x_grid])
-    #f0_ = spline()
-
+function Background(par::AbstractCosmoParams{T};
+                    x_grid=-20.0:0.01:0.0,logq_grid=-6.0:0.1:1.0) where T
+    ℋ_  = spline(x_grid, [ℋ(x, par) for x in x_grid])
+    η_   = spline(x_grid, [η(x, par) for x in x_grid])
+    #logq_grid   #probably bad but just to get started
+    f0_  = spline(logq_grid, [f0(10.0 ^(lq),par) for lq in logq_grid])
+    df0_ = spline(logq_grid, [dlnf0dlnq(10.0 ^(lq),par) for lq in logq_grid]) #maybe better to do spline gradient?
+    println("AHH")
     return Background(
         T(H₀(par)),
         T(η(0.0, par)),
         T(ρ_crit(par)),
         T(Ω_Λ(par)),
+
         x_grid,
+        logq_grid,
 
         ℋ_,
         spline_∂ₓ(ℋ_, x_grid),
@@ -131,5 +124,9 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0) where T
         η_,
         spline_∂ₓ(η_, x_grid),
         spline_∂ₓ²(η_, x_grid),
+
+
+        f0_,
+        df0_,
     )
 end
