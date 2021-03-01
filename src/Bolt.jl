@@ -5,6 +5,7 @@ export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory
 export Peebles
 export Hierarchy, boltsolve, BasicNewtonian
+export ρ_σ,ρP_0 #FIXME: quick hack to look at perts
 export source_grid, quadratic_k, cltt
 export z2a, a2z, x2a, a2x, z2x, x2z
 
