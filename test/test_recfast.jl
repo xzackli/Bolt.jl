@@ -112,7 +112,7 @@ using Parameters
     tol = 1e-6
 end
 
-𝕚 = RECFASTIonization()
+𝕣 = RECFASTIonization()
 
 
 # OmegaB = p.Ω_b
@@ -148,7 +148,7 @@ function get_xe(OmegaB::Float64, OmegaC::Float64, OmegaL::Float64,
     range(zstart,stop=zend,length=Nz+1)[2:end], xe
 end
 
-z, xedat = get_xe(𝕚.OmegaB, 𝕚.OmegaC, 𝕚.OmegaL, 𝕚.HOinp, 𝕚.Tnow, 𝕚.Yp)
+z, xedat = get_xe(𝕣.OmegaB, 𝕣.OmegaC, 𝕣.OmegaL, 𝕣.HOinp, 𝕣.Tnow, 𝕣.Yp)
 
 # clf()
 # plt.plot(z, xedat, "-")
@@ -167,26 +167,26 @@ function get_init(z)
     return x_H0[1], x_He0[1], x0[1]
 end
 
-function recfast_init(𝕚::RECFASTIonization, z)
+function recfast_init(𝕣::RECFASTIonization, z)
     if z > 8000.
         x_H0 = 1.
         x_He0 = 1.
-        x0 = 1. + 2 * 𝕚.fHe
+        x0 = 1. + 2 * 𝕣.fHe
     elseif z > 3500.
         x_H0 = 1.
         x_He0 = 1.
-        rhs = exp( 1.5 * log(𝕚.CR*𝕚.Tnow/(1 + z)) - 𝕚.CB1_He2/(𝕚.Tnow*(1 + z)) ) / 𝕚.Nnow
+        rhs = exp( 1.5 * log(𝕣.CR*𝕣.Tnow/(1 + z)) - 𝕣.CB1_He2/(𝕣.Tnow*(1 + z)) ) / 𝕣.Nnow
 	    rhs = rhs * 1.  # ratio of g's is 1 for He++ <-> He+
-	    x0 = 0.5 * ( sqrt( (rhs - 1 - 𝕚.fHe)^2 + 4 * (1 + 2 * 𝕚.fHe) * rhs) - (rhs - 1 - 𝕚.fHe) )
+	    x0 = 0.5 * ( sqrt( (rhs - 1 - 𝕣.fHe)^2 + 4 * (1 + 2 * 𝕣.fHe) * rhs) - (rhs - 1 - 𝕣.fHe) )
     elseif z > 2000.
 	    x_H0 = 1.
-	    rhs = exp( 1.5 * log(𝕚.CR * 𝕚.Tnow / (1 + z)) - 𝕚.CB1_He1/(𝕚.Tnow*(1 + z)) ) / 𝕚.Nnow
+	    rhs = exp( 1.5 * log(𝕣.CR * 𝕣.Tnow / (1 + z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1 + z)) ) / 𝕣.Nnow
 	    rhs = 4rhs    # ratio of g's is 4 for He+ <-> He0
-	    x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1 + 𝕚.fHe)*rhs) - (rhs-1))
+	    x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1 + 𝕣.fHe)*rhs) - (rhs-1))
 	    x0 = x_He0
-	    x_He0 = (x0 - 1.)/𝕚.fHe
+	    x_He0 = (x0 - 1.)/𝕣.fHe
     else
-	    rhs = exp( 1.5 * log(𝕚.CR*𝕚.Tnow/(1 + z)) - 𝕚.CB1/(𝕚.Tnow*(1 + z)) ) / 𝕚.Nnow
+	    rhs = exp( 1.5 * log(𝕣.CR*𝕣.Tnow/(1 + z)) - 𝕣.CB1/(𝕣.Tnow*(1 + z)) ) / 𝕣.Nnow
 	    x_H0 = 0.5 * (sqrt( rhs^2 + 4 * rhs ) - rhs )
 	    x_He0 = 0.
 	    x0 = x_H0
@@ -195,12 +195,12 @@ function recfast_init(𝕚::RECFASTIonization, z)
     return x_H0, x_He0, x0
 end
 using Test
-@test all(get_init(9000.0) .≈ recfast_init(𝕚, 9000.0))
-@test all(get_init(4000.0) .≈ recfast_init(𝕚, 4000.0))
-@test all(get_init(3000.0) .≈ recfast_init(𝕚, 3000.0))
-@test all(get_init(1000.0) .≈ recfast_init(𝕚, 1000.0))
-@test all(get_init(500.0) .≈ recfast_init(𝕚, 500.0))
-@test all(get_init(100.0) .≈ recfast_init(𝕚, 100.0))
+@test all(get_init(9000.0) .≈ recfast_init(𝕣, 9000.0))
+@test all(get_init(4000.0) .≈ recfast_init(𝕣, 4000.0))
+@test all(get_init(3000.0) .≈ recfast_init(𝕣, 3000.0))
+@test all(get_init(1000.0) .≈ recfast_init(𝕣, 1000.0))
+@test all(get_init(500.0) .≈ recfast_init(𝕣, 500.0))
+@test all(get_init(100.0) .≈ recfast_init(𝕣, 100.0))
 
 ##
 
@@ -216,111 +216,111 @@ function get_ion(z, y)
     return f
 end
 
-function ion_recfast!(f, y, 𝕚::RECFASTIonization, z)
+function ion_recfast!(f, y, 𝕣::RECFASTIonization, z)
 
 	x_H = y[1]
 	x_He = y[2]
-	x = x_H + 𝕚.fHe * x_He
+	x = x_H + 𝕣.fHe * x_He
 	Tmat = y[3]
 
-	n = 𝕚.Nnow * (1+z)^3
-	n_He = 𝕚.fHe * 𝕚.Nnow * (1+z)^3
-	Trad = 𝕚.Tnow * (1+z)
-	Hz = 𝕚.HO * sqrt((1+z)^4/(1+𝕚.z_eq)*𝕚.OmegaT + 𝕚.OmegaT*(1+z)^3 + 𝕚.OmegaK*(1+z)^2 + 𝕚.OmegaL)
+	n = 𝕣.Nnow * (1+z)^3
+	n_He = 𝕣.fHe * 𝕣.Nnow * (1+z)^3
+	Trad = 𝕣.Tnow * (1+z)
+	Hz = 𝕣.HO * sqrt((1+z)^4/(1+𝕣.z_eq)*𝕣.OmegaT + 𝕣.OmegaT*(1+z)^3 + 𝕣.OmegaK*(1+z)^2 + 𝕣.OmegaL)
 
     # Also calculate derivative for use later
-	dHdz = (𝕚.HO^2 /2/Hz)*(4*(1+z)^3/(1+𝕚.z_eq)*𝕚.OmegaT + 3*𝕚.OmegaT*(1+z)^2 + 2*𝕚.OmegaK*(1+z))
+	dHdz = (𝕣.HO^2 /2/Hz)*(4*(1+z)^3/(1+𝕣.z_eq)*𝕣.OmegaT + 3*𝕣.OmegaT*(1+z)^2 + 2*𝕣.OmegaK*(1+z))
 
     # Get the radiative rates using PPQ fit (identical to Hummer's table)
-	Rdown=1e-19*𝕚.a_PPB*(Tmat/1e4)^𝕚.b_PPB/(1. + 𝕚.c_PPB*(Tmat/1e4)^𝕚.d_PPB)
-	Rup = Rdown * (𝕚.CR*Tmat)^(1.5)*exp(-𝕚.CDB/Tmat)
+	Rdown=1e-19*𝕣.a_PPB*(Tmat/1e4)^𝕣.b_PPB/(1. + 𝕣.c_PPB*(Tmat/1e4)^𝕣.d_PPB)
+	Rup = Rdown * (𝕣.CR*Tmat)^(1.5)*exp(-𝕣.CDB/Tmat)
 
     # calculate He using a fit to a Verner & Ferland type formula
-	sq_0 = sqrt(Tmat/𝕚.T_0)
-	sq_1 = sqrt(Tmat/𝕚.T_1)
+	sq_0 = sqrt(Tmat/𝕣.T_0)
+	sq_1 = sqrt(Tmat/𝕣.T_1)
     # typo here corrected by Wayne Hu and Savita Gahlaut
-	Rdown_He = 𝕚.a_VF/(sq_0*(1+sq_0)^(1-𝕚.b_VF))
-	Rdown_He = Rdown_He/(1+sq_1)^(1+𝕚.b_VF)
-	Rup_He = Rdown_He*(𝕚.CR*Tmat)^(1.5)*exp(-𝕚.CDB_He/Tmat)
+	Rdown_He = 𝕣.a_VF/(sq_0*(1+sq_0)^(1-𝕣.b_VF))
+	Rdown_He = Rdown_He/(1+sq_1)^(1+𝕣.b_VF)
+	Rup_He = Rdown_He*(𝕣.CR*Tmat)^(1.5)*exp(-𝕣.CDB_He/Tmat)
 	Rup_He = 4. * Rup_He # statistical weights factor for HeI
     # Avoid overflow (pointed out by Jacques Roland)
-	if((𝕚.Bfact/Tmat) > 680.)
+	if((𝕣.Bfact/Tmat) > 680.)
 	  He_Boltz = exp(680.)
 	else
-	  He_Boltz = exp(𝕚.Bfact/Tmat)
+	  He_Boltz = exp(𝕣.Bfact/Tmat)
 	end
 
     # now deal with H and its fudges
-	if (𝕚.Hswitch == 0)
-	    K = 𝕚.CK / Hz # !Peebles coefficient K=lambda_a^3/8piH
+	if (𝕣.Hswitch == 0)
+	    K = 𝕣.CK / Hz # !Peebles coefficient K=lambda_a^3/8piH
 	else
         # fit a double Gaussian correction function
-        K = 𝕚.CK / Hz*(1.0
-            + 𝕚.AGauss1*exp(-((log(1+z)-𝕚.zGauss1)/𝕚.wGauss1)^2)
-            + 𝕚.AGauss2*exp(-((log(1+z)-𝕚.zGauss2)/𝕚.wGauss2)^2))
+        K = 𝕣.CK / Hz*(1.0
+            + 𝕣.AGauss1*exp(-((log(1+z)-𝕣.zGauss1)/𝕣.wGauss1)^2)
+            + 𝕣.AGauss2*exp(-((log(1+z)-𝕣.zGauss2)/𝕣.wGauss2)^2))
 	end
 
     # add the HeI part, using same T_0 and T_1 values
-	Rdown_trip = 𝕚.a_trip/(sq_0*(1+sq_0)^(1-𝕚.b_trip))
-	Rdown_trip = Rdown_trip/((1+sq_1)^(1+𝕚.b_trip))
-	Rup_trip = Rdown_trip*exp(-𝕚.h_P*𝕚.C*𝕚.L_He2St_ion/(𝕚.k_B*Tmat))
-	Rup_trip = Rup_trip*((𝕚.CR*Tmat)^1.5)*(4/3)
+	Rdown_trip = 𝕣.a_trip/(sq_0*(1+sq_0)^(1-𝕣.b_trip))
+	Rdown_trip = Rdown_trip/((1+sq_1)^(1+𝕣.b_trip))
+	Rup_trip = Rdown_trip*exp(-𝕣.h_P*𝕣.C*𝕣.L_He2St_ion/(𝕣.k_B*Tmat))
+	Rup_trip = Rup_trip*((𝕣.CR*Tmat)^1.5)*(4/3)
     # last factor here is the statistical weight
 
     # try to avoid "NaN" when x_He gets too small
 	if ((x_He < 5.e-9) || (x_He > 0.980))
         Heflag = 0
 	else
-	    Heflag = 𝕚.Heswitch
+	    Heflag = 𝕣.Heswitch
 	end
 	if (Heflag == 0)  # use Peebles coeff. for He
-	    K_He = 𝕚.CK_He/Hz
+	    K_He = 𝕣.CK_He/Hz
 	else # for Heflag>0 		!use Sobolev escape probability
-        tauHe_s = 𝕚.A2P_s*𝕚.CK_He*3*n_He*(1-x_He)/Hz
+        tauHe_s = 𝕣.A2P_s*𝕣.CK_He*3*n_He*(1-x_He)/Hz
         pHe_s = (1 - exp(-tauHe_s))/tauHe_s
-        K_He = 1 / (𝕚.A2P_s*pHe_s*3*n_He*(1-x_He))
+        K_He = 1 / (𝕣.A2P_s*pHe_s*3*n_He*(1-x_He))
         # smoother criterion here from Antony Lewis & Chad Fendt
 	    if (((Heflag == 2) || (Heflag >= 5)) && (x_H < 0.9999999))
             # use fitting formula for continuum opacity of H
             # first get the Doppler width parameter
-            Doppler = 2*𝕚.k_B*Tmat/(𝕚.m_H*𝕚.not4*𝕚.C*𝕚.C)
-            Doppler = 𝕚.C*𝕚.L_He_2p*sqrt(Doppler)
-            gamma_2Ps = 3*𝕚.A2P_s*𝕚.fHe*(1-x_He)*𝕚.C*𝕚.C /(
-                sqrt(π)*𝕚.sigma_He_2Ps*8π*Doppler*(1-x_H)) /((𝕚.C*𝕚.L_He_2p)^2)
+            Doppler = 2*𝕣.k_B*Tmat/(𝕣.m_H*𝕣.not4*𝕣.C*𝕣.C)
+            Doppler = 𝕣.C*𝕣.L_He_2p*sqrt(Doppler)
+            gamma_2Ps = 3*𝕣.A2P_s*𝕣.fHe*(1-x_He)*𝕣.C*𝕣.C /(
+                sqrt(π)*𝕣.sigma_He_2Ps*8π*Doppler*(1-x_H)) /((𝕣.C*𝕣.L_He_2p)^2)
             pb = 0.36 # value from KIV (2007)
-            qb = 𝕚.b_He
+            qb = 𝕣.b_He
             # calculate AHcon, the value of A*p_(con,H) for H continuum opacity
-            AHcon = 𝕚.A2P_s/(1+pb*(gamma_2Ps^qb))
-            K_He = 1/((𝕚.A2P_s*pHe_s+AHcon)*3*n_He*(1-x_He))
+            AHcon = 𝕣.A2P_s/(1+pb*(gamma_2Ps^qb))
+            K_He = 1/((𝕣.A2P_s*pHe_s+AHcon)*3*n_He*(1-x_He))
 	    end
 	    if (Heflag >= 3) # include triplet effects
-            tauHe_t = 𝕚.A2P_t*n_He*(1. - x_He)*3
-            tauHe_t = tauHe_t /(8π*Hz*𝕚.L_He_2Pt^3)
+            tauHe_t = 𝕣.A2P_t*n_He*(1. - x_He)*3
+            tauHe_t = tauHe_t /(8π*Hz*𝕣.L_He_2Pt^3)
             pHe_t = (1 - exp(-tauHe_t))/tauHe_t
-            CL_PSt = 𝕚.h_P*𝕚.C*(𝕚.L_He_2Pt - 𝕚.L_He_2St)/𝕚.k_B
+            CL_PSt = 𝕣.h_P*𝕣.C*(𝕣.L_He_2Pt - 𝕣.L_He_2St)/𝕣.k_B
             if ((Heflag == 3) || (Heflag == 5) || (x_H > 0.99999))
                 # no H cont. effect
-                CfHe_t = 𝕚.A2P_t*pHe_t*exp(-CL_PSt/Tmat)
+                CfHe_t = 𝕣.A2P_t*pHe_t*exp(-CL_PSt/Tmat)
                 CfHe_t = CfHe_t/(Rup_trip+CfHe_t) # "C" factor for triplets
             else # include H cont. effect
-                Doppler = 2*𝕚.k_B*Tmat/(𝕚.m_H*𝕚.not4*𝕚.C*𝕚.C)
-                Doppler = 𝕚.C*𝕚.L_He_2Pt*sqrt(Doppler)
-                gamma_2Pt = (3*𝕚.A2P_t*𝕚.fHe*(1-x_He)*𝕚.C*𝕚.C
-                    /(sqrt(π)*𝕚.sigma_He_2Pt*8π*Doppler*(1-x_H))
-                    /((𝕚.C*𝕚.L_He_2Pt)^2))
+                Doppler = 2*𝕣.k_B*Tmat/(𝕣.m_H*𝕣.not4*𝕣.C*𝕣.C)
+                Doppler = 𝕣.C*𝕣.L_He_2Pt*sqrt(Doppler)
+                gamma_2Pt = (3*𝕣.A2P_t*𝕣.fHe*(1-x_He)*𝕣.C*𝕣.C
+                    /(sqrt(π)*𝕣.sigma_He_2Pt*8π*Doppler*(1-x_H))
+                    /((𝕣.C*𝕣.L_He_2Pt)^2))
                 # use the fitting parameters from KIV (2007) in this case
                 pb = 0.66
                 qb = 0.9
-                AHcon = 𝕚.A2P_t/(1+pb*gamma_2Pt^qb)/3
-                CfHe_t = (𝕚.A2P_t*pHe_t+AHcon)*exp(-CL_PSt/Tmat)
+                AHcon = 𝕣.A2P_t/(1+pb*gamma_2Pt^qb)/3
+                CfHe_t = (𝕣.A2P_t*pHe_t+AHcon)*exp(-CL_PSt/Tmat)
                 CfHe_t = CfHe_t/(Rup_trip+CfHe_t)  # "C" factor for triplets
             end
 	    end
 	end
 
     # Estimates of Thomson scattering time and Hubble time
-	timeTh=(1/(𝕚.CT*Trad^4))*(1+x+𝕚.fHe)/x	#!Thomson time
-	timeH=2/(3*𝕚.HO*(1+z)^1.5)		#!Hubble time
+	timeTh=(1/(𝕣.CT*Trad^4))*(1+x+𝕣.fHe)/x	#!Thomson time
+	timeH=2/(3*𝕣.HO*(1+z)^1.5)		#!Hubble time
 
     # calculate the derivatives
     # turn on H only for x_H<0.99, and use Saha derivative for 0.98<x_H<0.99
@@ -329,43 +329,43 @@ function ion_recfast!(f, y, 𝕚::RECFASTIonization, z)
 		f[1] = 0.
     # else if ((x_H.gt.0.98d0).and.(Heflag.eq.0)) then	!don't modify
 	elseif (x_H > 0.985)  # !use Saha rate for Hydrogen
-		f[1] = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-𝕚.CL/Tmat))/(Hz*(1+z))
+		f[1] = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-𝕣.CL/Tmat))/(Hz*(1+z))
         # for interest, calculate the correction factor compared to Saha
         # (without the fudge)
-		factor=(1 + K*𝕚.Lambda*n*(1-x_H))/(Hz*(1+z)*(1+K*𝕚.Lambda*n*(1-x)+K*Rup*n*(1-x)))
+		factor=(1 + K*𝕣.Lambda*n*(1-x_H))/(Hz*(1+z)*(1+K*𝕣.Lambda*n*(1-x)+K*Rup*n*(1-x)))
     else  #!use full rate for H
-		f[1] = (((x*x_H*n*Rdown - Rup*(1.0-x_H)*exp(-𝕚.CL/Tmat))
-			*(1.0 + K*𝕚.Lambda*n*(1.0-x_H)))
-		    /(Hz*(1.0+z)*(1.0/𝕚.fu+K*𝕚.Lambda*n*(1.0-x_H)/𝕚.fu
+		f[1] = (((x*x_H*n*Rdown - Rup*(1.0-x_H)*exp(-𝕣.CL/Tmat))
+			*(1.0 + K*𝕣.Lambda*n*(1.0-x_H)))
+		    /(Hz*(1.0+z)*(1.0/𝕣.fu+K*𝕣.Lambda*n*(1.0-x_H)/𝕣.fu
 		    +K*Rup*n*(1.0-x_H))))
 	end
     # turn off the He once it is small
 	if (x_He < 1e-15)
 		f[2] = 0.
 	else
-		f[2] = (((x*x_He*n*Rdown_He - Rup_He*(1-x_He)*exp(-𝕚.CL_He/Tmat))
-            *(1+ K_He*𝕚.Lambda_He*n_He*(1-x_He)*He_Boltz))
+		f[2] = (((x*x_He*n*Rdown_He - Rup_He*(1-x_He)*exp(-𝕣.CL_He/Tmat))
+            *(1+ K_He*𝕣.Lambda_He*n_He*(1-x_He)*He_Boltz))
             / (Hz*(1+z)
-            * (1 + K_He*(𝕚.Lambda_He+Rup_He)*n_He*(1-x_He)*He_Boltz)))
+            * (1 + K_He*(𝕣.Lambda_He+Rup_He)*n_He*(1-x_He)*He_Boltz)))
         # Modification to HeI recombination including channel via triplets
 	    if (Heflag >= 3)
 		    f[2] = f[2] + (x*x_He*n*Rdown_trip
-                - (1-x_He)*3*Rup_trip*exp(-𝕚.h_P*𝕚.C*𝕚.L_He_2St/(𝕚.k_B*Tmat))
+                - (1-x_He)*3*Rup_trip*exp(-𝕣.h_P*𝕣.C*𝕣.L_He_2St/(𝕣.k_B*Tmat))
                 ) * CfHe_t/(Hz*(1+z))
 	    end
 	end
 
     # follow the matter temperature once it has a chance of diverging
 
-	if (timeTh < 𝕚.H_frac*timeH)
+	if (timeTh < 𝕣.H_frac*timeH)
     # f(3)=Tmat/(1.d0+z)	!Tmat follows Trad
     # additional term to smooth transition to Tmat evolution,
     # (suggested by Adam Moss)
-		epsilon = Hz*(1+x+𝕚.fHe)/(𝕚.CT*Trad^3*x)
-		f[3] = 𝕚.Tnow + epsilon*((1+𝕚.fHe)/(1+𝕚.fHe+x))*(
-            (f[1]+𝕚.fHe*f[2])/x) - epsilon* dHdz/Hz + 3*epsilon/(1+z)
+		epsilon = Hz*(1+x+𝕣.fHe)/(𝕣.CT*Trad^3*x)
+		f[3] = 𝕣.Tnow + epsilon*((1+𝕣.fHe)/(1+𝕣.fHe+x))*(
+            (f[1]+𝕣.fHe*f[2])/x) - epsilon* dHdz/Hz + 3*epsilon/(1+z)
 	else
-		f[3] = 𝕚.CT * (Trad^4) * x / (1+x+𝕚.fHe)* (Tmat-Trad) / (Hz*(1+z)) + 2*Tmat/(1+z)
+		f[3] = 𝕣.CT * (Trad^4) * x / (1+x+𝕣.fHe)* (Tmat-Trad) / (Hz*(1+z)) + 2*Tmat/(1+z)
 	end
 
 	return
@@ -373,22 +373,22 @@ end
 
 
 z_TEST = 1400.0
-x_H0, x_He0, x0 = recfast_init(𝕚, z_TEST)
+x_H0, x_He0, x0 = recfast_init(𝕣, z_TEST)
 f_TEST = zeros(3)
-# ion_recfast!(𝕚, z_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)], f_TEST)
+# ion_recfast!(𝕣, z_TEST, [x_H0, x_He0, 𝕣.Tnow * (1+z_TEST)], f_TEST)
 
 # print(x_H0, "\n")
-# get_ion(z_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)] )
+# get_ion(z_TEST, [x_H0, x_He0, 𝕣.Tnow * (1+z_TEST)] )
 ##
 
 function test_fort(z)
-    f_TEST = get_ion(z, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)] )
+    f_TEST = get_ion(z, [x_H0, x_He0, 𝕣.Tnow * (1+z_TEST)] )
     return f_TEST[1]
 end
 
 function test(z)
     f_TEST = zeros(3)
-    ion_recfast!(f_TEST, [x_H0, x_He0, 𝕚.Tnow * (1+z_TEST)], 𝕚, z)
+    ion_recfast!(f_TEST, [x_H0, x_He0, 𝕣.Tnow * (1+z_TEST)], 𝕣, z)
     return f_TEST[1]
 end
 
@@ -408,17 +408,17 @@ gcf()
 
 ##
 
-function recfast_xe(𝕚::RECFASTIonization;
+function recfast_xe(𝕣::RECFASTIonization;
     Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial::T=10000., zfinal::T=0.) where T
 
     z = zinitial
-    n = 𝕚.Nnow * (1 + z)^3
+    n = 𝕣.Nnow * (1 + z)^3
     y = zeros(3)  # array is x_H, x_He, Tmat (Hydrogen ionization, Helium ionization, matter temperature)
 
-    y[3] = 𝕚.Tnow * (1 + z)
+    y[3] = 𝕣.Tnow * (1 + z)
     Tmat = y[3]
 
-    x_H0, x_He0, x0 = recfast_init(𝕚, z)
+    x_H0, x_He0, x0 = recfast_init(𝕣, z)
     y[1] = x_H0
     y[2] = x_He0
 
@@ -439,54 +439,54 @@ function recfast_xe(𝕚::RECFASTIonization;
         if (zend > 8000.)
             x_H0 = 1.
             x_He0 = 1.
-            x0 = 1 + 2*𝕚.fHe
+            x0 = 1 + 2*𝕣.fHe
             y[1] = x_H0
             y[2] = x_He0
-            y[3] = 𝕚.Tnow*(1+z)
+            y[3] = 𝕣.Tnow*(1+z)
         elseif (z > 5000.)
             x_H0 = 1.
             x_He0 = 1.
-            rhs = exp(1.5 * log(𝕚.CR*𝕚.Tnow/(1+z)) - 𝕚.CB1_He2/(𝕚.Tnow*(1+z)) ) / 𝕚.Nnow
+            rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He2/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
             rhs = rhs*1.  # ratio of g's is 1 for He++ <-> He+
-            x0 = 0.5 * (sqrt( (rhs-1-𝕚.fHe)^2 + 4*(1+2𝕚.fHe)*rhs) - (rhs-1-𝕚.fHe) )
+            x0 = 0.5 * (sqrt( (rhs-1-𝕣.fHe)^2 + 4*(1+2𝕣.fHe)*rhs) - (rhs-1-𝕣.fHe) )
             y[1] = x_H0
             y[2] = x_He0
-            y[3] = 𝕚.Tnow*(1+z)
+            y[3] = 𝕣.Tnow*(1+z)
 	    elseif (z > 3500.)
             x_H0 = 1.
             x_He0 = 1.
-            x0 = x_H0 + 𝕚.fHe*x_He0
+            x0 = x_H0 + 𝕣.fHe*x_He0
             y[1] = x_H0
             y[2] = x_He0
-            y[3] = 𝕚.Tnow*(1+z)
+            y[3] = 𝕣.Tnow*(1+z)
         elseif (y[2] > 0.99)
             x_H0 = 1.
-            rhs = exp(1.5 * log(𝕚.CR*𝕚.Tnow/(1+z)) - 𝕚.CB1_He1/(𝕚.Tnow*(1+z)) ) / 𝕚.Nnow
+            rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
             rhs = rhs*4.  # ratio of g's is 4 for He+ <-> He0
-            x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕚.fHe)*rhs ) - (rhs-1))
+            x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
             x0 = x_He0
-            x_He0 = (x0 - 1) / 𝕚.fHe
+            x_He0 = (x0 - 1) / 𝕣.fHe
             y[1] = x_H0
             y[2] = x_He0
-            y[3] = 𝕚.Tnow*(1+z)
+            y[3] = 𝕣.Tnow*(1+z)
 	    elseif (y[1] > 0.99)
-            rhs = exp(1.5 * log(𝕚.CR*𝕚.Tnow/(1+z)) - 𝕚.CB1/(𝕚.Tnow*(1+z))) / 𝕚.Nnow
+            rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1/(𝕣.Tnow*(1+z))) / 𝕣.Nnow
             x_H0 = 0.5 * (sqrt(rhs^2+4*rhs) - rhs)
 
-            prob = ODEProblem(ion_recfast!, y, (zstart, zend), 𝕚, save_everystep=false)
-            sol = solve(prob, Tsit5(), reltol=𝕚.tol)
+            prob = ODEProblem(ion_recfast!, y, (zstart, zend), 𝕣, save_everystep=false)
+            sol = solve(prob, Tsit5(), reltol=𝕣.tol)
             y .= sol(zend)
 
             y[1] = x_H0
-            x0 = y[1] + 𝕚.fHe*y[2]
+            x0 = y[1] + 𝕣.fHe*y[2]
 	    else
-            prob = ODEProblem(ion_recfast!, y, (zstart, zend), 𝕚, save_everystep=false)
-            sol = solve(prob, Tsit5(), reltol=𝕚.tol)
+            prob = ODEProblem(ion_recfast!, y, (zstart, zend), 𝕣, save_everystep=false)
+            sol = solve(prob, Tsit5(), reltol=𝕣.tol)
             y .= sol(zend)
-            x0 = y[1] + 𝕚.fHe*y[2]
+            x0 = y[1] + 𝕣.fHe*y[2]
         end
 
-        Trad = 𝕚.Tnow * (1+zend)
+        Trad = 𝕣.Tnow * (1+zend)
         Tmat = y[3]
         x_H = y[1]
         x_He = y[2]
@@ -500,7 +500,7 @@ function recfast_xe(𝕚::RECFASTIonization;
 end
 
 ##
-@time xe_bespoke = recfast_xe(𝕚);
+@time xe_bespoke = recfast_xe(𝕣);
 
 ##
 clf()
