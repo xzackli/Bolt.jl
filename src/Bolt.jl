@@ -42,7 +42,6 @@ abstract type AbstractCosmoParams{T} end
 end
 
 include("util.jl")
-include("fftlog.jl")
 include("background.jl")
 include("ionization.jl")
 include("perturbations.jl")
