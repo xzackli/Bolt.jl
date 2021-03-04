@@ -21,14 +21,14 @@ end
 
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams)
-    m=par.Σm_ν #FIXME: alllow multiple species
+#    m=par.Σm_ν #FIXME: alllow multiple species
     #use the relation π²/15 Tγ⁴ = ργ = Ωr ρcrit' - BE integral
-    Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) #this is the same as 2.725 in eV for default Ω_r
-    Tν = (4/11)^(1/3) * Tγ #assume instant decouple for now
+    # Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) #this is the same as 2.725 in eV for default Ω_r
+    # Tν = (4/11)^(1/3) * Tγ #assume instant decouple for now
     #^This is a bit backwards, should we put TCMB as input?
-    ρ_ν,P_ν = ρP_0(a,par)
-    ρ_νr = 3P_ν
-    ρ_νnr = ρ_ν - ρ_νr
+    ρ_ν,_ = ρP_0(a,par) # we don't atually need pressure?
+    # ρ_νr = 3P_ν
+    # ρ_νnr = ρ_ν - ρ_νr
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r*(1+(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
@@ -43,20 +43,20 @@ H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
 
 # conformal time
 function η(x, par::AbstractCosmoParams)
-    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-2)[1] #FIXME rtol
+    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1] #FIXME rtol
 end
 
 #background FD phase space
 function f0(q,par::AbstractCosmoParams)
     Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
-    m = par.Σm_ν  #FIXME allow for multiple species
+    #m = par.Σm_ν  #FIXME allow for multiple species
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
 
 function dlnf0dlnq(q,par::AbstractCosmoParams) #this is actually only used in perts
     Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
-    m = par.Σm_ν  #FIXME allow for multiple species
+    #m = par.Σm_ν  #FIXME allow for multiple species
     return -q / Tν /(1 + exp(-q/Tν))
 end
 
@@ -69,8 +69,8 @@ function ρP_0(a,par::AbstractCosmoParams)
     qmin=1e-18 #numerical issue if qmin is smaller - how to choose?
     qmax=1e1 #how to determine qmax?
     #FIXME cheap rtol
-    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-2)[1]
-    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-2)[1]
+    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-6)[1]
+    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-6)[1]
     return ρ,P#,norm
 end
 # now build a Background with these functions
@@ -107,7 +107,6 @@ function Background(par::AbstractCosmoParams{T};
     #logq_grid   #probably bad but just to get started
     f0_  = spline(logq_grid, [f0(10.0 ^(lq),par) for lq in logq_grid])
     df0_ = spline(logq_grid, [dlnf0dlnq(10.0 ^(lq),par) for lq in logq_grid]) #maybe better to do spline gradient?
-    println("AHH")
     return Background(
         T(H₀(par)),
         T(η(0.0, par)),

@@ -12,15 +12,16 @@ struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T}
     ih::IH
     k::Tk
     ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
+    nq::Int
 end
-#n_q::Int
+
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
-    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ)
+    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8 ,nq=10) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, nq)
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
-    #println("ICS: ", u₀, "len ",length(u₀))
+    println("ICS: ",u₀," xi: ", xᵢ)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol, saveat=hierarchy.bg.x_grid, dense=false)
     return sol
@@ -31,12 +32,12 @@ function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     ℓᵧ = hierarchy.ℓᵧ
     ℓ_ν = 10 #Callin06, for now
     ℓ_mν = ℓ_ν #should be smaller
-    n_q = 10#FIXME add to hierarchy, rn don't wan't to break other stuff  n_q = hierarchy.n_q
+    nq = hierarchy.nq
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
     Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
     𝒩 = OffsetVector(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1)) , 0:ℓ_ν)  # indexed 0 through ℓ_ν
-    ℳ = OffsetVector(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q )) , 0:(ℓ_mν+1)*n_q -1)  # indexed 0 through ℓ_mν
-    Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q)+5)) #getting a little messy...
+    ℳ = OffsetVector(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq )) , 0:(ℓ_mν+1)*nq -1)  # indexed 0 through ℓ_mν
+    Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5)) #getting a little messy...
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
 
@@ -45,54 +46,47 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     #MB eqn (55)
     #for now just doing something dumb and similar to bg ρ,P integrals,
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
-    Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
     m = par.Σm_ν
+    nq = length(ℳ0) #assume we got this right
     qmin=1e-6 #numerical issue if qmin is smaller - how to choose?
     qmax=1e-1 #how to determine qmax?
-    #FIXME cheap rtol
-    #FIXME need to check q pts for f0 and for ℳ are the same
     #a-dependence has been moved into Einstein eqns, as have consts in σ
     #FIXME super hacky splines, come back when fix quadrature didn't want to change existing spline
     logqmin,logqmax = -6,-1 #FIXME: see note in ics
-    n_q = 10
-    #q_pts = exp.(collect(range(logqmin,logqmax,length=n_q)))
-    logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
-
-    #println(typeof(q_pts),typeof(ℳ0))
+    #q_pts = exp.(collect(range(logqmin,logqmax,length=nq)))
+    logq_pts = logqmin:(logqmax-logqmin)/(nq-1):logqmax
     # DO NOT WANT TO DO THIS
     ℳ0_ = spline(logq_pts, ℳ0)
     ℳ2_ = spline(logq_pts, ℳ2)
-    ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * bg.f0(q).*ℳ0_(log10(q)),
-                     qmin, qmax,rtol=1e-2)[1]
-    σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * bg.f0(q).*ℳ2_(log10(q)),
-                     qmin, qmax,rtol=1e-2)[1]
+    ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * bg.f0(log10(q)).*ℳ0_(log10(q)),
+                     qmin, qmax,rtol=1e-6)[1]
+    σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * bg.f0(log10(q)).*ℳ2_(log10(q)),
+                     qmin, qmax,rtol=1e-6)[1]
     return ρ,σ
 end
 
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
 function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
-    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
-    n_q = 10#hierarchy.n_q #FIXME: restore
+    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
     logqmin,logqmax = -6.,-1. #FIXME: see note in ics
-    q_pts = exp.(collect(range(logqmin,logqmax,length=n_q)))
-    #println("q_pts ", q_pts)
+    q_pts =  10.0 .^ (collect(range(logqmin,logqmax,length=nq)))
     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7N_ν/8 *(4/11)^(4/3) *Ω_r
     ℓ_ν = 10 #again, for now - should this be higher??
-    ℓ_mν =  ℓ_ν #50 #come back to put ℓmaxs in hierarchy
+    ℓ_mν =  ℓ_ν #come back to put ℓmaxs in hierarchy
+    norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν) #Normalization to match 𝒩 after integrating
+
 
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ρℳ, σℳ  =  ρ_σ(ℳ[0*n_q+1:1*n_q], ℳ[2*n_q+1:2*n_q+n_q], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
-    #println("rhom: ",ρℳ)
-    #println("sigmam: ", σℳ)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
                                   + σℳ / bg.ρ_crit) #add mnu integrated quadrupole
@@ -118,20 +112,16 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 
     #WIP: nonrelativistic nu
     # neutrinos (massive, MB 57)
-    # hierarchy is right, now need the q grid
-    #The Tγ,ν computations are redundant should just save as derived parameters in bg
-    Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    T_ν = (4/11)^(1/3) * Tγ
-    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)#enumerate(q_pts)
+    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (a*m_ν)^2)
-        dlnf0dlnq = bg.df0(q)
-        ℳ′[0* n_q+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* n_q+i_q] + Φ′ / 4 * dlnf0dlnq
-        #println("I= ",i_q," q= ",q)
-        ℳ′[1* n_q+i_q] = k / (3ℋₓ) * (( q/ϵ * (ℳ[0* n_q+i_q] - 2ℳ[2* n_q+i_q])) - ϵ/q * Ψ / 4 * dlnf0dlnq)
+        dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
+        #need these factors of 4 on Φ, Ψ terms due to MB pert defn
+        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q] + Φ′ / 4 * dlnf0dlnq
+        ℳ′[1* nq+i_q] = k / (3ℋₓ) * (( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])) - ϵ/q * Ψ / 4 * dlnf0dlnq)
         for ℓ in 2:(ℓ_mν-1)
-            ℳ′[ℓ* n_q+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* n_q+i_q] - (ℓ+1)*ℳ[(ℓ+1)* n_q+i_q] )
+            ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
         end
-        ℳ′[ℓ_ν* n_q+i_q] =  k / ℋₓ * ϵ / q * ℳ[(ℓ_mν-1)* n_q+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* n_q+i_q] #MB (58) similar to rel case
+        ℳ′[ℓ_ν* nq+i_q] =  k / ℋₓ * ϵ / q * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case
     end
 
     # photons
@@ -154,24 +144,22 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θ[ℓᵧ]
     Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θᵖ[ℓᵧ]
 
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
+    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
     return nothing
 end
 
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
 function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
-    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
-    n_q = 10# hierarchy.n_q #FIXME: restore
+    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih, hierarchy.nq
     logqmin, logqmax = -6.,-1.  #FIXME: remove hardcode when update quadrature, this seems reasonable from rel f0
-    q_pts = exp.(collect(range(logqmin,logqmax,length=n_q))) #logspace input - this will be bad in general but starting somewhere
+    q_pts = 10.0 .^ (collect(range(logqmin,logqmax,length=nq))) #logspace input - this will be bad in general but starting somewhere
     ℓ_ν = 10 #again, for now
     ℓ_mν = ℓ_ν
-    u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5)
+    u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
-
 
     # metric and matter perturbations
     Φ = 1.0
@@ -193,33 +181,29 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     end
 
     # neutrino hierarchy
-    # for now we assume xᵢ is before neutrinos decouple
+    # we need xᵢ to be before neutrinos decouple
+    Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     f_ν = 1/(1 + 1/(7par.N_ν/8 *(4/11)^(4/3)))
     𝒩[0] = Θ[0]
     𝒩[1] = Θ[1]
-    𝒩[2] = - (k^2 *aᵢ²*Φ) / (12H₀²) * 1 / (1 + 5f_ν/2) #Callin06 (71)
+    𝒩[2] = - (k^2 *aᵢ²*Φ) / (12H₀² * Ω_ν) * 1 / (1 + 5f_ν/2) #Callin06 (71)
     for ℓ in 3:ℓ_ν
         𝒩[ℓ] = k/((2ℓ+1)ℋₓ) * 𝒩[ℓ-1] #approximation of Callin06 (72)
     end
 
-    #WIP: massive nu
+    #massive neutrino hierarchy
     #It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
-    #^this will have to wait for m_ν to be added to pars
-    #get this from the backgroud
-    #FIXME add T as background prameter
-    Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    T_ν = (4/11)^(1/3) * Tγ
-
-    for (i_q, q) in enumerate(q_pts)
+    norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν) #Normalization to match 𝒩 after integrating
+    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
-        dlnf0dlnq = bg.df0(q)
-        ℳ[0* n_q+i_q] = -𝒩[0]/4  *dlnf0dlnq
-        ℳ[1* n_q+i_q] = -ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
-        ℳ[2* n_q+i_q] = -𝒩[2]/2  *dlnf0dlnq #drop quadratic+ terms in (ma/q) as in MB
+        dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
+        ℳ[0* nq+i_q] = -𝒩[0]  *dlnf0dlnq
+        ℳ[1* nq+i_q] = -ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
+        ℳ[2* nq+i_q] = -𝒩[2]  *dlnf0dlnq #drop quadratic+ terms in (ma/q) as in MB
     end
     #ignore ℓ>2, suppressed, leave as zero in MB -
     #FIXME check this against modern practice, i.e. we didn't do this for 𝒩
-    u[(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q)+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
+    u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
     return u
 end
 
@@ -237,9 +221,18 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
-    # recalulate these since we didn't save them #FIXME should add neutrino contributions to Ψ?
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * par.Ω_r * Θ[2]
-    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * par.Ω_r * (Θ′[2] - 2 * Θ[2])
+    # recalulate these since we didn't save them (Callin eqns 39-42)
+    #FIXME check the neutrino contributions to Ψ and Ψ′!
+    #^Also have just copied from before, but should save these maybe?
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq], ℳ[2*nq:3*nq], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    _, σℳ′ = ρ_σ(ℳ′[0:nq], ℳ′[2*nq:3*nq], bg, a, par)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
+                                  + Ω_ν * 𝒩[2] #add rel quadrupole
+                                  + σℳ / bg.ρ_crit) #add mnu integrated quadrupole
+
+    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
+                                    + Ω_ν * (𝒩′[2] - 2 * 𝒩[2])
+                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit) #I think this is right...
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 
