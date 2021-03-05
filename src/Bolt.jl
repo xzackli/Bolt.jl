@@ -4,10 +4,10 @@ export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory
 export Peebles
+export ρ_σ,ρP_0,f0,dlnf0dlnq #FIXME: quick hack to look at perts
 export Hierarchy, boltsolve, BasicNewtonian,unpack
-export ρ_σ,ρP_0#FIXME: quick hack to look at perts
 export source_grid, quadratic_k, cltt
-export z2a, a2z, x2a, a2x, z2x, x2z
+export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
 using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
@@ -19,6 +19,7 @@ using QuadGK
 using ThreadPools
 using ForwardDiff, DiffResults
 using NumericalIntegration
+using FastGaussQuadrature
 
 using FFTW
 import SpecialFunctions: lgamma, sphericalbesselj

@@ -45,26 +45,38 @@ end
 function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     #Do q integrals to get the massive neutrino metric perturbations
     #MB eqn (55)
-    #for now just doing something dumb and similar to bg ρ,P integrals,
+    Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)#1e-6,1e-1
+
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
-    Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
-    norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
+    # Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+    # norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
     m = par.Σm_ν
     nq = length(ℳ0) #assume we got this right
-    qmin=1e-6 #numerical issue if qmin is smaller - how to choose?
-    qmax=1e-1 #how to determine qmax?
-    #a-dependence has been moved into Einstein eqns, as have consts in σ
-    #FIXME super hacky splines, come back when fix quadrature didn't want to change existing spline
-    logqmin,logqmax = -6,-1 #FIXME: see note in ics
-    #q_pts = exp.(collect(range(logqmin,logqmax,length=nq)))
-    logq_pts = logqmin:(logqmax-logqmin)/(nq-1):logqmax
+
+    Iρ(x) = 4π *(√((10.0 ^ from_ui(x,logqmin,logqmax))^2 + (a * m)^2)
+                * f0(10.0 ^ from_ui(x,logqmin,logqmax),par)
+               )/ dxdq(10.0 ^ from_ui(x,logqmin,logqmax),logqmin,logqmax)
+
+    Iσ(x) = 4π *((10.0 ^ from_ui(x,logqmin,logqmax))^2
+                )/√((10.0 ^ from_ui(x,logqmin,logqmax))^2 + (a * m)^2
+                   )* f0(10.0 ^ from_ui(x,logqmin,logqmax),par)/ dxdq(10.0 ^ from_ui(x,logqmin,logqmax),logqmin,logqmax)
+
+    xq,wq = bg.quad_pts,bg.quad_wts
+    ρ = sum(Iρ.(xq).*ℳ0.*wq)
+    σ = sum(Iσ.(xq).*ℳ2.*wq)
+    # qmin=1e-6 #numerical issue if qmin is smaller - how to choose?
+    # qmax=1e-1 #how to determine qmax?
+    # #a-dependence has been moved into Einstein eqns, as have consts in σ
+    #logqmin,logqmax = -6,-1 #FIXME: see note in ics
+    #logq_pts = logqmin:(logqmax-logqmin)/(nq-1):logqmax
     # DO NOT WANT TO DO THIS
-    ℳ0_ = spline(logq_pts, ℳ0)
-    ℳ2_ = spline(logq_pts, ℳ2)
-    ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * bg.f0(log10(q)).*ℳ0_(log10(q)),
-                     qmin, qmax,rtol=1e-2)[1] #* norm𝒩
-    σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * bg.f0(log10(q)).*ℳ2_(log10(q)),
-                     qmin, qmax,rtol=1e-2)[1] #* norm𝒩
+    # ℳ0_ = spline(logq_pts, ℳ0)
+    # ℳ2_ = spline(logq_pts, ℳ2)
+    # ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * bg.f0(log10(q)).*ℳ0_(log10(q)),
+    #                  qmin, qmax,rtol=1e-2)[1] #* norm𝒩
+    # σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * bg.f0(log10(q)).*ℳ2_(log10(q)),
+    #                  qmin, qmax,rtol=1e-2)[1] #* norm𝒩
     return ρ,σ
 end
 
@@ -125,10 +137,11 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # neutrinos (massive, MB 57)
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (a*m_ν)^2)
-        dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
+        #dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
+        df0 = dlnf0dlnq(q,par) * norm𝒩
         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q] + Φ′ * dlnf0dlnq
-        ℳ′[1* nq+i_q] = k / (3ℋₓ) * (( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])) - ϵ/q * Ψ  * dlnf0dlnq)
+        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q] + Φ′ * df0
+        ℳ′[1* nq+i_q] = k / (3ℋₓ) * (( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])) - ϵ/q * Ψ  * df0)
         for ℓ in 2:(ℓ_mν-1)
             ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
         end
@@ -216,10 +229,11 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν) #Normalization to match 𝒩 after integrating
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
-        dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
-        ℳ[0* nq+i_q] = -𝒩[0]  *dlnf0dlnq
-        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *dlnf0dlnq #-ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
-        ℳ[2* nq+i_q] = -𝒩[2]  *dlnf0dlnq #drop quadratic+ terms in (ma/q) as in MB
+        #dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
+        df0 = dlnf0dlnq(q,par) * norm𝒩
+        ℳ[0* nq+i_q] = -𝒩[0]  *df0
+        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0 #-ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
+        ℳ[2* nq+i_q] = -𝒩[2]  *df0 #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
             ℳ[ℓ* nq+i_q] = k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72)
         end

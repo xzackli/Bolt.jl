@@ -21,14 +21,7 @@ end
 
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams)
-#    m=par.Σm_ν #FIXME: alllow multiple species
-    #use the relation π²/15 Tγ⁴ = ργ = Ωr ρcrit' - BE integral
-    # Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) #this is the same as 2.725 in eV for default Ω_r
-    # Tν = (4/11)^(1/3) * Tγ #assume instant decouple for now
-    #^This is a bit backwards, should we put TCMB as input?
     ρ_ν,_ = ρP_0(a,par) # we don't atually need pressure?
-    # ρ_νr = 3P_ν
-    # ρ_νnr = ρ_ν - ρ_νr
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r*(1+(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
@@ -43,7 +36,7 @@ H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
 
 # conformal time
 function η(x, par::AbstractCosmoParams)
-    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-2)[1] #FIXME rtol
+    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1]
 end
 
 #background FD phase space
@@ -69,8 +62,8 @@ function ρP_0(a,par::AbstractCosmoParams)
     qmin=1e-18 #numerical issue if qmin is smaller - how to choose?
     qmax=1e1 #how to determine qmax?
     #FIXME cheap rtol
-    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-2)[1]
-    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-2)[1]
+    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-6)[1]
+    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-6)[1]
     return ρ,P#,norm
 end
 # now build a Background with these functions
@@ -86,7 +79,9 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     Ω_Λ::T
 
     x_grid::GT
-    logq_grid::GT
+#    logq_grid::GT
+    quad_pts::Array{T,1}
+    quad_wts::Array{T,1}
 
     ℋ::IT
     ℋ′::IT
@@ -96,17 +91,18 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     η′′::IT
 
 
-    f0::IT
-    df0::IT
+    # f0::IT
+    # df0::IT
 end
 
-function Background(par::AbstractCosmoParams{T};
-                    x_grid=-20.0:0.01:0.0,logq_grid=-6.0:0.1:1.0) where T
+function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
+                    #,logq_grid=-6.0:0.1:1.0) where T
     ℋ_  = spline(x_grid, [ℋ(x, par) for x in x_grid])
     η_   = spline(x_grid, [η(x, par) for x in x_grid])
+    quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative for 1e-6
     #logq_grid   #probably bad but just to get started
-    f0_  = spline(logq_grid, [f0(10.0 ^(lq),par) for lq in logq_grid])
-    df0_ = spline(logq_grid, [dlnf0dlnq(10.0 ^(lq),par) for lq in logq_grid]) #maybe better to do spline gradient?
+    # f0_  = spline(logq_grid, [f0(10.0 ^(lq),par) for lq in logq_grid])
+    # df0_ = spline(logq_grid, [dlnf0dlnq(10.0 ^(lq),par) for lq in logq_grid]) #maybe better to do spline gradient?
     return Background(
         T(H₀(par)),
         T(η(0.0, par)),
@@ -114,7 +110,9 @@ function Background(par::AbstractCosmoParams{T};
         T(Ω_Λ(par)),
 
         x_grid,
-        logq_grid,
+        #logq_grid,
+        convert(Array{T,1},quad_pts), #explicit call to convert instead of constructor for arrays
+        convert(Array{T,1},quad_wts),
 
         ℋ_,
         spline_∂ₓ(ℋ_, x_grid),
@@ -125,7 +123,7 @@ function Background(par::AbstractCosmoParams{T};
         spline_∂ₓ²(η_, x_grid),
 
 
-        f0_,
-        df0_,
+        # f0_,
+        # df0_,
     )
 end

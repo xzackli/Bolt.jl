@@ -11,10 +11,10 @@ using QuadGK
 
 #input ingredients
 par = CosmoParams()
-logqmin,logqmax = -6,-1
-n_q = 10
-logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
-bg = Background(par;x_grid=-20.0:0.1:0.0)#,logq_grid=logq_pts)
+# logqmin,logqmax = -6,-1
+n_q = 15
+# logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
+bg = Background(par;x_grid=-20.0:0.1:0.0,nq=n_q) #,logq_grid=logq_pts)
 ih = IonizationHistory(Peebles(), par, bg)
 k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100) #quadratically spaced k points
 
@@ -84,8 +84,6 @@ bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(length(logq_pts)) ,
 ρν #analytic answer
 
 #@btime @qthreads
-#seems to take like a minute (without threads) (rel nus)
-#with mass nus now takes around (~4-5mins) at much reduced reltol (1e-11-1e-5) with dumb integration
 ℓᵧ=8 #cutoff
 ℓ_ν=10 #not used except for size here, should pass
 ℓ_mν=ℓ_ν
@@ -102,7 +100,6 @@ for (i_k, k) in enumerate(k_grid)
     hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ, n_q)
     perturb = boltsolve(hierarchy; reltol=reltol)
     u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
-    #print(size(u))
     results[:,i_k] = u #z should use unpack somehow
 end
 results
