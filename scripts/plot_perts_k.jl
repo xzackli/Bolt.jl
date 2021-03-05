@@ -89,7 +89,7 @@ bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(length(logq_pts)) ,
 ℓᵧ=8 #cutoff
 ℓ_ν=10 #not used except for size here, should pass
 ℓ_mν=ℓ_ν
-reltol=1e-5 #cheap  rtol
+reltol=1e-3 #cheap  rtol
 #solve hierarchy at single x to check
 x=-8 #just picking a number
 a=exp(x)
@@ -105,15 +105,21 @@ for (i_k, k) in enumerate(k_grid)
     #print(size(u))
     results[:,i_k] = u #z should use unpack somehow
 end
-
+results
 #Integrate the q moments for ℳ0 and ℳ2 for plotting
 ℳρ,ℳσ = zeros(length(k_grid)),zeros(length(k_grid))
+ℳθ = zeros(length(k_grid))
+Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
 for (i_k, k) in enumerate(k_grid)
     ℳρ[i_k],ℳσ[i_k] = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q,i_k],
                             results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q,i_k],
-                            bg,exp(-20),par)
-end
+                            bg,a,par)#.*norm𝒩
+    ℳθ[i_k],_ = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q,i_k],
+                            zeros(n_q),
+                            bg,a,par)
 
+end
 #'Need to figure out the units of k here'
 labels = [raw"$\Phi$",raw"$\delta$",raw"$v$",raw"$|\delta_{b}|$",raw"$|v_{b}|$"]
 plot(legend=:bottomleft)
@@ -127,13 +133,19 @@ plot!(log10.(k_grid/ bg.H₀), log10.(abs.(results[1,:])),label=raw"$|\Theta_{0}
 
 plot!(log10.(k_grid/ bg.H₀), log10.(abs.( results[2(ℓᵧ+1)+1,:])),
       label=raw"$|\mathcal{N}_{0}|$")
+plot!(log10.(k_grid/ bg.H₀), log10.(abs.(results[2(ℓᵧ+1)+2,:])),
+      label=raw"$|\mathcal{N}_{1}|$")
 plot!(log10.(k_grid/ bg.H₀), log10.(abs.(results[2(ℓᵧ+1)+3,:])),
       label=raw"$|\mathcal{N}_{2}|$")
 
-
+results[2(ℓᵧ+1)+1,:] ./ ℳρ
+results[2(ℓᵧ+1)+2,:] ./ ℳθ
+results[2(ℓᵧ+1)+3,:] ./ ℳσ
 #these look okay except for normalization...
 plot!(log10.(k_grid/ bg.H₀),log10.(abs.(ℳρ)),
       label=raw"$|\mathcal{M}_{0}|$",ls=:dash)
+plot!(log10.(k_grid/ bg.H₀),log10.(abs.(ℳθ)),
+    label=raw"$|\mathcal{M}_{1}|$",ls=:dash)
 plot!(log10.(k_grid/ bg.H₀),log10.(abs.(ℳσ)),
       label=raw"$|\mathcal{M}_{2}|$",ls=:dash)
 

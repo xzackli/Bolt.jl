@@ -21,7 +21,8 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
-    println("ICS: ",u₀," xi: ", xᵢ)
+    #println("ICS: ",u₀," xi: ", xᵢ)
+    #hierarchy!(zeros(length(u₀)),u₀,hierarchy,xᵢ)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol, saveat=hierarchy.bg.x_grid, dense=false)
     return sol
@@ -46,6 +47,8 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     #MB eqn (55)
     #for now just doing something dumb and similar to bg ρ,P integrals,
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
+    Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+    norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
     m = par.Σm_ν
     nq = length(ℳ0) #assume we got this right
     qmin=1e-6 #numerical issue if qmin is smaller - how to choose?
@@ -59,9 +62,9 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     ℳ0_ = spline(logq_pts, ℳ0)
     ℳ2_ = spline(logq_pts, ℳ2)
     ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * bg.f0(log10(q)).*ℳ0_(log10(q)),
-                     qmin, qmax,rtol=1e-6)[1]
+                     qmin, qmax,rtol=1e-2)[1] #* norm𝒩
     σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * bg.f0(log10(q)).*ℳ2_(log10(q)),
-                     qmin, qmax,rtol=1e-6)[1]
+                     qmin, qmax,rtol=1e-2)[1] #* norm𝒩
     return ρ,σ
 end
 
@@ -89,11 +92,19 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
-                                  + σℳ / bg.ρ_crit) #add mnu integrated quadrupole
+                                  + σℳ / bg.ρ_crit/ norm𝒩) #add mnu integrated quadrupole
+
+    # println("x= ",x, " so a = ", exp(x))
+    # println("Size of terms in i neq j eqn. Ω_ν: ", Ω_ν * 𝒩[2], " and σℳ ", σℳ / bg.ρ_crit / norm𝒩)
+
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
-        + 4 * a^(-2) * ρℳ / bg.ρ_crit) #add mnu integrated monopole
+        + 4 * a^(-2) * ρℳ  / bg.ρ_crit / norm𝒩) #add mnu integrated monopole
+
+#    println("Size of terms in 00 eqn. Ω_ν: ", 4Ω_ν * a^(-2) * 𝒩[0], " and ρℳ", 4 * a^(-2) * ρℳ  / bg.ρ_crit / norm𝒩)
+
+
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
@@ -116,13 +127,22 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         ϵ = √(q^2 + (a*m_ν)^2)
         dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q] + Φ′ / 4 * dlnf0dlnq
-        ℳ′[1* nq+i_q] = k / (3ℋₓ) * (( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])) - ϵ/q * Ψ / 4 * dlnf0dlnq)
+        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q] + Φ′ * dlnf0dlnq
+        ℳ′[1* nq+i_q] = k / (3ℋₓ) * (( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])) - ϵ/q * Ψ  * dlnf0dlnq)
         for ℓ in 2:(ℓ_mν-1)
             ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
         end
-        ℳ′[ℓ_ν* nq+i_q] =  k / ℋₓ * ϵ / q * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case
+        ℳ′[ℓ_mν* nq+i_q] =  k / ℋₓ * ϵ / q * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case
     end
+
+    #check monopole, quadrupole
+    # ρℳ′, σℳ′  =  ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
+    # println("Size of 𝒩0` : ",𝒩′[0] , " and ρℳ` ",  ρℳ′)
+    # println("Size of 𝒩2` : ",𝒩′[2] , " and σℳ` ",  σℳ′)
+    # θℳ′, _  =  ρ_σ(ℳ′[nq:2*nq-1], zeros(nq), bg, a, par) #approximate ϵ=q
+    # println("Size of 𝒩1` : ",𝒩′[1] , " and θℳ` ",  θℳ′)
+    # maxℳ′, _  =  ρ_σ(ℳ′[(ℓ_mν-1)*nq:ℓ_mν*nq-1], zeros(nq), bg, a, par) #not sure if kosher
+    # println("Size of max1` : ",𝒩′[ℓ_ν] , " and maxℳ` ",  maxℳ′)
 
     # photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
@@ -198,9 +218,13 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
         dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
         ℳ[0* nq+i_q] = -𝒩[0]  *dlnf0dlnq
-        ℳ[1* nq+i_q] = -ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
+        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *dlnf0dlnq #-ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
         ℳ[2* nq+i_q] = -𝒩[2]  *dlnf0dlnq #drop quadratic+ terms in (ma/q) as in MB
+        for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
+            ℳ[ℓ* nq+i_q] = k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72)
+        end
     end
+
     #ignore ℓ>2, suppressed, leave as zero in MB -
     #FIXME check this against modern practice, i.e. we didn't do this for 𝒩
     u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
@@ -211,7 +235,7 @@ end
 # Bardeen potential Ψ and its derivative ψ′ for an integrator, or we saved them
 function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute some quantities
-    k, ℓᵧ, par, bg, ih = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih
+    k, ℓᵧ, par, bg, ih,nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
     H₀² = bg.H₀^2
     ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
     τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
@@ -224,15 +248,17 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     # recalulate these since we didn't save them (Callin eqns 39-42)
     #FIXME check the neutrino contributions to Ψ and Ψ′!
     #^Also have just copied from before, but should save these maybe?
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq], ℳ[2*nq:3*nq], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    _, σℳ′ = ρ_σ(ℳ′[0:nq], ℳ′[2*nq:3*nq], bg, a, par)
+    Ω_ν =  7N_ν/8 *(4/11)^(4/3) *Ω_r
+    norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
-                                  + σℳ / bg.ρ_crit) #add mnu integrated quadrupole
+                                  + σℳ / bg.ρ_crit / norm𝒩) #add mnu integrated quadrupole
 
     Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
                                     + Ω_ν * (𝒩′[2] - 2 * 𝒩[2])
-                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit) #I think this is right...
+                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit/ norm𝒩) #FIXME: check a factor
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 

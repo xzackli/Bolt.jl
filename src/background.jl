@@ -43,7 +43,7 @@ H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
 
 # conformal time
 function η(x, par::AbstractCosmoParams)
-    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1] #FIXME rtol
+    return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-2)[1] #FIXME rtol
 end
 
 #background FD phase space
@@ -69,8 +69,8 @@ function ρP_0(a,par::AbstractCosmoParams)
     qmin=1e-18 #numerical issue if qmin is smaller - how to choose?
     qmax=1e1 #how to determine qmax?
     #FIXME cheap rtol
-    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-6)[1]
-    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-6)[1]
+    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-2)[1]
+    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-2)[1]
     return ρ,P#,norm
 end
 # now build a Background with these functions
