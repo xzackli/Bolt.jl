@@ -18,3 +18,4 @@ spline_∂ₓ²(f, x_grid) = spline(x_grid, [Interpolations.hessian(f, x)[1] for
 to_ui(lq,lqmi,lqma) = -1 + (1- (-1)) / (lqma-lqmi) * (lq-lqmi)
 from_ui(x,lqmi,lqma) = lqmi + (lqma- lqmi) / (1- (-1)) * (x- (-1))
 dxdq(q,logqmin,logqmax) = (1+to_ui(1+logqmin,logqmin,logqmax))/(q*log(10))
+xq2q(x,logqmin,logqmax) = 10.0 ^ from_ui(x,logqmin,logqmax)

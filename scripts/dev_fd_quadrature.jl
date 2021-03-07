@@ -76,28 +76,29 @@ println("Relative error on CC: ", abs.(1-IGCC/answer), "  with n= ", ncc," point
 dlnf0dlnq0(q) = -q / T /(1 + exp(-q/T))
 
 #high-tolerance QuadGK
-@time Iqgk_truth = quadgk(q ->  √(q^2 + 1 * 0.06^2)* f0(q)*dlnf0dlnq0(q) ,10.0 .^logqmin, 10.0 .^logqmax,rtol=1e-12)[1]
+a=1#10^-4
+@time Iqgk_truth = quadgk(q ->  √(q^2 + a^2 * 0.06^2)* q^2 * f0(q)*dlnf0dlnq0(q) ,10.0 .^logqmin, 10.0 .^logqmax,rtol=1e-12)[1]
 
 #fast QuadGK at 1e-3
-@time Iqgk_fast = quadgk(q ->  √(q^2 + 1 * 0.06^2)* f0(q)*dlnf0dlnq0(q) ,10.0 .^logqmin, 10.0 .^logqmax,rtol=1e-3)[1]
+@time Iqgk_fast = quadgk(q ->  √(q^2 + a^2 * 0.06^2)* q^2 * f0(q)*dlnf0dlnq0(q) ,10.0 .^logqmin, 10.0 .^logqmax,rtol=1e-3)[1]
 println("Relative error on realistic 1e-3 gk: ", abs.(1-Iqgk_fast/Iqgk_truth))
 
 
 #vs FastGaussQuadrature
 function ftp(x)
-    return (√((10.0 ^ from_ui(x,logqmin,logqmax))^2 + 1 * 0.06^2)
-            * f0(10.0 ^ from_ui(x,logqmin,logqmax))
+    return (√((10.0 ^ from_ui(x,logqmin,logqmax))^2 + a^2 * 0.06^2)
+            * f0(10.0 ^ from_ui(x,logqmin,logqmax)) * (10.0 ^ from_ui(x,logqmin,logqmax))^2
             *dlnf0dlnq0(10.0 ^ from_ui(x,logqmin,logqmax)) )/ dxdq(10.0 ^ from_ui(x,logqmin,logqmax))
 end
 
 #Gauss-Legendre
-m = 12
+m = 15
 @time xGLe2, wGLe2 = gausslegendre( m )
 @time IGLe2 = quad_sum(xGLe2,wGLe2,ftp)
 println("Relative error on realistic GLeg: ", abs.(1-IGLe2/Iqgk_truth), "  with m= ", m," points.")
 
 #CC
-mcc = m+1
+mcc = m#+1
 @time xGCC2, wGCC2 = gausslobatto( mcc )
 @time IGCC2 = quad_sum(xGCC2,wGCC2,ftp)
 println("Relative error on CC: ", abs.(1-IGCC2/Iqgk_truth), "  with n= ", mcc," points.")
@@ -112,3 +113,6 @@ println("Relative error on CC: ", abs.(1-IGCC2/Iqgk_truth), "  with n= ", mcc," 
 
 #Would be interesting to see if cosmology affects this accuracy, because could reduce cost even further by
 #just passing the q-pts (computed externally) once instead of computing in bg
+
+#hmm I forgot a factor of q before, but even at higher redshift the performance
+#is about the same on 15 pts, only around 1e-3 rerr

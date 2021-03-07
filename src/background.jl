@@ -13,8 +13,8 @@ function Ω_Λ(par::AbstractCosmoParams)
     #Below can definitely be more streamlined, I am just making it work for now
     Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     νfac = (90 * ζ /(11 * π^4)) * (par.Ω_r * par.h^2 / Tγ)#the factor that goes into nr approx to neutrino energy density
-    Ω_ν = par.Σm_ν*νfac/par.h^2
-    return 1 - (par.Ω_r*(1+(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
+    Ω_ν = par.Σm_ν*νfac/par.h^2 #FIXME I think this is right for a single neutrino? May be mssing Neff/3 factor
+    return 1 - (par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
                                          + par.Ω_b + par.Ω_m
                                          + Ω_ν) #assume massive nus are non-rel today
 end
@@ -24,7 +24,7 @@ function H_a(a, par::AbstractCosmoParams)
     ρ_ν,_ = ρP_0(a,par) # we don't atually need pressure?
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
-                        + par.Ω_r*(1+(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
+                        + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
                         + Ω_Λ(par))
 end
 # conformal time Hubble parameter, aH
@@ -41,14 +41,14 @@ end
 
 #background FD phase space
 function f0(q,par::AbstractCosmoParams)
-    Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     #m = par.Σm_ν  #FIXME allow for multiple species
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
 
 function dlnf0dlnq(q,par::AbstractCosmoParams) #this is actually only used in perts
-    Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
     #m = par.Σm_ν  #FIXME allow for multiple species
     return -q / Tν /(1 + exp(-q/Tν))
 end
@@ -57,7 +57,7 @@ end
 #FIXME better quadrature, other codes use asymptotic expansion
 function ρP_0(a,par::AbstractCosmoParams)
     #Background phase space energy density and pressure
-    Tν =  (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
     m = par.Σm_ν
     qmin=1e-18 #numerical issue if qmin is smaller - how to choose?
     qmax=1e1 #how to determine qmax?

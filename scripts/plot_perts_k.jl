@@ -11,22 +11,22 @@ using QuadGK
 
 #input ingredients
 par = CosmoParams()
-# logqmin,logqmax = -6,-1
+logqmin,logqmax = -6,-1
 n_q = 15
-# logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
+logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
 bg = Background(par;x_grid=-20.0:0.1:0.0,nq=n_q) #,logq_grid=logq_pts)
 ih = IonizationHistory(Peebles(), par, bg)
 k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100) #quadratically spaced k points
 
 function f00(q)
-    Tν =  (4/11)^(1/3) * (15/ π^2 *3.9669896e-11 *5.042e-5)^(1/4) ##assume instant decouple for now
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *3.9669896e-11 *5.042e-5)^(1/4) ##assume instant decouple for now
     m = 0.06  #FIXME allow for multiple species
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
 
 function dlnf0dlnq0(q) #this is actually only used in perts
-    Tν =  (4/11)^(1/3) * (15/ π^2 *3.9669896e-11 *5.042e-5)^(1/4) ##assume instant decouple for now
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *3.9669896e-11 *5.042e-5)^(1/4) ##assume instant decouple for now
     m = 0.06  #FIXME allow for multiple species
     return -q / Tν /(1 + exp(-q/Tν))
 end
@@ -59,6 +59,8 @@ plot!(bg.logq_grid,((10.0.^(bg.logq_grid)).^3) .* abs.(bg.f0))
 plot!(bg.logq_grid,((10.0.^(bg.logq_grid)).^3 ).*f00.(10.0 .^ bg.logq_grid),ls=:dash)
 
 #find correct factor for normalization...
+ρν0 = 7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r * bg.ρ_crit / 2 #used to be div by Neff, now div by floor(Neff-1)
+ρν=ρν0*(exp(-20))^(-4)
 aaa=4π  * quadgk(q ->  q^2 * -dlnf0dlnq0(q) *q * f00(q),
             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
 #!
@@ -78,8 +80,8 @@ aaa
             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
 
 #test that ρ_σ is the same as bg when passed ones - it is up to quadgk tol...
-bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(length(logq_pts)) ,
-               zeros(length(logq_pts)),bg,exp(-20),par)
+bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(n_q) ,
+               zeros(n_q),bg,exp(-20),par)
 ρP_0(exp(-20),par)
 ρν #analytic answer
 
@@ -94,7 +96,7 @@ a=exp(x)
 pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
 println("pert vector length=",pertlen)
 results=zeros(pertlen,length(k_grid))
-
+n_q
 for (i_k, k) in enumerate(k_grid)
     println(i_k)
     hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ, n_q)
@@ -106,8 +108,8 @@ results
 #Integrate the q moments for ℳ0 and ℳ2 for plotting
 ℳρ,ℳσ = zeros(length(k_grid)),zeros(length(k_grid))
 ℳθ = zeros(length(k_grid))
-Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
-norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
+Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / 2)
 for (i_k, k) in enumerate(k_grid)
     ℳρ[i_k],ℳσ[i_k] = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q,i_k],
                             results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q,i_k],
