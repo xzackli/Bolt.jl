@@ -18,15 +18,15 @@ end
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8 ,nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, nq)
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=Rodas5(); reltol=1e-10) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     # #println("ICS: ",u₀," xi: ", xᵢ)
     #hierarchy!(zeros(length(u₀)),u₀,hierarchy,xᵢ)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,
+    sol = solve(prob, ode_alg, reltol=reltol,#save_everystep=true,
                 saveat=hierarchy.bg.x_grid, dense=false)
-    return sol #u₀#
+    return sol #
 end
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
@@ -131,12 +131,12 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 
     # relativistic neutrinos (massless)
     𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-    𝒩′[1] = k/(3ℋₓ)*𝒩[0] - 2*k/(3ℋₓ)*𝒩[2] + k/(3ℋₓ)*Ψ
+    𝒩′[1] = k/(3ℋₓ)*𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
     for ℓ in 2:(ℓ_ν-1) #ℓ_ν same as ℓᵧ for massless nu for now
         𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
     end
-    #truncation
-    𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]#Callin 06
+    #truncation (same between MB and Callin06)
+    𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]
 
     #WIP: nonrelativistic nu
     # neutrinos (massive, MB 57)
@@ -150,10 +150,10 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         for ℓ in 2:(ℓ_mν-1)
             ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
         end
-        ℳ′[ℓ_mν* nq+i_q] =  k / ℋₓ * ϵ / q * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case
+        ℳ′[ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case but w/ q/ϵ
     end
 
-    #check monopole, quadrupole
+    #check monopole, dipole, quadrupole
     # ρℳ′, σℳ′  =  ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
     # println("Size of 𝒩0` : ",𝒩′[0] , " and ρℳ` ",  ρℳ′)
     # println("Size of 𝒩2` : ",𝒩′[2] , " and σℳ` ",  σℳ′)
@@ -161,6 +161,15 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # println("Size of 𝒩1` : ",𝒩′[1] , " and θℳ` ",  θℳ′)
     # maxℳ′, _  =  ρ_σ(ℳ′[(ℓ_mν-1)*nq:ℓ_mν*nq-1], zeros(nq), bg, a, par) #not sure if kosher
     # println("Size of max1` : ",𝒩′[ℓ_ν] , " and maxℳ` ",  maxℳ′)
+    #
+    # #check sizes of individual terms
+    # println("Φ′ term - massless: ", -Φ′)
+    # df0test = [dlnf0dlnq(q,par) for q in q_pts]
+    # println("Φ′ term - massive: ", Φ′ * ρ_σ(df0test * norm𝒩, zeros(nq), bg, a, par)[1])
+    # println("Ψ term - massless: ",k/(3ℋₓ) *Ψ)
+    # println("Ψ term - massive: ",k/(3ℋₓ)* Ψ *ρ_σ(- sqrt.(ones(nq) .+ (a*m_ν ./ q_pts).^2)  .* df0test * norm𝒩, zeros(nq), bg, a, par)[1])
+
+    #compare the sizes of individual terms
 
     # photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
@@ -243,7 +252,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
         ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0 #-ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
         ℳ[2* nq+i_q] = -𝒩[2]  *df0 #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
-            ℳ[ℓ* nq+i_q] = k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72)
+            ℳ[ℓ* nq+i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ
         end
     end
 

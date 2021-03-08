@@ -89,7 +89,7 @@ bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(n_q) ,
 ℓᵧ=8 #cutoff
 ℓ_ν=10 #not used except for size here, should pass
 ℓ_mν=ℓ_ν
-reltol=1e-3 #cheap  rtol
+reltol=1e-5 #cheaper  rtol
 #solve hierarchy at single x to check
 x=-8 #just picking a number
 a=exp(x)
@@ -101,7 +101,7 @@ for (i_k, k) in enumerate(k_grid)
     println(i_k)
     hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ, n_q)
     perturb = boltsolve(hierarchy; reltol=reltol)
-    u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
+    u = perturb#(x)  #z this can be optimized away, save timesteps at the grid!
     results[:,i_k] = u #z should use unpack somehow
 end
 results
