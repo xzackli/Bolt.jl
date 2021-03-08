@@ -12,7 +12,8 @@ H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
 function Ω_Λ(par::AbstractCosmoParams)
     #Below can definitely be more streamlined, I am just making it work for now
     Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    νfac = (90 * ζ /(11 * π^4)) * (par.Ω_r * par.h^2 / Tγ)#the factor that goes into nr approx to neutrino energy density
+    νfac = (90 * ζ /(11 * π^4)) * (par.Ω_r * par.h^2 / Tγ) *((par.N_ν/3)^(3/4))
+    #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
     Ω_ν = par.Σm_ν*νfac/par.h^2 #FIXME I think this is right for a single neutrino? May be mssing Neff/3 factor
     return 1 - (par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
                                          + par.Ω_b + par.Ω_m
@@ -42,26 +43,22 @@ end
 #background FD phase space
 function f0(q,par::AbstractCosmoParams)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    #m = par.Σm_ν  #FIXME allow for multiple species
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
 
 function dlnf0dlnq(q,par::AbstractCosmoParams) #this is actually only used in perts
-    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
-    #m = par.Σm_ν  #FIXME allow for multiple species
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     return -q / Tν /(1 + exp(-q/Tν))
 end
 
-#in natural units, q should be 1 at c since c=1 no? will assume this here
-#FIXME better quadrature, other codes use asymptotic expansion
+#FIXME use FastGaussQuadrature instead of slower adaptive 9as in perts)
 function ρP_0(a,par::AbstractCosmoParams)
     #Background phase space energy density and pressure
-    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4) ##assume instant decouple for now
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     m = par.Σm_ν
     qmin=1e-18 #numerical issue if qmin is smaller - how to choose?
     qmax=1e1 #how to determine qmax?
-    #FIXME cheap rtol
     ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-6)[1]
     P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-6)[1]
     return ρ,P#,norm
@@ -79,7 +76,6 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     Ω_Λ::T
 
     x_grid::GT
-#    logq_grid::GT
     quad_pts::Array{T,1}
     quad_wts::Array{T,1}
 
@@ -89,20 +85,13 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     η::IT
     η′::IT
     η′′::IT
-
-
-    # f0::IT
-    # df0::IT
 end
 
 function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
                     #,logq_grid=-6.0:0.1:1.0) where T
     ℋ_  = spline(x_grid, [ℋ(x, par) for x in x_grid])
     η_   = spline(x_grid, [η(x, par) for x in x_grid])
-    quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative for 1e-6
-    #logq_grid   #probably bad but just to get started
-    # f0_  = spline(logq_grid, [f0(10.0 ^(lq),par) for lq in logq_grid])
-    # df0_ = spline(logq_grid, [dlnf0dlnq(10.0 ^(lq),par) for lq in logq_grid]) #maybe better to do spline gradient?
+    quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative
     return Background(
         T(H₀(par)),
         T(η(0.0, par)),
@@ -110,7 +99,6 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         T(Ω_Λ(par)),
 
         x_grid,
-        #logq_grid,
         convert(Array{T,1},quad_pts), #explicit call to convert instead of constructor for arrays
         convert(Array{T,1},quad_wts),
 
@@ -122,8 +110,5 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         spline_∂ₓ(η_, x_grid),
         spline_∂ₓ²(η_, x_grid),
 
-
-        # f0_,
-        # df0_,
     )
 end

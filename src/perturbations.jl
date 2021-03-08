@@ -21,12 +21,10 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
-    # #println("ICS: ",u₀," xi: ", xᵢ)
-    #hierarchy!(zeros(length(u₀)),u₀,hierarchy,xᵢ)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,#save_everystep=true,
+    sol = solve(prob, ode_alg, reltol=reltol,
                 saveat=hierarchy.bg.x_grid, dense=false)
-    return sol #
+    return sol
 end
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
@@ -50,8 +48,6 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)#1e-6,1e-1
 
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
-    # Ω_ν =  7par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
-    # norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
     m = par.Σm_ν
     nq = length(ℳ0) #assume we got this right
     ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
@@ -61,25 +57,7 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     xq,wq = bg.quad_pts,bg.quad_wts
     ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
     σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
-    # qmin=1e-6 #numerical issue if qmin is smaller - how to choose?
-    # qmax=1e-1 #how to determine qmax?
     # #a-dependence has been moved into Einstein eqns, as have consts in σ
-    #DO NOT WANT TO DO THIS
-    # logqmin,logqmax = -6,-1
-    # logq_pts = logqmin:(logqmax-logqmin)/(nq-1):logqmax
-    #
-    # ℳ0_ = spline(logq_pts, ℳ0)
-    # ℳ2_ = spline(logq_pts, ℳ2)
-    # #exact in f0
-    # ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par).*ℳ0_(log10(q)),
-    #                  10.0 ^logqmin, 10.0 ^logqmax,rtol=1e-2)[1] #* norm𝒩
-    # σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par).*ℳ2_(log10(q)),
-    #                  10.0 ^logqmin, 10.0 ^logqmax,rtol=1e-2)[1] #* norm𝒩
-    #old with splines
-    # ρ = 4π  * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * bg.f0(log10(q)).*ℳ0_(log10(q)),
-    #                  10.0 ^logqmin, 10.0 ^logqmax,rtol=1e-2)[1] #* norm𝒩
-    # σ = 4π  * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * bg.f0(log10(q)).*ℳ2_(log10(q)),
-    #                  10.0 ^logqmin, 10.0 ^logqmax,rtol=1e-2)[1] #* norm𝒩
     return ρ,σ
 end
 
@@ -87,8 +65,6 @@ end
 function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
-    # logqmin,logqmax = -6.,-1. #FIXME: see note in ics
-    # q_pts =  10.0 .^ (collect(range(logqmin,logqmax,length=nq)))
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -198,8 +174,6 @@ end
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
 function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih, hierarchy.nq
-    # logqmin, logqmax = -6.,-1.  #FIXME: remove hardcode when update quadrature, this seems reasonable from rel f0
-    # q_pts = 10.0 .^ (collect(range(logqmin,logqmax,length=nq))) #logspace input - this will be bad in general but starting somewhere
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -246,13 +220,12 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / 2)#par.N_ν) #Normalization to match 𝒩 after integrating, par.N_ν->2
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
-        #dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
         df0 = dlnf0dlnq(q,par) * norm𝒩
         ℳ[0* nq+i_q] = -𝒩[0]  *df0
-        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0 #-ϵ/(3*q*k) * 𝒩[1] *dlnf0dlnq
+        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0
         ℳ[2* nq+i_q] = -𝒩[2]  *df0 #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
-            ℳ[ℓ* nq+i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ
+            ℳ[ℓ* nq+i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
         end
     end
 
@@ -289,7 +262,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
 
     Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
                                     + Ω_ν * (𝒩′[2] - 2 * 𝒩[2])
-                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit/ norm𝒩) #FIXME: check a factor
+                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit/ norm𝒩) 
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 
