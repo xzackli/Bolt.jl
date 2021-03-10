@@ -145,7 +145,6 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # println("Ψ term - massless: ",k/(3ℋₓ) *Ψ)
     # println("Ψ term - massive: ",k/(3ℋₓ)* Ψ *ρ_σ(- sqrt.(ones(nq) .+ (a*m_ν ./ q_pts).^2)  .* df0test * norm𝒩, zeros(nq), bg, a, par)[1])
 
-    #compare the sizes of individual terms
 
     # photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
@@ -229,8 +228,6 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
         end
     end
 
-    #ignore ℓ>2, suppressed, leave as zero in MB -
-    #FIXME check this against modern practice, i.e. we didn't do this for 𝒩
     u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
     return u
 end
@@ -262,7 +259,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
 
     Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
                                     + Ω_ν * (𝒩′[2] - 2 * 𝒩[2])
-                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit/ norm𝒩) 
+                                    + (σℳ′ - 2 * σℳ) / bg.ρ_crit/ norm𝒩)
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 

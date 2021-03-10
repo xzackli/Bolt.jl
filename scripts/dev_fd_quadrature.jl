@@ -39,11 +39,7 @@ println("Relative error on quadGK: ", abs.(1-Iqgk/answer))
 #this is already very slow - it takes .73 seconds at rtol=1e-2
 #going to 1e-6 (which seems about what fast quadrature is getting), gives ~.26 s
 #Should get average timings b/c seeing big difference from first call
-#Either way, fast quad is at least 3 orders of magnitude faster
-#Seems cheby is faster than Legendre by ~50x - but is only accurate at ~1%
-#(which makes sense, lobatto pts much faster than Newton iteration to find Legendre zeros)
-#though with 13 pts get 1e-3 error same as Legendre - this may be way to go, but should
-#first check on perturbed f integrals
+#Comparison with FastGaussQuadrature should take into account saved quantities.
 
 #FastGaussQuadrature.jl routines
 quad_sum(x,w,f) = sum(f.(x).*w)
@@ -64,7 +60,7 @@ ncc = n+3
 println("Relative error on CC: ", abs.(1-IGCC/answer), "  with n= ", ncc," points.")
 #30 pts is pretty good - relative tolerance of 1e-6 for Leg, 1e-4 for cheby zeros
 
-#Use asymptotic expansion instead of just truncating the integral (standard practice)
+#FIXME: try using asymptotic expansion instead of just truncating the integral (standard practice)
 
 #FIXME: Need to take into account possible integration over splines instead of f
 #If integrate over spline is faster but probably introduces interp error, especially at ends
@@ -106,7 +102,7 @@ println("Relative error on CC: ", abs.(1-IGCC2/Iqgk_truth), "  with n= ", mcc," 
 #comparing to the f0 test, where we got 1e-3 error for 10 and 13 pts for GL and CC respectively, here we have
 #12 and 13 pts, respectively, and similarly, we have that it is faster
 #Need to do a careful comparison at some point where we can average over a number of times,
-#as it is hard to know when the quad points are reusing pre-computed values...
+#as it is hard to know when the quad points are reusing p/re-computed values...
 #Either way so long as the computation of quadrature points (which occurs in the background once)
 #plus the sum operations that happen frequently are faster than quadgk * number of times it is called,
 #then we are fine - and I think this is an easily attainable threshold for a small number of quad pts (<15)

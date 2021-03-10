@@ -42,19 +42,19 @@ aaa=4π  * quadgk(q ->  q^2 * -dlnf0dlnq0(q) *q * f00(q),
             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
 #!
 aaa
-
-#check the splining error:
-#use both splines - error of ~1.8e-3
-4π  * quadgk(q ->  q^2 * -bg.df0(log10(q)) *q * bg.f0(log10(q)),
-            1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
-
-#only use df0 spline - error of ~ 5e-6, ~ rtol
-4π  * quadgk(q ->  q^2 * -bg.df0(log10(q)) *q * f00(q),
-            1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
-
-#only use f0 spline - again we get error of ~1.8e-3 - so this is the problem...
-4π  * quadgk(q ->  q^2 * -dlnf0dlnq0(q) *q * bg.f0(log10(q)),
-            1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
+# Removed the splines from bg so these won't work anymore
+# #check the splining error:
+# #use both splines - error of ~1.8e-3
+# 4π  * quadgk(q ->  q^2 * -bg.df0(log10(q)) *q * bg.f0(log10(q)),
+#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
+#
+# #only use df0 spline - error of ~ 5e-6, ~ rtol
+# 4π  * quadgk(q ->  q^2 * -bg.df0(log10(q)) *q * f00(q),
+#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
+#
+# #only use f0 spline - again we get error of ~1.8e-3 - so this is the problem...
+# 4π  * quadgk(q ->  q^2 * -dlnf0dlnq0(q) *q * bg.f0(log10(q)),
+#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
 
 #test that ρ_σ is the same as bg when passed ones - it is up to quadgk tol...
 bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(n_q) ,
