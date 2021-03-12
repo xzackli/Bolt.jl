@@ -12,11 +12,12 @@ struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T}
     ih::IH
     k::Tk
     ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
+    ℓ_mν::Int
     nq::Int
 end
 
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
-    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8 ,nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, nq)
+    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_mν, nq)
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-10) where T
     xᵢ = first(hierarchy.bg.x_grid)
@@ -30,8 +31,8 @@ end
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     ℓᵧ = hierarchy.ℓᵧ
-    ℓ_ν = 10 #Callin06, for now
-    ℓ_mν = ℓ_ν #should be smaller
+    ℓ_ν = ℓᵧ#10 #Callin06, for now
+    ℓ_mν = hierarchy.ℓ_mν #should be smaller
     nq = hierarchy.nq
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
     Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
@@ -73,8 +74,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    ℓ_ν = 10 #again, for now - should this be higher??
-    ℓ_mν =  ℓ_ν #come back to put ℓmaxs in hierarchy
+    ℓ_ν = ℓᵧ#10 #again, for now - should this be higher??
+    ℓ_mν =  hierarchy.ℓ_mν
     norm𝒩′ = 1.0 /(Ω_ν * bg.ρ_crit / 2)# par.N_ν) #Normalization to match 𝒩 after integrating, par.N_ν->2
     norm𝒩 = norm𝒩′/ 4.0
     #^Here we remove the 4 in denom b/c it has moved to the Einstein eqns.
@@ -107,7 +108,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 
     # relativistic neutrinos (massless)
     𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-    𝒩′[1] = k/(3ℋₓ)*𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+    𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
     for ℓ in 2:(ℓ_ν-1) #ℓ_ν same as ℓᵧ for massless nu for now
         𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
     end
@@ -176,8 +177,8 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    ℓ_ν = 10 #again, for now
-    ℓ_mν = ℓ_ν
+    ℓ_ν = ℓᵧ#10 #again, for now
+    ℓ_mν =  hierarchy.ℓ_mν
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
@@ -209,7 +210,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     f_ν = 1/(1 + 1/(7*(2/3)*par.N_ν/8 *(4/11)^(4/3)))
     𝒩[0] = Θ[0]
     𝒩[1] = Θ[1]
-    𝒩[2] = - (k^2 *aᵢ²*Φ) / (12H₀² * Ω_ν) * 1 / (1 + 5f_ν/2) #Callin06 (71)
+    𝒩[2] = - (k^2 *aᵢ²*Φ) / (12H₀² * Ω_ν) * 1 / (1 + 5/(2*f_ν)) #Callin06 (71)
     for ℓ in 3:ℓ_ν
         𝒩[ℓ] = k/((2ℓ+1)ℋₓ) * 𝒩[ℓ-1] #approximation of Callin06 (72)
     end
