@@ -4,9 +4,10 @@ export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory
 export Peebles
-export Hierarchy, boltsolve, BasicNewtonian
+export ρ_σ,ρP_0,f0,dlnf0dlnq #FIXME: quick hack to look at perts
+export Hierarchy, boltsolve, BasicNewtonian,unpack
 export source_grid, quadratic_k, cltt
-export z2a, a2z, x2a, a2x, z2x, x2z
+export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
 using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
@@ -18,6 +19,7 @@ using QuadGK
 using ThreadPools
 using ForwardDiff, DiffResults
 using NumericalIntegration
+using FastGaussQuadrature
 
 using FFTW
 import SpecialFunctions: lgamma, sphericalbesselj
@@ -39,6 +41,7 @@ abstract type AbstractCosmoParams{T} end
     n = 1.0  # spectral index
     Y_p = 0.0  # primordial helium fraction, currently unused
     N_ν = 3.046 #effective number of relativisic species (PDG25 value)
+    Σm_ν = 0.06 #sum of neutrino masses (eV), Planck 15 default ΛCDM value
 end
 
 include("util.jl")
