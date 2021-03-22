@@ -47,9 +47,9 @@ end
 const T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]  # TODO: make this a parameter of the ionization
 n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
 n_H(a, par) = n_b(a, par)  # ignoring helium for now
-T_b(a, par) = T₀ / a
-saha_rhs(a, par) = (m_e * T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
-    exp(-ε₀_H / T_b(a, par))  # rhs of Callin06 eq. 12
+saha_T_b(a, par) = T₀ / a
+saha_rhs(a, par) = (m_e * saha_T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
+    exp(-ε₀_H / saha_T_b(a, par))  # rhs of Callin06 eq. 12
 
 function saha_Xₑ(x, par::AbstractCosmoParams)
     rhs = saha_rhs(x2a(x), par)
@@ -82,7 +82,7 @@ Cᵣ(a, Xₑ, T_b, par) = (Λ_2s_to_1s + Λ_α(a, Xₑ, par)) / (
 # RHS of Callin06 eq. 13
 function peebles_Xₑ′(Xₑ, par, x)
     a = exp(x)
-    T_b_a = BigFloat(T_b(a, par))  # handle overflows by switching to bigfloat
+    T_b_a = BigFloat(saha_T_b(a, par))  # handle overflows by switching to bigfloat
     return float(Cᵣ(a, Xₑ, T_b_a, par) / H_a(a, par) * (
         β(T_b_a) * (1 - Xₑ) - n_H(a, par) * α⁽²⁾(T_b_a) * Xₑ^2))
 end

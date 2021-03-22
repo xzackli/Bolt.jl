@@ -1,5 +1,9 @@
 
-@with_kw struct RECFASTIonization <: Bolt.IonizationIntegrator @deftype Float64
+
+@with_kw struct RECFAST{AB<:AbstractBackground} <: IonizationIntegrator @deftype Float64
+    bg::AB  # a RECFAST has an associated background evolution
+    H0_natural_unit_conversion = ustrip(u"s", unnatural(u"s", 1u"eV^-1"))
+
     bigH = 100.0e3 / (1e6 * 3.0856775807e16)	 # H₀ in s-1
     C  = 2.99792458e8  # Fundamental constants in SI units
     k_B = 1.380658e-23
@@ -82,25 +86,19 @@
 
     # Cosmology
     Yp = 0.24
-    OmegaB = 0.046
-    OmegaC = 0.224
-    # OmegaL = 0.73
-    # HOinp = 70  # Hubble constant in units of km/s/Mpc
-    # H = HOinp/100  # convert the Hubble constant units
-    # HO = H*bigH
-    # OmegaT = OmegaC + OmegaB            # total dark matter + baryons
-    # OmegaK = 1. - OmegaT - OmegaL	    # curvature
-    # Tnow = 2.725
+    OmegaB = 0.046  # TODO: should replace during GREAT GENERALIZATION
+    HO =  bg.H₀ / H0_natural_unit_conversion
+    Tnow = 2.725
 
     # sort out the helium abundance parameters
     mu_H = 1 / (1 - Yp)			 # Mass per H atom
     mu_T = not4/(not4-(not4-1)*Yp)	 # Mass per atom
     fHe = Yp/(not4*(1 - Yp))		# n_He_tot / n_H_tot
 
-    Nnow = 3 * HO * HO * OmegaB / (8π * G * mu_H * m_H)
-    fnu = (21/8)*(4/11)^(4/3)
+    Nnow = 3 * HO * HO * OmegaB / (8π * G * mu_H * m_H)  # TODO: should replace during GREAT GENERALIZATION
+    # fnu = (21/8)*(4/11)^(4/3)
     # (this is explictly for 3 massless neutrinos - change if N_nu.ne.3)  # this is only for H(z) and ∂H/∂z
-    z_eq = (3 * (HO*C)^2 / (8π * G * a * (1+fnu)*Tnow^4))*OmegaT - 1
+    # z_eq = (3 * (HO*C)^2 / (8π * G * a * (1+fnu)*Tnow^4))*OmegaT - 1
 
     fu = (Hswitch == 0) ? 1.14 : 1.125
     b_He = 0.86  # Set the He fudge factor
@@ -108,7 +106,7 @@
 end
 
 
-function recfast_init(𝕣::RECFASTIonization, z)
+function recfast_init(𝕣::RECFAST, z)
     if z > 8000.
         x_H0 = 1.
         x_He0 = 1.
@@ -137,7 +135,7 @@ function recfast_init(𝕣::RECFASTIonization, z)
 end
 
 
-function ion_recfast!(f, y, 𝕣::RECFASTIonization, z)
+function ion_recfast!(f, y, 𝕣::RECFAST, z)
 
 	x_H = y[1]
 	x_He = y[2]
@@ -147,10 +145,13 @@ function ion_recfast!(f, y, 𝕣::RECFASTIonization, z)
 	n = 𝕣.Nnow * (1+z)^3
 	n_He = 𝕣.fHe * 𝕣.Nnow * (1+z)^3
 	Trad = 𝕣.Tnow * (1+z)
-	Hz = 𝕣.HO * sqrt((1+z)^4/(1+𝕣.z_eq)*𝕣.OmegaT + 𝕣.OmegaT*(1+z)^3 + 𝕣.OmegaK*(1+z)^2 + 𝕣.OmegaL)
 
-    # Also calculate derivative for use later
-	dHdz = (𝕣.HO^2 /2/Hz)*(4*(1+z)^3/(1+𝕣.z_eq)*𝕣.OmegaT + 3*𝕣.OmegaT*(1+z)^2 + 2*𝕣.OmegaK*(1+z))
+    a = 1 / (1+z)  # scale factor
+    x_a = a2x(a)
+	Hz = 𝕣.bg.ℋ(x_a) / a / 𝕣.H0_natural_unit_conversion
+	dHdz = (-𝕣.bg.ℋ′(x_a) + 𝕣.bg.ℋ(x_a)) / 𝕣.H0_natural_unit_conversion
+	# Hz = 𝕣.HO * sqrt((1+z)^4/(1+𝕣.z_eq)*𝕣.OmegaT + 𝕣.OmegaT*(1+z)^3 + 𝕣.OmegaK*(1+z)^2 + 𝕣.OmegaL)
+	# dHdz = (𝕣.HO^2 /2/Hz)*(4*(1+z)^3/(1+𝕣.z_eq)*𝕣.OmegaT + 3*𝕣.OmegaT*(1+z)^2 + 2*𝕣.OmegaK*(1+z))
 
     # Get the radiative rates using PPQ fit (identical to Hummer's table)
 	Rdown=1e-19*𝕣.a_PPB*(Tmat/1e4)^𝕣.b_PPB/(1. + 𝕣.c_PPB*(Tmat/1e4)^𝕣.d_PPB)
@@ -293,7 +294,7 @@ function ion_recfast!(f, y, 𝕣::RECFASTIonization, z)
 end
 
 
-function recfast_xe(𝕣::RECFASTIonization;
+function recfast_xe(𝕣::RECFAST;
     Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial::T=10000., zfinal::T=0., alg=Tsit5()) where T
 
     z = zinitial
