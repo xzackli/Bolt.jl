@@ -44,8 +44,10 @@ end
 include("util.jl")
 include("fftlog.jl")
 include("background.jl")
-include("ionization.jl")
+include("ionization/ionization.jl")
+include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
+
 
 end
