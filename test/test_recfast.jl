@@ -14,9 +14,9 @@ z⃗, Xe = recfastdata[:,1], recfastdata[:,2]
 using Bolt
 
 𝕡 = CosmoParams(Σm_ν = 0.0, N_ν = 3.0)
-@time bg = Background(𝕡)
+bg = Background(𝕡)
 𝕣 = Bolt.RECFAST(bg=bg)
-@time xe_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.);
+xe_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.);
 
 ##
 
