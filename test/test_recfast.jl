@@ -12,10 +12,12 @@ z⃗, Xe = recfastdata[:,1], recfastdata[:,2]
 
 ##
 using Bolt
-
 𝕡 = CosmoParams(Σm_ν = 0.0, N_ν = 3.0)
 bg = Background(𝕡)
-𝕣 = Bolt.RECFAST(bg=bg)
+𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
+𝕣 = Bolt.Peebles()
+ih = IonizationHistory(𝕣, 𝕡, bg);
+
 
 ##
 Nz = 1000
@@ -51,7 +53,8 @@ gcf()
 ##
 
 clf()
-plot(z⃗, Xe ./ xe_bespoke , "-", label=raw"RECFAST / recfast.jl")
+# plot(z⃗, Xe ./ xe_bespoke , "-", label=raw"RECFAST / recfast.jl")
+plot(z⃗, Xe ./ ih.Xₑ.(z2x.(z⃗)) , "-", label=raw"RECFAST / recfast.jl")
 ylim(1 - 0.01, 1 + 0.01)
 
 # plot(z, Xe , "-")
@@ -59,6 +62,29 @@ ylim(1 - 0.01, 1 + 0.01)
 xlabel(raw"redshift")
 legend()
 gcf()
+
+
+##
+
+clf()
+x_grid = bg.x_grid
+fig, ax = subplots(1,2,figsize=(10,5))
+ax[1].plot(x_grid, ih.τ.(x_grid), "-", label=raw"$\tau$")
+ax[1].plot(x_grid, abs.(ih.τ′.(x_grid)), "--", label=raw"$|\tau^\prime|$")
+ax[2].plot(x_grid, ih.g̃.(x_grid), "-", label=raw"$\tilde{g}$")
+ax[2].plot(x_grid, ih.g̃′.(x_grid) ./ 10, "--", label=raw"$\tilde{g}\prime/10$")
+ax[2].plot(x_grid, ih.g̃′′.(x_grid) ./ 300, "--", label=raw"$\tilde{g}\prime/300$")
+ax[1].set_yscale("log")
+ax[1].legend()
+ax[1].set_xlabel(raw"$x$")
+ax[2].set_xlim(-8.0, -6.0)
+ax[2].set_ylim(-3.5, 5.5)
+ax[2].legend()
+ax[2].set_xlabel(raw"$x$")
+tight_layout()
+gcf()
+
+
 
 ##
 using UnitfulAstro, NaturallyUnitful

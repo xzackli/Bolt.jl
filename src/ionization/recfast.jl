@@ -390,11 +390,28 @@ function recfast_xe(𝕣::RECFAST{T};
     return out_xe, out_Tmat
 end
 
+RECFASTredshifts(Nz, zinitial, zfinal) =
+    range(zinitial, stop=zfinal, length=Nz+1)[2:end]
 
-function IonizationHistory(integrator::RECFAST{T}, par::ACP, bg::AB) where
+
+function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
                            {T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
     x_grid = bg.x_grid
-    Xₑ_function = Bolt.saha_peebles_recombination(par)
+
+    # GRAFT RECFAST ONTO BOLT. TODO: CLEANUP ==============
+    Nz = 1000
+    Xe_RECFAST, Tmat_RECFAST = recfast_xe(𝕣; Nz=Nz, zinitial=10000., zfinal=0.)
+    z_RECFAST = RECFASTredshifts(Nz, 10000., 0.)
+    RECFAST_Xₑ_z = spline(reverse(Xe_RECFAST), reverse(z_RECFAST))
+    RECFAST_Tmat_z = spline(reverse(Tmat_RECFAST), reverse(z_RECFAST))
+    xinitial_RECFAST = z2x(first(z_RECFAST))
+    Xₑ_function = x -> (x < xinitial_RECFAST) ?
+        first(Xe_RECFAST) : RECFAST_Xₑ_z(x2z(x))
+    Trad_function = x -> 𝕣.Tnow * (1 + x2z(x))
+    Tmat_function = x -> (x < xinitial_RECFAST) ?
+        Trad_function(x) : RECFAST_Tmat_z(x2z(x))
+    # =====================================================
+
     τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
     g̃ = g̃_function(τ, τ′)
 
@@ -402,6 +419,9 @@ function IonizationHistory(integrator::RECFAST{T}, par::ACP, bg::AB) where
     τ_ = spline(τ.(x_grid), x_grid)
     g̃_ = spline(g̃.(x_grid), x_grid)
     IT = typeof(Xₑ_)
+
+    Tmat_ = spline(Tmat_function.(x_grid), x_grid)
+    Trad_ = spline(Trad_function.(x_grid), x_grid)
 
     # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
     return IonizationHistory{T, IT}(
@@ -412,5 +432,7 @@ function IonizationHistory(integrator::RECFAST{T}, par::ACP, bg::AB) where
         g̃_,
         spline_∂ₓ(g̃_, x_grid),
         spline_∂ₓ²(g̃_, x_grid),
+        Tmat_,
+        Trad_
     )
 end
