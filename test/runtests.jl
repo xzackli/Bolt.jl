@@ -27,7 +27,6 @@ using LinearAlgebra
     y2 = similar(r, ComplexF64)
     ldiv!(y2, pl, y)
     @test all(abs.(y2 .- aₙ) .< 1e-15)
-
 end
 
 ##
@@ -37,7 +36,6 @@ end
     𝕡 = CosmoParams(Σm_ν=0.0, N_ν=3.0)
     bg = Background(𝕡)
     𝕣 = Bolt.RECFAST(bg=bg, OmegaB=𝕡.Ω_b, Yp=𝕡.Y_p)
-    xe_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
-
+    xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
     @test all(abs.(Xe_fort .- xe_bespoke) .< 1e-5)
 end

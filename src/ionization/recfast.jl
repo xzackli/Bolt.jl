@@ -1,6 +1,6 @@
 
 
-@with_kw struct RECFAST{AB<:AbstractBackground} <: IonizationIntegrator @deftype Float64
+@with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator @deftype T
     bg::AB  # a RECFAST has an associated background evolution
     H0_natural_unit_conversion = ustrip(u"s", unnatural(u"s", 1u"eV^-1"))
 
@@ -294,8 +294,9 @@ function ion_recfast!(f, y, 𝕣::RECFAST, z)
 end
 
 
-function recfast_xe(𝕣::RECFAST;
-    Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial::T=10000., zfinal::T=0., alg=Tsit5()) where T
+function recfast_xe(𝕣::RECFAST{T};
+        Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial=10000., zfinal=0.,
+        alg=Tsit5()) where T
 
     z = zinitial
     n = 𝕣.Nnow * (1 + z)^3
@@ -309,6 +310,7 @@ function recfast_xe(𝕣::RECFAST;
     y[2] = x_He0
 
     out_xe = zeros(T, Nz)
+    out_Tmat = zeros(T, Nz)
 
     for i in 1:Nz
         # calculate the start and end redshift for the interval at each z
@@ -381,8 +383,34 @@ function recfast_xe(𝕣::RECFAST;
         x = x0
 
         out_xe[i] = x
+        out_Tmat[i] = Tmat
 
     end
 
-    return out_xe
+    return out_xe, out_Tmat
+end
+
+
+function IonizationHistory(integrator::RECFAST{T}, par::ACP, bg::AB) where
+                           {T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
+    x_grid = bg.x_grid
+    Xₑ_function = Bolt.saha_peebles_recombination(par)
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
+    g̃ = g̃_function(τ, τ′)
+
+    Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
+    τ_ = spline(τ.(x_grid), x_grid)
+    g̃_ = spline(g̃.(x_grid), x_grid)
+    IT = typeof(Xₑ_)
+
+    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
+    return IonizationHistory{T, IT}(
+        Xₑ_,
+        τ_,
+        spline_∂ₓ(τ_, x_grid),
+        spline_∂ₓ²(τ_, x_grid),
+        g̃_,
+        spline_∂ₓ(g̃_, x_grid),
+        spline_∂ₓ²(g̃_, x_grid),
+    )
 end

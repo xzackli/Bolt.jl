@@ -16,7 +16,37 @@ using Bolt
 𝕡 = CosmoParams(Σm_ν = 0.0, N_ν = 3.0)
 bg = Background(𝕡)
 𝕣 = Bolt.RECFAST(bg=bg)
-xe_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.);
+
+##
+Nz = 1000
+xe_bespoke, Tmat = Bolt.recfast_xe(𝕣; Nz=Nz, zinitial=10000., zfinal=0.);
+
+# z⃗ = 10000.0-10.0:-10.0:0.0
+dz = (0. - 10000.)/float(Nz)
+z⃗ = (10000. + dz):(dz):0.0
+
+clf()
+plot(z⃗, Tmat, "-", label=raw"$T_{\mathrm{mat}}$")
+plot(z⃗, 𝕣.Tnow .* (1 .+ z⃗), "--", label=raw"$T_{\mathrm{rad}}$")
+
+yscale("log")
+xscale("log")
+legend()
+ylim(1, 2e4)
+xlim(10, 10000)
+xlabel("redshift")
+ylabel("temperature [K]")
+gcf()
+
+##
+clf()
+plot(z⃗, Tmat ./ (𝕣.Tnow .* (1 .+ z⃗)), "-")
+xscale("log")
+legend()
+xlim(10, 10000)
+xlabel("redshift")
+ylabel(raw"$T_{\mathrm{mat}} \, / \, T_{\mathrm{rad}}$")
+gcf()
 
 ##
 
@@ -38,7 +68,7 @@ x₁ = let z = 100.0
 end
 
 ##
-x₂ =let z = 100.0
+x₂ = let z = 100.0
     H0_natural_unit_conversion = ustrip(u"s", unnatural(u"s", 1u"eV^-1"))
 
     a = 1 / (1+z)  # scale factor
