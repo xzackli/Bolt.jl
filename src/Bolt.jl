@@ -13,7 +13,7 @@ using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
 using NLsolve
 using OrdinaryDiffEq
-using Interpolations, DataInterpolations
+using Interpolations
 using OffsetArrays
 using QuadGK
 using ThreadPools

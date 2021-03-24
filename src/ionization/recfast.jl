@@ -398,7 +398,7 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
                            {T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
     x_grid = bg.x_grid
 
-    # GRAFT RECFAST ONTO BOLT. TODO: CLEANUP ==============
+    # GRAFT RECFAST ONTO BOLT. TODO: MEGA-REFACTOR ==============
     Nz = 1000
     Xe_RECFAST, Tmat_RECFAST = recfast_xe(𝕣; Nz=Nz, zinitial=10000., zfinal=0.)
     z_RECFAST = RECFASTredshifts(Nz, 10000., 0.)
