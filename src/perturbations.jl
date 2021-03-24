@@ -19,7 +19,7 @@ end
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_mν, nq)
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-10) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
@@ -250,7 +250,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     # recalulate these since we didn't save them (Callin eqns 39-42)
     #FIXME check the neutrino contributions to Ψ and Ψ′!
     #^Also have just copied from before, but should save these maybe?
-    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *Ω_r
     norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)

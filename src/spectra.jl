@@ -33,7 +33,7 @@ function bessel_interpolator(ℓ, kmax_η₀)
     Δg = bessel_argmax / 5000
     bessel_xgrid = bessel_argmin:Δg:bessel_argmax
     bessel_ygrid = [sphericalbesselj(ℓ, x) for x in bessel_xgrid]
-    bes = spline(bessel_xgrid, bessel_ygrid)
+    bes = spline(bessel_ygrid, bessel_xgrid)
     return bes
 end
 

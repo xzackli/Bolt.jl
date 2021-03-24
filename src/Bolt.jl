@@ -39,15 +39,17 @@ abstract type AbstractCosmoParams{T} end
     Ω_b = 0.046  # baryon density
     Ω_m = 0.224  # matter density
     n = 1.0  # spectral index
-    Y_p = 0.0  # primordial helium fraction, currently unused
+    Y_p = 0.24  # primordial helium fraction
     N_ν = 3.046 #effective number of relativisic species (PDG25 value)
     Σm_ν = 0.06 #sum of neutrino masses (eV), Planck 15 default ΛCDM value
 end
 
 include("util.jl")
 include("background.jl")
-include("ionization.jl")
+include("ionization/ionization.jl")
+include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
+
 
 end
