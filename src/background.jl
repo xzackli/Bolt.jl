@@ -88,8 +88,8 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
 end
 
 function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
-    ℋ_  = spline(x_grid, [ℋ(x, par) for x in x_grid])
-    η_   = spline(x_grid, [η(x, par) for x in x_grid])
+    ℋ_  = spline([ℋ(x, par) for x in x_grid], x_grid)
+    η_   = spline([η(x, par) for x in x_grid], x_grid)
     quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative
     return Background(
         T(H₀(par)),

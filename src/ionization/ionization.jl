@@ -12,44 +12,22 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     g̃::IT
     g̃′::IT
     g̃′′::IT
+
+    Tmat::IT
+    Trad::IT
 end
 
-# this Peebles history comes from Callin+06, peep the plots from examples/
-# which match that paper perfectly
-function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
-                           {T, ACP<:AbstractCosmoParams{T}, AB<:AbstractBackground}
-    x_grid = bg.x_grid
-    Xₑ_function = Bolt.saha_peebles_recombination(par)
-    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
-    g̃ = g̃_function(τ, τ′)
 
-    Xₑ_ = spline(x_grid, Xₑ_function.(x_grid))
-    τ_ = spline(x_grid, τ.(x_grid))
-    g̃_ = spline(x_grid, g̃.(x_grid))
-    IT = typeof(Xₑ_)
-
-    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
-    return IonizationHistory{T, IT}(
-        Xₑ_,
-        τ_,
-        spline_∂ₓ(τ_, x_grid),
-        spline_∂ₓ²(τ_, x_grid),
-        g̃_,
-        spline_∂ₓ(g̃_, x_grid),
-        spline_∂ₓ²(g̃_, x_grid),
-    )
-end
-
-# Saha Equation
-# Useful for high ionization fractions.
+## Saha Equation
+## Useful for high ionization fractions.
 
 # auxillary equations for saha_rhs
-const T₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]  # TODO: make this a parameter of the ionization
+const PeeblesT₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]  # TODO: make this a parameter of the ionization
 n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
 n_H(a, par) = n_b(a, par)  # ignoring helium for now
-T_b(a, par) = T₀ / a
-saha_rhs(a, par) = (m_e * T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
-    exp(-ε₀_H / T_b(a, par))  # rhs of Callin06 eq. 12
+saha_T_b(a, par) = PeeblesT₀ / a
+saha_rhs(a, par) = (m_e * saha_T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
+    exp(-ε₀_H / saha_T_b(a, par))  # rhs of Callin06 eq. 12
 
 function saha_Xₑ(x, par::AbstractCosmoParams)
     rhs = saha_rhs(x2a(x), par)
@@ -58,8 +36,8 @@ end
 saha_Xₑ(par) = (x -> saha_Xₑ(x, par))
 
 
-# Peebles Equation
-# Use this for Xₑ < 0.99, i.e. z < 1587.4
+## Peebles Equation
+## Use this for Xₑ < 0.99, i.e. z < 1587.4
 
 # recombination parameters for Saha/Peebles
 const Λ_2s_to_1s = ustrip(natural(8.227u"s^-1"))  # rate of hydrogen double transition from 2s to 1s
@@ -82,7 +60,7 @@ Cᵣ(a, Xₑ, T_b, par) = (Λ_2s_to_1s + Λ_α(a, Xₑ, par)) / (
 # RHS of Callin06 eq. 13
 function peebles_Xₑ′(Xₑ, par, x)
     a = exp(x)
-    T_b_a = BigFloat(T_b(a, par))  # handle overflows by switching to bigfloat
+    T_b_a = BigFloat(saha_T_b(a, par))  # handle overflows by switching to bigfloat
     return float(Cᵣ(a, Xₑ, T_b_a, par) / H_a(a, par) * (
         β(T_b_a) * (1 - Xₑ) - n_H(a, par) * α⁽²⁾(T_b_a) * Xₑ^2))
 end
@@ -154,4 +132,37 @@ end
 
 function g̃_function(τ_x_function, τ′_x_function)
     return x -> -τ′_x_function(x) * exp(-τ_x_function(x))
+end
+
+
+# this Peebles history comes from Callin+06, peep the plots from examples/
+# which match that paper perfectly
+function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
+                           {T, ACP<:AbstractCosmoParams{T}, AB<:AbstractBackground}
+    x_grid = bg.x_grid
+    Xₑ_function = Bolt.saha_peebles_recombination(par)
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
+    g̃ = g̃_function(τ, τ′)
+
+
+    Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
+    τ_ = spline(τ.(x_grid), x_grid)
+    g̃_ = spline(g̃.(x_grid), x_grid)
+    IT = typeof(Xₑ_)
+
+    Trad_ = spline(PeeblesT₀ .* (1 .+ x2z.(x_grid)), x_grid)
+    # in this model, Tmat ~ Trad
+
+    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
+    return IonizationHistory{T, IT}(
+        Xₑ_,
+        τ_,
+        spline_∂ₓ(τ_, x_grid),
+        spline_∂ₓ²(τ_, x_grid),
+        g̃_,
+        spline_∂ₓ(g̃_, x_grid),
+        spline_∂ₓ²(g̃_, x_grid),
+        Trad_,
+        Trad_
+    )
 end

@@ -8,9 +8,9 @@ z2x(z) = a2x(z2a(z))
 x2z(x) = a2z(x2a(x))
 
 # utility function for constructing an interpolator
-spline(x, y) = scale(interpolate(y, BSpline(Cubic(Line(OnGrid())))), x)
-spline_∂ₓ(f, x_grid) = spline(x_grid, [Interpolations.gradient(f, x)[1] for x in x_grid])
-spline_∂ₓ²(f, x_grid) = spline(x_grid, [Interpolations.hessian(f, x)[1] for x in x_grid])
+spline(f, x_grid) = scale(interpolate(f, BSpline(Cubic(Line(OnGrid())))), x_grid)
+spline_∂ₓ(f, x_grid) = spline([Interpolations.gradient(f, x)[1] for x in x_grid], x_grid)
+spline_∂ₓ²(f, x_grid) = spline([Interpolations.hessian(f, x)[1] for x in x_grid], x_grid)
 
 δ_kron(i, j) = (i == j) ? 1 : 0
 
@@ -101,4 +101,3 @@ function ldiv!(Y, pl::FFTLogPlan, A)
     pl.ifftplan! * Y
     Y .*= (pl.r).^(pl.q)
 end
-

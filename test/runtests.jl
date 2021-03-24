@@ -27,15 +27,15 @@ using LinearAlgebra
     y2 = similar(r, ComplexF64)
     ldiv!(y2, pl, y)
     @test all(abs.(y2 .- aₙ) .< 1e-15)
-
 end
 
-# test U with more naive result
-# U_μ(μ, x) = 2^x * gamma((μ + 1 + x)/2) / gamma((μ + 1 - x)/2)
-
-## hand-written ℋ derivative for testing
-# function ℋ′(x, par::AbstractCosmoParams)
-#     a = x2a(x)
-#     return -H₀(par) * (2par.Ω_r + (par.Ω_b + par.Ω_m) * a - 2Ω_Λ(par) * a^4) /
-#         (2 * a * √(par.Ω_r + (par.Ω_b + par.Ω_m) * a + Ω_Λ(par) * a^4))
-# end
+##
+@testset "RECFAST" begin
+    recfastdata = readdlm("data/test_recfast_1.dat", ',', Float64, '\n', header=true)[1]
+    z⃗, Xe_fort = recfastdata[:,1], recfastdata[:,2]
+    𝕡 = CosmoParams(Σm_ν=0.0, N_ν=3.0)
+    bg = Background(𝕡)
+    𝕣 = Bolt.RECFAST(bg=bg, OmegaB=𝕡.Ω_b, Yp=𝕡.Y_p)
+    xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
+    @test all(abs.(Xe_fort .- xe_bespoke) .< 1e-5)
+end
