@@ -14,7 +14,7 @@ using QuadGK
 𝕡 = CosmoParams()
 bg = Background(𝕡;x_grid=-20.0:0.1:0.0,nq=n_q)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)  #  𝕣 = Bolt.Peebles()
-ih = IonizationHistory(𝕣, 𝕡, bg);
+ih = IonizationHistory(𝕣, 𝕡, bg)
 logqmin,logqmax = -6,-1
 n_q = 15
 logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax

@@ -108,11 +108,11 @@ function saha_peebles_recombination(par::AbstractCosmoParams{T}) where {T}
     return Xₑ
 end
 
-function τ_functions(x, Xₑ_function, par::AbstractCosmoParams)
+function τ_functions(x, Xₑ_function, par::AbstractCosmoParams,ℋ_function)
     @assert x[2] > x[1]  # CONVENTION: x increasing always
     # do a reverse cumulative integrate
     rx = reverse(x)
-    τ_primes = [τ′(x_, Xₑ_function, par) for x_ in x]
+    τ_primes = [τ′(x_, Xₑ_function, par, ℋ_function) for x_ in x]
     τ_integrated = reverse(cumul_integrate(rx, reverse(τ_primes)))
 
     τ̂ = interpolate((x,),τ_integrated,Gridded(Linear()))
@@ -125,9 +125,11 @@ function τ̇(x, Xₑ_function, par)
     return Xₑ_function(x) * n_H(a, par) * a
 end
 
-function τ′(x, Xₑ_function, par)
+function τ′(x, Xₑ_function, par, ℋ_function)
     a = x2a(x)
-    return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_a(a, par)
+    #return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_a(a, par)
+    return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_function(x)
+    #why not use bg spline? this is the only place "pure" ℋ_a is actually used outside of bg...
 end
 
 function g̃_function(τ_x_function, τ′_x_function)
@@ -141,7 +143,8 @@ function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
                            {T, ACP<:AbstractCosmoParams{T}, AB<:AbstractBackground}
     x_grid = bg.x_grid
     Xₑ_function = Bolt.saha_peebles_recombination(par)
-    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
+    ℋ_function = bg.ℋ
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
     g̃ = g̃_function(τ, τ′)
 
 

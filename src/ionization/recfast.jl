@@ -411,8 +411,8 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
     Tmat_function = x -> (x < xinitial_RECFAST) ?
         Trad_function(x) : RECFAST_Tmat_z(x2z(x))
     # =====================================================
-
-    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
+	ℋ_function = bg.ℋ
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
     g̃ = g̃_function(τ, τ′)
 
     Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
