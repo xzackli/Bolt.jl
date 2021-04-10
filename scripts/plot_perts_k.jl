@@ -79,7 +79,7 @@ println("pert vector length=",pertlen)
 results=zeros(pertlen,length(k_grid))
 for (i_k, k) in enumerate(k_grid)
     println(i_k)
-    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_mν,n_q)
+    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
     perturb = boltsolve(hierarchy; reltol=reltol)
     u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
     results[:,i_k] = u #z should use unpack somehow

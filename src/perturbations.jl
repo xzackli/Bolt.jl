@@ -12,12 +12,13 @@ struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T}
     ih::IH
     k::Tk
     ℓᵧ::Int  # Boltzmann hierarchy cutoff, i.e. Seljak & Zaldarriaga
+    ℓ_ν::Int
     ℓ_mν::Int
     nq::Int
 end
 
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
-    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_mν, nq)
+    ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_ν=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_ν,ℓ_mν, nq)
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
@@ -31,8 +32,8 @@ end
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     ℓᵧ = hierarchy.ℓᵧ
-    ℓ_ν = ℓᵧ#10 #Callin06, for now
-    ℓ_mν = hierarchy.ℓ_mν #should be smaller
+    ℓ_ν =  hierarchy.ℓ_ν
+    ℓ_mν = hierarchy.ℓ_mν #should be smaller than others
     nq = hierarchy.nq
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
     Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
@@ -74,7 +75,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    ℓ_ν = ℓᵧ#10 #again, for now - should this be higher??
+    ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
     norm𝒩′ = 1.0 /(Ω_ν * bg.ρ_crit / 2)# par.N_ν) #Normalization to match 𝒩 after integrating, par.N_ν->2
     norm𝒩 = norm𝒩′/ 4.0
@@ -177,7 +178,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    ℓ_ν = ℓᵧ#10 #again, for now
+    ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)

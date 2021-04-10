@@ -12,8 +12,8 @@ logqmin,logqmax = -6,-1
 x_grid = collect(-10:0.1:0)
 
 ℓᵧ=8
-ℓ_ν=ℓᵧ
-ℓ_mν=ℓ_ν
+ℓ_ν=8
+ℓ_mν=8
 reltol=1e-5 #cheaper  rtol
 k =  1000bg.H₀*.3/.333 /10
 kbolt = k/(bg.H₀*3e5/100)
@@ -25,7 +25,7 @@ results=zeros(pertlen,length(x_grid))
 ℳρ,ℳσ = zeros(length(x_grid)),zeros(length(x_grid))
 for (i_x, x) in enumerate(x_grid)
     println(i_x)
-    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_mν,n_q)
+    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
     perturb = boltsolve(hierarchy; reltol=reltol)
     u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
     results[:,i_x] = u #z should use unpack somehow
@@ -93,14 +93,14 @@ plot!(x_grid, log10.(abs.(results[2(ℓᵧ+1)+1,:]* 𝕡.h*4)),
       label=raw"$4 h \nu_{0,\rm{Bolt}}$",ls=:dash)
 
 #photon Θ0 monopole
-plot!(class_pxs[1,:],log10.(abs.(class_pxs[2,:])),
+plot(class_pxs[1,:],log10.(abs.(class_pxs[2,:])),
       label=raw"$\Theta_{0,\rm{CLASS}}$")
 plot!(x_grid, log10.(abs.(results[1,:]* 𝕡.h*4)),
-      label=raw"$4 h \Theta_{0,\rm{Bolt}}$",ls=:dash)
+      label=raw"$4 h \Theta_{0,\rm{Bolt,50}}$",ls=:dash)
 
 #massive neutrino monopole ℳ0
 plot!(class_pxs[1,:],log10.(abs.(class_pxs[6,:])),
-    label=raw"$m\nu_{0,\rm{CLASS}}$",
+    label=raw"$m\nu_{0,\rm{CLASS}}$")#,
     #legend=:topleft)
 plot!(x_grid, log10.(abs.(ℳρ* 𝕡.h *4)),
     label=raw"$4 h m\nu_{0,\rm{Bolt}}$",ls=:dash)
