@@ -3,7 +3,6 @@ using Bolt
 using ForwardDiff
 #using PyPlot
 using Plots
-pyplot()
 using BenchmarkTools
 using Printf
 #using QuadGK
@@ -72,7 +71,7 @@ k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100) #quadratically spaced k point
 ℓ_mν=ℓ_ν
 reltol=1e-5 #cheaper  rtol
 #solve hierarchy at single x to check
-x=0#-5#-8#0 #just picking a number
+x=-8#-5#-8#0 #just picking a number
 a=exp(x)
 pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
 println("pert vector length=",pertlen)

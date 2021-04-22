@@ -20,10 +20,40 @@ function Ω_Λ(par::AbstractCosmoParams)
                                          + Ω_ν) #assume massive nus are non-rel today
 end
 
+#background FD phase space
+function f0(q,par::AbstractCosmoParams)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
+    return gs / (2π)^3 / ( exp(q/Tν) +1)
+end
+
+function dlnf0dlnq(q,par::AbstractCosmoParams) #this is actually only used in perts
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    return -q / Tν /(1 + exp(-q/Tν))
+end
+
+#This is just copied from perturbations.jl for now - but take out Pressure - maybe later restore for FD tests?
+function ρP_0(a,par::AbstractCosmoParams,quad_pts,quad_wts)
+    #Do q integrals to get the massive neutrino metric perturbations
+    #MB eqn (55)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    #FIXME: avoid repeating code? and maybe put general integrals in utils?
+    m = par.Σm_ν
+    ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
+    Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    xq,wq =quad_pts,quad_wts
+    ρ = 4π * a^(-4) * sum(Iρ.(xq).*wq)
+    P = 4π/3 * a^(-4) *sum(IP.(xq).*wq)
+    return ρ,P
+end
+
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
     #ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) # we don't atually need pressure?
-    ρ_ν = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
+    ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
+    #ρ_ν = ρℳ(a2x(a))
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
@@ -46,38 +76,6 @@ function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
     return sum(Iη.(quad_pts).*quad_wts)
 end
 
-#background FD phase space
-function f0(q,par::AbstractCosmoParams)
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
-    return gs / (2π)^3 / ( exp(q/Tν) +1)
-end
-
-function dlnf0dlnq(q,par::AbstractCosmoParams) #this is actually only used in perts
-    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    return -q / Tν /(1 + exp(-q/Tν))
-end
-
-#This is just copied from perturbations.jl for now - but take out Pressure - maybe later restore for FD tests?
-function ρP_0(a,par::AbstractCosmoParams,quad_pts,quad_wts)
-    #Do q integrals to get the massive neutrino metric perturbations
-    #MB eqn (55)
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-
-    #FIXME: avoid repeating code? and maybe put general integrals in utils?
-    m = par.Σm_ν
-    ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
-    Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    #IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-
-    xq,wq =quad_pts,quad_wts
-    ρ = 4π * a^(-4) * sum(Iρ.(xq).*wq)
-    #P = 4π/3 * a^(-4) *sum(IP.(xq).*wq)
-    return ρ#,P
-
-
-end
 # now build a Background with these functions
 
 # a background is parametrized on the scalar type T, the interpolator type IT,
@@ -100,13 +98,21 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     η::IT
     η′::IT
     η′′::IT
+    ρ₀ℳ::IT
+    P₀ℳ::IT
 end
 
 function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
     quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative
     #Passing the quad pts/wts gets a little busy but eliminates quadgk
     #We may want to fix the quad points to be more/less for bg compared to perts
-    #e.g. CLASS uses tolerances of 1e-5 for bg and 1e-3 for perts
+    #e.g. CLASS uses tolerances of 1e-5 for bg and 1e-3 for perts'
+
+    #println([ρP_0(x2a(x), par,quad_pts,quad_wts) for x in x_grid])
+
+    #FIXME do the tuple juggling to avoid calling quad twice for ρ and P
+    ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
+    P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     return Background(
@@ -126,6 +132,7 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         η_,
         spline_∂ₓ(η_, x_grid),
         spline_∂ₓ²(η_, x_grid),
-
+        ρ₀ℳ_,
+        P₀ℳ_,
     )
 end
