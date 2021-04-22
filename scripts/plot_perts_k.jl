@@ -1,15 +1,11 @@
 using Revise
 using Bolt
 using ForwardDiff
-#using PyPlot
 using Plots
 using BenchmarkTools
 using Printf
-#using QuadGK
-#using ThreadPools
 
 #input ingredients
-#par = CosmoParams()
 𝕡 = CosmoParams()
 n_q=15
 bg = Background(𝕡;x_grid=-20.0:0.1:0.0,nq=n_q)
@@ -17,53 +13,7 @@ bg = Background(𝕡;x_grid=-20.0:0.1:0.0,nq=n_q)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 logqmin,logqmax = -6,-1
 logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
-#bg = Background(par;x_grid=-20.0:0.1:0.0,nq=n_q) #,logq_grid=logq_pts)
-#ih = IonizationHistory(Peebles(), par, bg)
 k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100) #quadratically spaced k points
-
-# #quickly check bg against nr approx
-# Tγ = (15/ π^2 *bg.ρ_crit *par.Ω_r)^(1/4)
-# νfac = (90 * 1.2020569 /(11 * π^4)) * (par.Ω_r * par.h^2 / Tγ)#the factor that goes into nr approx to neutrino energy density
-# par.Σm_ν*νfac/par.h^2 *((par.N_ν/3)^(3/4)) /(ρP_0(1,par)[1]/bg.ρ_crit)
-# (par.N_ν/3)^(3/4)
-#
-# function f00(q)
-#     Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *3.9669896e-11 *5.042e-5)^(1/4) ##assume instant decouple for now
-#     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
-#     return gs / (2π)^3 / ( exp(q/Tν) +1)
-# end
-#
-# function dlnf0dlnq0(q) #this is actually only used in perts
-#     Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 *3.9669896e-11 *5.042e-5)^(1/4) ##assume instant decouple for now
-#     return -q / Tν /(1 + exp(-q/Tν))
-# end
-#
-# #find correct factor for normalization...
-# ρν0 = 7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r * bg.ρ_crit / 2 #used to be div by Neff, now div by floor(Neff-1)
-# ρν=ρν0*(exp(-20))^(-4)
-# aaa=4π  * quadgk(q ->  q^2 * -dlnf0dlnq0(q) *q * f00(q),
-#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
-# #!
-# aaa
-# Removed the splines from bg so these won't work anymore
-# #check the splining error:
-# #use both splines - error of ~1.8e-3
-# 4π  * quadgk(q ->  q^2 * -bg.df0(log10(q)) *q * bg.f0(log10(q)),
-#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
-#
-# #only use df0 spline - error of ~ 5e-6, ~ rtol
-# 4π  * quadgk(q ->  q^2 * -bg.df0(log10(q)) *q * f00(q),
-#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
-#
-# #only use f0 spline - again we get error of ~1.8e-3 - so this is the problem...
-# 4π  * quadgk(q ->  q^2 * -dlnf0dlnq0(q) *q * bg.f0(log10(q)),
-#             1e-6, 1e-1,rtol=1e-6)[1]/4/ρν0
-
-#test that ρ_σ is the same as bg when passed ones - it is up to quadgk tol...
-# bgrho,_ =  (exp(-20)^(-4)) .* ρ_σ(ones(n_q) ,
-#                zeros(n_q),bg,exp(-20),par)
-# ρP_0(exp(-20),par)
-# ρν #analytic answer
 
 #@btime @qthreads
 ℓᵧ=8 #cutoff
@@ -197,7 +147,6 @@ plot!(log10.(class_tfs[1,:]),log10.(abs.(class_tfs[2,:])),
       label=raw"$\Theta_{0,\rm{CLASS}}$")
 plot!(log10.(k_grid_hMpc), log10.(abs.(results[1,:]* 𝕡.h*4)),
       label=raw"$4 h \Theta_{0,\rm{Bolt}}$",ls=:dash)
-
 # #photon dipole - good at z=3000, bad at z=0
 # plot!(log10.(class_tfs[1,:]),log10.(abs.(class_tfs[1,:].^-1 .* class_tfs[10,:])),
 #       label=raw"$\theta_{\Theta,\rm{CLASS}}/k$")

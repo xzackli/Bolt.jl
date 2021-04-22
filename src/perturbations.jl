@@ -75,65 +75,29 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
-    P0ℳ = bg.P₀ℳ(x) #get current value of massive neutrino backround density from spline
+    # ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
     ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
-    # norm𝒩′ = 1.0 /(Ω_ν * bg.ρ_crit / 2)# par.N_ν) #Normalization to match 𝒩 after integrating, par.N_ν->2
-    # norm𝒩 = norm𝒩′/ 4.0
-    #^Here we remove the 4 in denom b/c it has moved to the Einstein eqns.
-
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
 
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ftest = [dlnf0dlnq(q,par) for q in q_pts]
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1].*ftest, ℳ[2*nq:3*nq-1].*ftest, bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    norm𝒩 =  1 / (ρ_σ(ftest,zeros(length(bg.quad_pts)),bg,a,par)[1])# .* (a<1/100 ? 1 : 2))
-
-    #shoji komatsu norm ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1].*ftest, ℳ[2*nq:3*nq-1].*ftest, bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
-                                  + σℳ * norm𝒩*ρ0ℳ  *a^4 / bg.ρ_crit ) #why am I doing this? - because H0 pulls out a factor of rho crit
-                                                                   #this introduces a factor of bg density I cancel using the integrated bg mnu density now
-                                                                   #this is the correct prefactor in this equation - agree with class very well after horizon entry
+                                  + σℳ / bg.ρ_crit / 4 )
 
-    # G_natural = (3 / 8π) * H₀(par)^2 / bg.ρ_crit
-    # Ψ = -Φ - (12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
-    #                               + Ω_ν * 𝒩[2]) #add rel quadrupole
-    #                               + 12π * G_natural * a^2 * a^-4 * 2/3 * σℳ / k^2 ) #try not to do this thing with the rho crit
+    # println("New - Size of terms in ij eqn. Ω_ν: ", Ω_ν * 𝒩[2]/2, " and ρℳ ",  σℳ / bg.ρ_crit /4)
 
-
-                                  #+ σℳ * (2ρ0ℳ-3P0ℳ)  *a^4 / bg.ρ_crit ) #4
-                                  #+ 4σℳ * ρ0ℳ * (a<1/100 ? 1 : 2) *a^4 / bg.ρ_crit ) #4
-                                  #+ 4σℳ * (ρ0ℳ+P0ℳ) * a^4 / bg.ρ_crit ) #4
-                                  #+ σℳ / bg.ρ_crit/ norm𝒩′) #was #add mnu integrated quadrupole
-                                  #which is Ω_ν * σℳ / 2 = ρ0𝒩*σℳ/ρ_crit /2
-    # println("x= ",x, " so a = ", exp(x))
-    # println("Old - Size of terms in i neq j eqn. Ω_ν: ", Ω_ν * 𝒩[2], " and σℳ ", σℳ / bg.ρ_crit / norm𝒩′)
-    # println("New - Size of terms in i neq j eqn. Ω_ν: ", Ω_ν * 𝒩[2], " and σℳ ", σℳ * 4ρ0ℳ / bg.ρ_crit* a^4 )
-
-    # Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + (H₀² / (2ℋₓ^2) * (
-    #     Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
-    #     + 4Ω_ν * a^(-2) * 𝒩[0]) #add rel monopole on this line
-    #     + 4π * G_natural * a^2 * a^(-4) * ρℳ  / (2ℋₓ^2))
 
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
-        + a^(-2) * ρℳ *norm𝒩*ρ0ℳ *a^4 / bg.ρ_crit )
+        + a^(-2) * ρℳ / bg.ρ_crit ) #again unit conversion, factor in () provides correct effective 3(1+w) ∈ [4,3]
 
-
-        # + a^(-2) * 4ρℳ * (2ρ0ℳ-3P0ℳ) *a^4 / bg.ρ_crit )
-        #+ a^(-2) * 4ρℳ * ρ0ℳ * (a<1/100 ? 1 : 2) *a^4 / bg.ρ_crit ) #*4
-        # * ρℳ  / bg.ρ_crit / norm𝒩′) #add mnu integrated monopole
-
-    #what is this 4 in the massive term?
-    # println("Old - Size of terms in 00 eqn. Ω_ν: ", 4Ω_ν * a^(-2) * 𝒩[0], " and ρℳ ", 4 * a^(-2) * ρℳ  / bg.ρ_crit / norm𝒩′)
-    # println("New - Size of terms in 00 eqn. Ω_ν: ", 4Ω_ν * a^(-2) * 𝒩[0], " and ρℳ ", 4* a^(-2) * ρℳ * ρ0ℳ / bg.ρ_crit * a^4 )
-
+    # println("New - Size of terms in 00 eqn. Ω_ν: ", 4Ω_ν * a^(-2) * 𝒩[0]/2, " and ρℳ ",  a^(-2) * ρℳ / bg.ρ_crit )
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
     v′ = -v - k / ℋₓ * Ψ
@@ -149,46 +113,18 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     #truncation (same between MB and Callin06/Dodelson)
     𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]
 
-    #WIP: nonrelativistic nu
-
     # neutrinos (massive, MB 57)
-    # norm𝒩 =  1 / (ρ_σ(ftest,zeros(length(bg.quad_pts)),bg,a,par)[1])# .* (a<1/100 ? 1 : 2))
-    # norm𝒩= 1 /( (4*(2ρ0ℳ-3P0ℳ)) *a^4)#/ρ0ℳ #
-    # norm𝒩=1 /( ρ0ℳ * (a<1/100 ? 1 : 2) *a^4)#/4 # 1 /( 3*(ρ0ℳ+P0ℳ) * a^4 )#/4
-    #norm𝒩 =  ρ_σ(ftest,zeros(length(bg.quad_pts)),bg,ai,𝕡)[1] * a^-4
-    #norm𝒩 = a^-4 / ρ0ℳ
-    # norm𝒩 = 1  / (4ρ0ℳ *a^4) #same as in ICs
-    #however, now at low redshift the ad hoc for has -4/4  -> -3/4
-    #what we need is -3 ... so need to throw away ad hoc 4 at some point?
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (a*m_ν)^2)
-        #dlnf0dlnq = bg.df0(log10(q)) * norm𝒩
-        df0 = dlnf0dlnq(q,par) #* norm𝒩
+        df0 = dlnf0dlnq(q,par)
         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        ℳ′[0* nq+i_q] = (- k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0 )#* (a<1/100 ? 1 : 1/4)
-        ℳ′[1* nq+i_q] = (k / (3ℋₓ) * (( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])) - ϵ/q * Ψ  * df0)) #* (a<1/100 ? 1 : 1/2))
+        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
+        ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
         for ℓ in 2:(ℓ_mν-1)
-            ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )#* (a<1/100 ? 1 : 1/2)
+            ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
         end
-        ℳ′[ℓ_mν* nq+i_q] =  (q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q])#* (a<1/100 ? 1 : 1/2) #MB (58) similar to rel case but w/ q/ϵ
+        ℳ′[ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case but w/ q/ϵ
     end
-
-    #check monopole, dipole, quadrupole
-    # ρℳ′, σℳ′  =  ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
-    # println("Size of 𝒩0` : ",𝒩′[0] , " and ρℳ` ",  ρℳ′)
-    # println("Size of 𝒩2` : ",𝒩′[2] , " and σℳ` ",  σℳ′)
-    # θℳ′, _  =  ρ_σ(ℳ′[nq:2*nq-1], zeros(nq), bg, a, par) #approximate ϵ=q
-    # println("Size of 𝒩1` : ",𝒩′[1] , " and θℳ` ",  θℳ′)
-    # maxℳ′, _  =  ρ_σ(ℳ′[(ℓ_mν-1)*nq:ℓ_mν*nq-1], zeros(nq), bg, a, par) #not sure if kosher
-    # println("Size of max1` : ",𝒩′[ℓ_ν] , " and maxℳ` ",  maxℳ′)
-    #
-    # #check sizes of individual terms
-    # println("Φ′ term - massless: ", -Φ′)
-    # df0test = [dlnf0dlnq(q,par) for q in q_pts]
-    # println("Φ′ term - massive: ", Φ′ * ρ_σ(df0test * norm𝒩, zeros(nq), bg, a, par)[1])
-    # println("Ψ term - massless: ",k/(3ℋₓ) *Ψ)
-    # println("Ψ term - massive: ",k/(3ℋₓ)* Ψ *ρ_σ(- sqrt.(ones(nq) .+ (a*m_ν ./ q_pts).^2)  .* df0test * norm𝒩, zeros(nq), bg, a, par)[1])
-
 
     # photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
@@ -227,7 +163,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
-    ρ0ℳ = bg.ρ₀ℳ(xᵢ)
+    # ρ0ℳ = bg.ρ₀ℳ(xᵢ)
     # metric and matter perturbations
     Φ = 1.0
     δ = 3Φ / 2
@@ -260,20 +196,12 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
 
     #massive neutrino hierarchy
     #It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
-    #norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / 2)#par.N_ν) #Normalization to match 𝒩 after integrating, par.N_ν->2
-    #^This is fine to do in the ICs where (standard) massive neutrinos are the same as massless
-    #norm𝒩= 1 /( ρ0ℳ *  aᵢ^4)/4# 1 /( 3*(ρ0ℳ+P0ℳ) * a^4 )#/4
-    #it makes no numerical difference but we should do the correct thing for clarity
-    # norm𝒩 = 1  / (4ρ0ℳ * aᵢ^4)  #this ensures integrating ℳ0 recovers 𝒩0
-    ftest = [dlnf0dlnq(xq2q(q,logqmin,logqmax),par) for q in bg.quad_pts]
-    norm𝒩 =  1 #/ (ρ_σ(ftest,zeros(length(bg.quad_pts)),bg,aᵢ,par)[1])
-    #^The integral of dlnf0dlnq over the second 2 terms returns -4, the 1/4 corrects it
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
-        df0 = dlnf0dlnq(q,par) * norm𝒩
+        df0 = dlnf0dlnq(q,par)
         ℳ[0* nq+i_q] = -𝒩[0]  *df0
         ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0
-        ℳ[2* nq+i_q] = -𝒩[2]  *df0 #drop quadratic+ terms in (ma/q) as in MB
+        ℳ[2* nq+i_q] = -𝒩[2]  *df0  #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
             ℳ[ℓ* nq+i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
         end
@@ -294,6 +222,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
     a = x2a(x)
     ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
+    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
 
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
@@ -301,21 +230,19 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     # recalulate these since we didn't save them (Callin eqns 39-42)
     #FIXME check the neutrino contributions to Ψ and Ψ′!
     #^Also have just copied from before, but should save these maybe?
-    # Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *Ω_r
-    # norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / par.N_ν)
-    norm𝒩= 1 /( ρ0ℳ   *a^4)/4# 1 /( 3*(ρ0ℳ+P0ℳ) * a^4 )#/4
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
 
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
-                                  + σℳ * ρ0ℳ / bg.ρ_crit )
-                                  #+ σℳ / bg.ρ_crit / norm𝒩) #add mnu integrated quadrupole
+                                  + σℳ / bg.ρ_crit ) #why am I doing this? - because H0 pulls out a factor of rho crit - just unit conversion
+                                                                   #this introduces a factor of bg density I cancel using the integrated bg mnu density now
 
-    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
-                                    + Ω_ν * (𝒩′[2] - 2 * 𝒩[2])
-                                     + (σℳ′ - 2 * σℳ)  * ρ0ℳ / bg.ρ_crit )
-                                    #+ (σℳ′ - 2 * σℳ) / bg.ρ_crit/ norm𝒩)
+   Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
+                                   + Ω_ν * (𝒩′[2] - 2 * 𝒩[2])
+                                   + (σℳ′ - 2 * σℳ) / bg.ρ_crit )
+
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
     Π′ = Θ′[2] + Θᵖ′[2] + Θᵖ′[0]
 

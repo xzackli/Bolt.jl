@@ -99,7 +99,7 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     η′::IT
     η′′::IT
     ρ₀ℳ::IT
-    P₀ℳ::IT
+    # P₀ℳ::IT
 end
 
 function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
@@ -112,7 +112,7 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
 
     #FIXME do the tuple juggling to avoid calling quad twice for ρ and P
     ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
-    P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
+    # P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     return Background(
@@ -133,6 +133,6 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         spline_∂ₓ(η_, x_grid),
         spline_∂ₓ²(η_, x_grid),
         ρ₀ℳ_,
-        P₀ℳ_,
+        # P₀ℳ_,
     )
 end
