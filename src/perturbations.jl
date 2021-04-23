@@ -55,7 +55,6 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
     Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
     Iσ(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-
     xq,wq = bg.quad_pts,bg.quad_wts
     ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
     σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
@@ -96,8 +95,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit ) #again unit conversion, factor in () provides correct effective 3(1+w) ∈ [4,3]
-
     # println("New - Size of terms in 00 eqn. Ω_ν: ", 4Ω_ν * a^(-2) * 𝒩[0]/2, " and ρℳ ",  a^(-2) * ρℳ / bg.ρ_crit )
+
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
     v′ = -v - k / ℋₓ * Ψ

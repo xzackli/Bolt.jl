@@ -38,13 +38,24 @@ for (i_x, x) in enumerate(x_grid)
                             results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q,i_x],
                             bg,exp(x),𝕡)
     #normalization for plotting, divide by integral of just momentum measure
+    # ℳρ[i_x]=ℳρ[i_x] ./ bg.ρ₀ℳ(x)
     ℳρ[i_x]=ℳρ[i_x] ./ (ρ_σ(ones(length(bg.quad_pts)),
                                    zeros(length(bg.quad_pts)),
                                    bg,exp(x),𝕡)[1] )
 
-
+    println(ρP_0(exp(x),𝕡,bg.quad_pts,bg.quad_pts)[1],' ', bg.ρ₀ℳ(x),' ',(exp(x)^-4 *ρ_σ(ones(length(bg.quad_pts)),
+                                   zeros(length(bg.quad_pts)),
+                                   bg,exp(x),𝕡)[1] ))
 end
 results
+
+#What?? Why should ρP_0 be different from ρ₀ℳ which is computed using the same function??
+ρP_0(1.0,𝕡,bg.quad_pts,bg.quad_pts)[1]
+ρ_σ(ones(length(bg.quad_pts)),
+                               zeros(length(bg.quad_pts)),
+                               bg,1,𝕡)[1]
+
+bg.ρ₀ℳ(0)
 
 #CLASS perturbations
 #CLASS keys:
@@ -56,6 +67,7 @@ ret = open("./test/data/class_px_kp03.dat","r") do datafile
 end
 #By default CLASS uses fluid approximation, which introduces almost 2x error for massive neutrinos at lower x
 #We don't want to compare to this
+# retnf = open("./test/data/class_px_kp3_nofluid.dat","r") do datafile
 retnf = open("./test/data/class_px_kp03_nofluid.dat","r") do datafile
     [parse.(Float64, split(line)) for line in eachline(datafile)]
 end
@@ -99,8 +111,8 @@ savefig("../compare/nr_both_class_bolt_perts_x_k$(@sprintf("%.3f", kclass)).png"
 plot(class_pxs[1,:],log10.(abs.(class_pxs[5,:])),
      label=raw"$\nu_{0,\rm{CLASS}}$",
      legend=:topleft)
-plot!(x_grid, log10.(abs.(results[2(ℓᵧ+1)+1,:]* 𝕡.h*4)),
-      label=raw"$4 h \nu_{0,\rm{Bolt}}$",ls=:dash)
+plot!(x_grid, log10.(abs.(4results[2(ℓᵧ+1)+1,:]* 𝕡.h)),
+      label=raw"$4h \nu_{0,\rm{Bolt}}$",ls=:dash)
 
 #photon Θ0 monopole
 plot(class_pxs[1,:],log10.(abs.(class_pxs[2,:])),
@@ -116,7 +128,7 @@ plot!(class_pxs[1,:],log10.(abs.(class_pxs[6,:])),
     label=raw"$m\nu_{0,\rm{CLASS,f}}$",
     ls=:dot)
 plot!(x_grid, log10.(abs.(ℳρ* 𝕡.h)),
-    label=raw"$4 h m\nu_{0,\rm{3 Bolt}}$",ls=:dash)
+    label=raw"$h m\nu_{0,\rm{Bolt}}$",ls=:dash)
     #ls=:dot)
 vline!([xhor],ls=:dot,c=:black,label=raw"$k/(2\pi a H h)=1$")
 
@@ -138,7 +150,7 @@ hline!([1],ls=:dot,color=:black)
 
 #check Phi, delta
 itpphiclass = LinearInterpolation(class_pxsnf[1,:][end:-1:1],class_pxsnf[8,:][end:-1:1])
-plot(x_grid[1:end-1], (results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+1,:]* 𝕡.h )[1:end-1]./itpphiclass.(x_grid[1:end-1]) )
+plot!(x_grid[1:end-1], (results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+1,:]* 𝕡.h )[1:end-1]./itpphiclass.(x_grid[1:end-1]) )
 hline!([1],ls=:dot,color=:black)
 
 itpdelclass = LinearInterpolation(class_pxsnf[1,:][end:-1:1],class_pxsnf[4,:][end:-1:1])

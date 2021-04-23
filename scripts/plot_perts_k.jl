@@ -8,7 +8,7 @@ using Printf
 #input ingredients
 𝕡 = CosmoParams()
 n_q=15
-bg = Background(𝕡;x_grid=-20.0:0.1:0.0,nq=n_q)
+bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=n_q)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)  #  𝕣 = Bolt.Peebles()
 ih = IonizationHistory(𝕣, 𝕡, bg)
 logqmin,logqmax = -6,-1
@@ -43,10 +43,14 @@ norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / 2)
 for (i_k, k) in enumerate(k_grid)
     ℳρ[i_k],ℳσ[i_k] = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q,i_k],
                             results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q,i_k],
-                            bg,a,𝕡)#.*norm𝒩
+                            bg,a,𝕡)./ (ρ_σ(ones(length(bg.quad_pts)),
+                                                         zeros(length(bg.quad_pts)),
+                                                         bg,exp(x),𝕡)[1] )
     ℳθ[i_k],_ = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q,i_k],
                             zeros(n_q),
-                            bg,a,𝕡)
+                            bg,a,𝕡) ./ (ρ_σ(ones(length(bg.quad_pts)),
+                                                         zeros(length(bg.quad_pts)),
+                                                         bg,exp(x),𝕡)[1] )
 
 end
 
@@ -89,9 +93,9 @@ xlabel!(raw"$k \ [h/Mpc]$")
 #CLASS keys:
 #['k (h/Mpc)', 'd_g', 'd_b', 'd_cdm', 'd_ur', 'd_ncdm[0]', 'd_tot',
 #'phi', 'psi', 't_g', 't_b', 't_cdm', 't_ur', 't_ncdm[0]', 't_tot']
-# ret = open("./test/data/class_tf_xm8.dat","r") do datafile
-ret = open("./test/data/class_tf_x0.dat","r") do datafile
-# ret = open("./test/data/class_tf_xm5.dat","r") do datafile
+ret = open("./test/data/class_tf_xm8_nofluid.dat","r") do datafile
+# ret = open("./test/data/class_tf_x0_nofluid.dat","r") do datafile
+# ret = open("./test/data/class_tf_xm5_nofluid.dat","r") do datafile
     [parse.(Float64, split(line)) for line in eachline(datafile)]
 end
 class_tfs = reduce(hcat,ret)
@@ -154,10 +158,10 @@ plot!(log10.(k_grid_hMpc), log10.(abs.(results[1,:]* 𝕡.h*4)),
 #       label=raw"$4 h \Theta_{1,\rm{Bolt}}$",ls=:dash)
 
 #massive neutrino monopole - factor of 100 at z =0, fine at z=3000
-plot!(log10.(class_tfs[1,:]),log10.(abs.(class_tfs[6,:])),
+plot(log10.(class_tfs[1,:]),log10.(abs.(class_tfs[6,:])),
       label=raw"$m\nu_{0,\rm{CLASS}}$")
-plot!(log10.(k_grid_hMpc), log10.(abs.(ℳρ* 𝕡.h *4)),
-      label=raw"$4 h m\nu_{0,\rm{Bolt}}$",ls=:dash)
+plot!(log10.(k_grid_hMpc), log10.(abs.(ℳρ* 𝕡.h)),
+      label=raw"$h m\nu_{0,\rm{Bolt}}$",ls=:dash)
 
 
 # #massive neutrino dipole - factor of 2e4 at z=0, factor of maybw 2 at z=3000
