@@ -12,7 +12,7 @@ ih = IonizationHistory(𝕣, 𝕡, bg)
 logqmin,logqmax = -6,-1
 x_grid = collect(-10:0.1:0)
 
-ℓᵧ=100
+ℓᵧ=1000
 ℓ_ν=100
 ℓ_mν=50
 reltol=1e-5 #cheaper  rtol
@@ -116,9 +116,9 @@ plot!(x_grid, log10.(abs.(4results[2(ℓᵧ+1)+1,:]* 𝕡.h)),
 
 #photon Θ0 monopole
 plot(class_pxs[1,:],log10.(abs.(class_pxs[2,:])),
-      label=raw"$\Theta_{0,\rm{CLASS}}$")
+      label=raw"$\Theta_{0,\rm{CLASS}}$",legend=:topleft)
 plot!(x_grid, log10.(abs.(results[1,:]* 𝕡.h*4)),
-      label=raw"$4 h \Theta_{0,\rm{Bolt,8}}$",ls=:dash)
+      label=raw"$4 h \Theta_{0,\rm{Bolt}}$",ls=:dash)
 
 #massive neutrino monopole ℳ0
 plot(class_pxsnf[1,:],log10.(abs.(class_pxsnf[6,:])),
@@ -160,5 +160,3 @@ hline!([1],ls=:dot,color=:black)
 itpbarclass = LinearInterpolation(class_pxsnf[1,:][end:-1:1],class_pxsnf[3,:][end:-1:1])
 plot(x_grid[1:end-1], -(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h )[1:end-1]./itpbarclass.(x_grid[1:end-1]) )
 hline!([1],ls=:dot,color=:black)
-
-fac =  bg.ρ₀ℳ(-20)/(exp(-20)^-4 * ρ_σ(ones(length(bg.quad_pts)),zeros(length(bg.quad_pts)),bg,exp(-20),𝕡)[1])

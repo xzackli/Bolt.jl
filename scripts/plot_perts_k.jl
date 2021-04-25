@@ -4,6 +4,7 @@ using ForwardDiff
 using Plots
 using BenchmarkTools
 using Printf
+using Interpolations
 
 #input ingredients
 𝕡 = CosmoParams()
@@ -13,15 +14,15 @@ bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=n_q)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 logqmin,logqmax = -6,-1
 logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
-k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100) #quadratically spaced k points
+k_grid = quadratic_k(0.1bg.H₀, 5000bg.H₀, 100) #quadratically spaced k points
 
 #@btime @qthreads
-ℓᵧ=8 #cutoff
-ℓ_ν=ℓᵧ#10 #not used except for size here, should pass
-ℓ_mν=ℓ_ν
+ℓᵧ=100 #cutoff
+ℓ_ν=100#10 #not used except for size here, should pass
+ℓ_mν=10
 reltol=1e-5 #cheaper  rtol
 #solve hierarchy at single x to check
-x=-8#-5#-8#0 #just picking a number
+x=0#-8#-5#-8#0 #just picking a number
 a=exp(x)
 pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
 println("pert vector length=",pertlen)
@@ -38,8 +39,6 @@ results
 #Integrate the q moments for ℳ0 and ℳ2 for plotting
 ℳρ,ℳσ = zeros(length(k_grid)),zeros(length(k_grid))
 ℳθ = zeros(length(k_grid))
-Ω_ν =  7*(2/3)*𝕡.N_ν/8 *(4/11)^(4/3) *𝕡.Ω_r
-norm𝒩 = 1/(4Ω_ν * bg.ρ_crit / 2)
 for (i_k, k) in enumerate(k_grid)
     ℳρ[i_k],ℳσ[i_k] = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q,i_k],
                             results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q,i_k],
@@ -93,15 +92,15 @@ xlabel!(raw"$k \ [h/Mpc]$")
 #CLASS keys:
 #['k (h/Mpc)', 'd_g', 'd_b', 'd_cdm', 'd_ur', 'd_ncdm[0]', 'd_tot',
 #'phi', 'psi', 't_g', 't_b', 't_cdm', 't_ur', 't_ncdm[0]', 't_tot']
-ret = open("./test/data/class_tf_xm8_nofluid.dat","r") do datafile
-# ret = open("./test/data/class_tf_x0_nofluid.dat","r") do datafile
+# ret = open("./test/data/class_tf_xm8_nofluid.dat","r") do datafile
+ret = open("./test/data/class_tf_x0_nofluid.dat","r") do datafile
 # ret = open("./test/data/class_tf_xm5_nofluid.dat","r") do datafile
     [parse.(Float64, split(line)) for line in eachline(datafile)]
 end
 class_tfs = reduce(hcat,ret)
 
 
-#matter δ
+#matter (cdm) δ
 plot(log10.(class_tfs[1,:]),log10.(-class_tfs[4,:]),
      label=raw"$\delta_{c,\rm{CLASS}}$")
 plot!(log10.(k_grid_hMpc),log10.(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:]* 𝕡.h),
@@ -131,7 +130,7 @@ plot!(log10.(k_grid_hMpc),log10.(abs.(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)
 xlabel!(raw"$k \ [h/Mpc]$")
 ylabel!(raw"$\delta_{i}(k)$")
 title!("Compare CLASS - Bolt (NR) - z=$(@sprintf("%.0f", exp(-x)-1))")
-savefig("../compare/nr_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
+savefig("../compare/newnu_nr_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
 
 
 #massless neutrino monopole
@@ -158,7 +157,7 @@ plot!(log10.(k_grid_hMpc), log10.(abs.(results[1,:]* 𝕡.h*4)),
 #       label=raw"$4 h \Theta_{1,\rm{Bolt}}$",ls=:dash)
 
 #massive neutrino monopole - factor of 100 at z =0, fine at z=3000
-plot(log10.(class_tfs[1,:]),log10.(abs.(class_tfs[6,:])),
+plot!(log10.(class_tfs[1,:]),log10.(abs.(class_tfs[6,:])),
       label=raw"$m\nu_{0,\rm{CLASS}}$")
 plot!(log10.(k_grid_hMpc), log10.(abs.(ℳρ* 𝕡.h)),
       label=raw"$h m\nu_{0,\rm{Bolt}}$",ls=:dash)
@@ -182,4 +181,50 @@ ylabel!(raw"$\delta_{i}(k)$")
 #ylims!(-4,1)
 #xlims!(-5,2)
 title!("Compare CLASS - Bolt (R-mono) - z=$(@sprintf("%.0f", exp(-x)-1))")
-savefig("../compare/mono_r_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
+savefig("../compare/newnu_mono_r_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
+
+#ratios, lazy but don't want to reindex things
+labels = [raw"$\Phi$",raw"$\delta$",raw"$v$",raw"$|\delta_{b}|$",raw"$|v_{b}|$",raw"$|\Theta_{0}|$",raw"$|\mathcal{N}_{0}|$",raw"$|\mathcal{M}_{0}|$"]
+#cdm
+itpclass = LinearInterpolation(class_tfs[1,:],-class_tfs[4,:])
+using Plots.PlotMeasures
+plot(log10.(k_grid_hMpc),
+     results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:]* 𝕡.h ./ itpclass.(k_grid_hMpc),
+     label=labels[2],left_margin=4mm )
+hline!([1],ls=:dash,c=:black,label="")
+
+#baryon
+itpclass = LinearInterpolation(class_tfs[1,:],-class_tfs[3,:])
+plot!(log10.(k_grid_hMpc),
+      results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h ./ itpclass.(k_grid_hMpc),
+      label=labels[4] )
+
+# #v
+# itpclass = LinearInterpolation(class_tfs[1,:],class_tfs[1,:].^-1 .* class_tfs[12,:])
+# plot(log10.(k_grid_hMpc), results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:]* 𝕡.h^2 ./ itpclass.(k_grid_hMpc) )
+#
+# #vb
+# itpclass = LinearInterpolation(class_tfs[1,:],class_tfs[1,:].^-1 .* class_tfs[11,:])
+# plot!(log10.(k_grid_hMpc), results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]* 𝕡.h^2 ./ itpclass.(k_grid_hMpc) )
+
+#massless neutrino monopole, I guess not enough ell here too
+itpclass = LinearInterpolation(class_tfs[1,:],-class_tfs[5,:])
+plot!(log10.(k_grid_hMpc),
+      results[2(ℓᵧ+1)+1,:]* 4𝕡.h ./ itpclass.(k_grid_hMpc),
+      label=labels[7] )
+
+#photon monopole, not enough ell so put limits
+itpclass = LinearInterpolation(class_tfs[1,:],-class_tfs[2,:])
+plot!(log10.(k_grid_hMpc),
+      results[1,:]* 4𝕡.h ./ itpclass.(k_grid_hMpc),
+      label=labels[6] )
+ylims!(0.9,1.2)
+
+#massive multipole
+itpclass = LinearInterpolation(class_tfs[1,:],-class_tfs[6,:])
+plot!(log10.(k_grid_hMpc), ℳρ* 𝕡.h ./ itpclass.(k_grid_hMpc),
+      label=labels[8]  )
+ylabel!(raw"$\frac{\delta_{x,\rm{Bolt}}}{\delta_{X,\rm{CLASS}}}(k)$")
+xlabel!(raw"$\log ~k \ [h/Mpc]$")
+title!("Compare CLASS - Bolt (all-ratios) - z=$(@sprintf("%.0f", exp(-x)-1))")
+savefig("../compare/all_ratios_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")

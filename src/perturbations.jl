@@ -47,6 +47,7 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     #Do q integrals to get the massive neutrino metric perturbations
     #MB eqn (55)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    #^Replace this with bg.ρ_crit? I think it is using an imported function ρ_crit
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
 
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
@@ -60,6 +61,19 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
     # #a-dependence has been moved into Einstein eqns, as have consts in σ
     return ρ,σ
+end
+
+#need a separate function for θ (really(ρ̄+P̄)θ) for plin gauge change
+function θ(ℳ1,bg,a,par::AbstractCosmoParams) #a mess
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *bg.ρ_crit *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    m = par.Σm_ν
+    nq = length(ℳ1) #assume we got this right
+    Iθ(x) = xq2q(x,logqmin,logqmax)^3  * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    xq,wq = bg.quad_pts,bg.quad_wts
+    θ = 4π*sum(Iθ.(xq).*ℳ1.*wq)
+    #Note that this still needs to be multiplied with ka^-4 prefactor
+    return θ
 end
 
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
