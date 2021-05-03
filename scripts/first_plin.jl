@@ -128,21 +128,64 @@ savefig("../compare/plin_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1))
 
 #need to streamline this, should have As as a Bolt parameter (and eventually σ8)
 #generalize the perturbations to be computed from hierarchy
-function plin(k,𝕡,bg,ih,δc,δb,ℳρ)
+function plin(k,results)
     #copy code abvoe
+    ℳρ,_ = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q],
+                            results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q],
+                            bg,a,𝕡)./ bg.ρ₀ℳ(x)
+    #Below assumes negligible neutrino pressure for the normalization (fine at z=0)
+    ℳθ = k*θ(results[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+2n_q],
+                     bg,a,𝕡)./ bg.ρ₀ℳ(x)
+    #Also using the fact that a=1 at z=0
+    δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h
+    vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]* 𝕡.h
+    ℳρN,ℳθN = ℳρ,ℳθ
+    vmνN = -ℳθN./ k
+    #omegas to get weighted sum for total matter in background
+    Tγ = (15/ π^2 *bg.ρ_crit *𝕡.Ω_r)^(1/4)
+    ζ = 1.2020569
+    νfac = (90 * ζ /(11 * π^4)) * (𝕡.Ω_r * 𝕡.h^2 / Tγ) *((𝕡.N_ν/3)^(3/4))
+    #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
+    Ω_ν = 𝕡.Σm_ν*νfac/𝕡.h^2
+    Ωm = 𝕡.Ω_m+𝕡.Ω_b+Ω_ν
+
+    #construct gauge-invariant versions of density perturbations
+    δc = δcN - 3bg.ℋ(x)*vcN./k
+    δb = δbN - 3bg.ℋ(x)*vbN./k
+    #assume neutrinos fully non-relativistic and can be described by fluid (ok at z=0)
+    δmν = ℳρN - 3bg.ℋ(x)*vmνN./k
+    println(δb,δmν)
+    δm = (𝕡.Ω_m*δc .+ 𝕡.Ω_b*δb .+ Ω_ν*δmν) ./ Ωm
+    As=1e-10*exp(3.043)
+    k_hMpc=k/(bg.H₀*3e5/100)
+    Pprim = As*(k_hMpc./0.05).^(𝕡.n-1)
+    PL= (2π^2 ./ k_hMpc.^3).*(δm*𝕡.h).^2 .*Pprim
+    return PL
 end
 
 #PL as a function of Ωmf
+#one k at a time to start
 function PL(Ω_c::DT, k) where DT
-   𝕡 = CosmoParams{DT}(Ω_b=Ω_b)
+   𝕡 = CosmoParams{DT}(Ω_m=Ω_c)
+   println(𝕡)
    bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=n_q)
    𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
    ih = IonizationHistory(𝕣, 𝕡, bg)
-   k_grid = quadratic_k(, 100)
-   return plin(k, par, bg, ...)
+   #Why does recfast not work?
+   # ih = IonizationHistory(Peebles(), 𝕡, bg)
+   #Peebles doesn't work for same reason as before, raw Ha(a) function,
+   #Can't fix this easily either because function that takes it for Peebles
+   #doesn't know about bg...
+   hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
+   perturb = boltsolve(hierarchy; reltol=reltol)
+   u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
+   results=zeros(pertlen)
+   results = u
+   # println(results)
+   return plin(k, results)
 end
 
-f(Ω_c) = plin(Ω_c, k)
+f(Ω_c) = PL(Ω_c, k_grid[1])#
 #this is gonna take forever
 @time pl = f(0.224)
 @time ∂pl = ForwardDiff.derivative(f, 0.224)

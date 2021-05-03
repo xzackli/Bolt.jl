@@ -235,8 +235,10 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
     a = x2a(x)
     ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
@@ -244,10 +246,8 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     #FIXME check the neutrino contributions to Ψ and Ψ′!
     #^Also have just copied from before, but should save these maybe?
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (par.Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
                                   + σℳ / bg.ρ_crit ) #why am I doing this? - because H0 pulls out a factor of rho crit - just unit conversion
                                                                    #this introduces a factor of bg density I cancel using the integrated bg mnu density now
