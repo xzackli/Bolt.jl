@@ -411,6 +411,8 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
     Tmat_function = x -> (x < xinitial_RECFAST) ?
         Trad_function(x) : RECFAST_Tmat_z(x2z(x))
     # =====================================================
+	#j - do we really need bg to be passed to IonizationHistory separately from 𝕣.bg?
+	#is there a reason not to just put par and bg into 𝕣?
 	ℋ_function = bg.ℋ
     τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
     g̃ = g̃_function(τ, τ′)
