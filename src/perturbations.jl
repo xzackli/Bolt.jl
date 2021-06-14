@@ -88,7 +88,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    # ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
+    csb² = ih.csb²(x)
+
     ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
@@ -115,7 +116,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     δ′ = k / ℋₓ * v - 3Φ′
     v′ = -v - k / ℋₓ * Ψ
     δ_b′ = k / ℋₓ * v_b - 3Φ′
-    v_b′ = -v_b - k / ℋₓ * Ψ + τₓ′ * R * (3Θ[1] + v_b)
+    v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
+
 
     # relativistic neutrinos (massless)
     𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
@@ -158,6 +160,22 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # photon boundary conditions: diffusion damping
     Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θ[ℓᵧ]
     Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θᵖ[ℓᵧ]
+
+
+    # RSA equations (implementation of CLASS default switches)
+    # This probably needs to happen before anything else...or at end?
+    # if (k*ηₓ > 45) &&  (5τₓ′*ηₓ > 1)
+    #     #photons
+    #     Θ[0] = Φ′ -1/k *τₓ′ * v_b #recall ϕMB = -Φ, 4 absorbed into pert
+    #     coeff on theta is? vs v_b? I think no H here b/c no deriv?
+    #     Θ[1] = -3Φ′/2 + (3/k)*( τₓ′′ * v_b + τₓ′ * (-ℋₓ*v_b + cs² *δ_b/k - k*Φ) ) #again norm on vb?
+    #     #massless neutrinos
+    #     𝒩[0] = Φ′
+    #     𝒩[1] = -3Φ′/2
+    # else
+    #     #do usual stuff
+    #
+    # end
 
     du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
     return nothing

@@ -19,8 +19,8 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     g̃::IT
     g̃′::IT
     g̃′′::IT
-
     Tmat::IT
+    csb²::IT
     Trad::IT
 end
 
@@ -224,6 +224,11 @@ function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
 
     Trad_ = spline(PeeblesT₀ .* (1 .+ x2z.(x_grid)), x_grid)
     # in this model, Tmat ~ Trad
+    #sound speed
+    csb²_pre = 2.99792458e8^-2 * 1.380658e-23 / (3.9715e0/(3.9715e0-(3.9715e0-1)*par.Y_p)) / 1.673575e-27#hardcode the prefactor for non-recfast, though not sure if we will be using these later?
+    #𝕣.C^-2 * 𝕣.k_B/𝕣.mu_T/𝕣.m_H
+    csb²_ = spline(csb²_pre * (Trad_.(x_grid) .- 1/3 *spline_∂ₓ(Trad_, x_grid).(x_grid)),x_grid)
+
 
     # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
     return IonizationHistory{T, IT}(
@@ -235,6 +240,7 @@ function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
         spline_∂ₓ(g̃_, x_grid),
         spline_∂ₓ²(g̃_, x_grid),
         Trad_,
+        csb²_,
         Trad_
     )
 end
@@ -257,6 +263,10 @@ function IonizationHistory(𝕚𝕡::PeeblesI{T},  par::ACP, bg::AB) where
 
     Trad_ = spline(PeeblesT₀ .* (1 .+ x2z.(x_grid)), x_grid)
     # in this model, Tmat ~ Trad
+    #sound speed
+	csb²_pre = 2.99792458e8^-2 * 1.380658e-23 / (3.9715e0/(3.9715e0-(3.9715e0-1)*par.Y_p)) / 1.673575e-27#hardcode the prefactor for non-recfast, though not sure if we will be using these later?
+    #𝕣.C^-2 * 𝕣.k_B/𝕣.mu_T/𝕣.m_H
+	csb²_ = spline(csb²_pre * (Trad_.(x_grid) .- 1/3 *spline_∂ₓ(Trad_, x_grid).(x_grid)),x_grid)
 
     # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
     # println("check aa ", isa(Xₑ_, AbstractArray))
@@ -269,6 +279,7 @@ function IonizationHistory(𝕚𝕡::PeeblesI{T},  par::ACP, bg::AB) where
         spline_∂ₓ(g̃_, x_grid),
         spline_∂ₓ²(g̃_, x_grid),
         Trad_,
+        csb²_,
         Trad_
     )
 end
