@@ -12,12 +12,13 @@ H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
 function Ω_Λ(par::AbstractCosmoParams)
     #Below can definitely be more streamlined, I am just making it work for now
     Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    νfac = (90 * ζ /(11 * π^4)) * (par.Ω_r * par.h^2 / Tγ) *((par.N_ν/3)^(3/4))
+    νfac =(90 * ζ /(11 * π^4)) * (par.Ω_r * par.h^2 / Tγ) *((par.N_ν/3)^(3/4))
     #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
     Ω_ν = par.Σm_ν*νfac/par.h^2
     return 1 - (par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
                                          + par.Ω_b + par.Ω_m
-                                         + Ω_ν) #assume massive nus are non-rel today
+                                         + Ω_ν
+                                         ) #assume massive nus are non-rel today
 end
 
 #background FD phase space
@@ -37,6 +38,7 @@ function ρP_0(a,par::AbstractCosmoParams,quad_pts,quad_wts)
     #Do q integrals to get the massive neutrino metric perturbations
     #MB eqn (55)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    #Not allowed to set Neff=0 o.w. breaks this #FIXME add an error message
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
     m = par.Σm_ν
@@ -51,7 +53,7 @@ end
 
 #neglect neutrinos, this is for ionization debugging purposes only
 function oldH_a(a, par::AbstractCosmoParams)
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
+    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)                 
                         + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
                         + Ω_Λ(par))
 end
@@ -63,7 +65,7 @@ function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
     #ρ_ν = ρℳ(a2x(a))
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
-                        + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
+                        + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
                         + Ω_Λ(par))
 end
 # conformal time Hubble parameter, aH
