@@ -85,6 +85,7 @@
     Heswitch::Int64 = 6
 
     # Cosmology
+	#FIXME other cosmo
     Yp = 0.24
     OmegaB = 0.046  # TODO: should replace during GREAT GENERALIZATION
     HO =  bg.H₀ / H0_natural_unit_conversion
@@ -410,9 +411,12 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
     Trad_function = x -> 𝕣.Tnow * (1 + x2z(x))
     Tmat_function = x -> (x < xinitial_RECFAST) ?
         Trad_function(x) : RECFAST_Tmat_z(x2z(x))
-    # =====================================================
 
-    τ, τ′ = τ_functions(x_grid, Xₑ_function, par)
+    # =====================================================
+	#j - do we really need bg to be passed to IonizationHistory separately from 𝕣.bg?
+	#is there a reason not to just put par and bg into 𝕣?
+	ℋ_function = bg.ℋ
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
     g̃ = g̃_function(τ, τ′)
 
     Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
@@ -422,6 +426,10 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
 
     Tmat_ = spline(Tmat_function.(x_grid), x_grid)
     Trad_ = spline(Trad_function.(x_grid), x_grid)
+	#sound speed
+	csb²_pre = 𝕣.C^-2 * 𝕣.k_B/𝕣.mu_T/𝕣.m_H
+	#probably this is not the best way to do this...
+	csb²_ = spline(csb²_pre * (Tmat_.(x_grid) .- 1/3 *spline_∂ₓ(Tmat_, x_grid).(x_grid)),x_grid)
 
     # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
     return IonizationHistory{T, IT}(
@@ -433,6 +441,8 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
         spline_∂ₓ(g̃_, x_grid),
         spline_∂ₓ²(g̃_, x_grid),
         Tmat_,
+		#spline_∂ₓ(Tmat_, x_grid),
+		csb²_,
         Trad_
     )
 end
