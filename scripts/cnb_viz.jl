@@ -30,7 +30,7 @@ mp=938e6 #proton mass eV/c^2 (938 Mev)
 n_b(η) = bg.ρ_crit*𝕡.Ω_b*η2a(η)^(-3) / mp
 η_ani = a2η(Tν0/511e3) #around electron mass of 511keV
 n_e(η) = (η<η_ani) ? n_e_rel(η) : n_b(η)
-n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
+# n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
 
 # cross section
 GF = 1.17e-5 * (1e-9)^2 #eV⁻¹, (1.17e-5GeV⁻¹)
@@ -79,7 +79,7 @@ end
 
 # plot(log10.(bg.η.(x_grid)),log10.(τ_ν.(bg.η.(x_grid))))
 # plot(log10.(bg.η.(x_grid)),log10.(exp.(-τ_ν.(bg.η.(x_grid)))))
-# plot!(log10.(bg.η.(x_grid)),log10.(τ_ν′.(bg.η.(x_grid))))
+plot(log10.(bg.η.(x_grid)),log10.(τ_ν′.(bg.η.(x_grid)) ./ (bg.ℋ.(log.(η2a.(bg.η.(x_grid)))))))
 # plot!(log10.(bg.η.(x_grid)),log10.(τ_ν′.(bg.η.(x_grid))./(bg.ℋ.(x_grid))))
 # plot!(log10.(bg.η.(x_grid)),log10.(g_ν.(bg.η.(x_grid))))
 
@@ -92,6 +92,11 @@ ylabel!(raw"$g_{\nu}(\eta) \mathcal{H}(\eta)^{-1}$")
 ylims!(-0.001,1.1)
 savefig("../nu_viz_func.png")
 
-# v_b term
+# add v_b term in 𝒩[1] proportional to τ_ν′
 
-# source functions
+# source functions - do what I said and replace the dipole line with v_b
+
+
+
+# save the Cells
+writedlm("../compare/bolt_cnb_cell.txt", (ells,cells))
