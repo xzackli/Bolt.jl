@@ -53,19 +53,25 @@ end
 
 #neglect neutrinos, this is for ionization debugging purposes only
 function oldH_a(a, par::AbstractCosmoParams)
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)                 
+    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
                         + Ω_Λ(par))
 end
-
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
     #ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) # we don't atually need pressure?
     ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
     #ρ_ν = ρℳ(a2x(a))
+    Tdec = 0.8e5
+    Tγ0 = (15/ π^2 * ρ_crit(par) *par.Ω_r)^(1/4) #CMB temp today in eV
+    Tν0 = Tγ0 * (par.N_ν/3)^(1/4) *(4/11)^(1/3)
+    f_νm0 = (2/3)*(7par.N_ν/8)*(4/11)^(4/3)
+    Ω_rad_reg = par.Ω_r* a^(-4)*(1+f_νm0) #usual thing
+    Ω_rad_v_early = par.Ω_r* a^(-4)*(1+f_νm0*(Tγ0/Tν0)^4) # before neutrino decoupling, Tγ=Tνm0, and photons have not been heated wrt neutrinos yet
+    Ω_rad = (a < Tν0/Tdec) ? Ω_rad_v_early : Ω_rad_reg
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
-                        + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
+                        +
                         + Ω_Λ(par))
 end
 # conformal time Hubble parameter, aH
