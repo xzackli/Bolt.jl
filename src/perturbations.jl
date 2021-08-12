@@ -22,12 +22,80 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
 
 
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,
+    # Φ₀=1.0
+    ) where T
     xᵢ = first(hierarchy.bg.x_grid)
+    # u₀ = initial_conditions(xᵢ, hierarchy; Φ₀)#Marius viz code
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
                 saveat=hierarchy.bg.x_grid, dense=false,
+                # maxiters=1
+                )
+    return sol
+end
+
+function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
+    #redundant code for what we need to compute RSA perts in place in u
+    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    a = x2a(x)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    csb² = ih.csb²(x)
+    ℓ_ν = hierarchy.ℓ_ν
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+    # Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
+
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+                                  Ω_ν * 𝒩[2]
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+
+    #put a k/ℋ everywhere Blas++11 puts a k...
+    Θ[0] = Φ + 1/(k/ℋₓ) *τₓ′ * v_b
+    #dipole is somehow very wrong, bunch of oscillations - FIXME check units/sign on τ
+    Θ[1] = -2Φ′ + ((k/ℋₓ)^-2)*( -τₓ′′*ℋₓ^2 * v_b + -τₓ′*ℋₓ * (ℋₓ*v_b - csb² *δ_b/(k/ℋₓ) + (k/ℋₓ)*Φ) )
+    Θ[2] = 0
+    #massless neutrinos
+    𝒩[0] = Φ
+    𝒩[1] = -2Φ′
+    𝒩[2] = 0
+
+    u[1] = Θ[0]
+    u[2] = Θ[1]
+    u[3] = Θ[2]
+
+    u[2(ℓᵧ+1)+1] = 𝒩[0]
+    u[2(ℓᵧ+1)+2] = 𝒩[1]
+    u[2(ℓᵧ+1)+3] = 𝒩[2]
+
+    #zero the rest to avoid future confusion
+    for ℓ in 3:(ℓᵧ)
+        u[ℓ] = 0
+        u[(ℓᵧ+1)+ℓ] = 0
+    end
+    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
+    return nothing
+end
+
+function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+    #evolve hierarchy up to RSA switch, default value is hierarchy.xᵣ=0, i.e. no RSA
+    xᵣ = hierarchy.xᵣ
+    soln=boltsolve()
+    uᵣ = soln(xᵣ)
+    prob = ODEProblem{true}(hierarchy!, uᵣ, (xᵣ , zero(T)), hierarchy)
+    sol = solve(prob, ode_alg, reltol=reltol,
+                saveat=hierarchy.bg.x_grid[hierarchy.bg.x_grid>xᵣ],
+                dense=false,
                 # maxiters=1
                 )
     return sol
@@ -81,7 +149,8 @@ function θ(ℳ1,bg,a,par::AbstractCosmoParams) #a mess
 end
 
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
-function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
+function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x;
+                    ∂x_spl_τ_ν_x=0.) where T
     # compute cosmological quantities at time x, and do some unpacking
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
@@ -92,6 +161,13 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    Tdec = 0.8e5
+    Tγ0 = (15/ π^2 * bg.ρ_crit *par.Ω_r)^(1/4) #CMB temp today in eV
+    Tν0 = Tγ0 * (par.N_ν/3)^(1/4) *(4/11)^(1/3)
+    f_νm0 = (2/3)*(7par.N_ν/8)*(4/11)^(4/3)
+    Ω_rad_reg = Ω_r* a^(-4)*(1+f_νm0) #usual thing
+    Ω_rad_v_early = Ω_r* a^(-4)*(1+f_νm0*(Tγ0/Tν0)^4) # before neutrino decoupling, Tγ=Tνm0, and photons have not been heated wrt neutrinos yet
+    Ω_rad = (a < Tν0/Tdec) ? Ω_rad_v_early : Ω_rad_reg
     csb² = ih.csb²(x)
 
 
@@ -148,11 +224,15 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     #     println("Matter term = ", H₀² / (2ℋₓ^2) *( Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b ))
     # end
 
+    #for CNB viz
+    R_ν = Ω_ν/Ω_r 
+    τ_ν′ = ∂x_spl_τ_ν_x
+
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
     v′ = -v - k / ℋₓ * Ψ
     δ_b′ = k / ℋₓ * v_b - 3Φ′
-    v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
+    v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b) + τ_ν′ * R_ν * (3𝒩[1] + v_b)
 
     # neutrinos (massive, MB 57)
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
@@ -172,17 +252,19 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
     # if (k*ηₓ > 45) println("k condition satisfied") end
     # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = false #actual condition: (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         # println("INSIDE RSA")
         #photons
-        Θ[0] = Φ + 1/k *τₓ′ * v_b
-        Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+        # Θ[0] = Φ + τₓ′ * v_b *1/k
+        Θ[0] = Φ + 1/(k/ℋₓ) *τₓ′ * v_b
+        # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+        Θ[1] = -2Φ′ + ((k/ℋₓ)^-2)*( -τₓ′′*ℋₓ^2 * v_b + -τₓ′*ℋₓ * (ℋₓ*v_b - csb² *δ_b/(k/ℋₓ) + (k/ℋₓ)*Φ) )
         Θ[2] = 0
         #massless neutrinos
         𝒩[0] = Φ
-        𝒩[1] = -2Φ′/k
+        𝒩[1] = -2Φ′#/k
         𝒩[2] = 0
 
         #try manual zeroing
@@ -203,7 +285,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         #do usual hierarchy
         # relativistic neutrinos (massless)
         𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-        𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+        𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ + τ_ν′ * (𝒩[1] + v_b/3)
         for ℓ in 2:(ℓ_ν-1)
             𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
         end
@@ -239,6 +321,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 end
 
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
+# function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}; Φ₀ = 1.0) where T
 function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih, hierarchy.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
@@ -253,11 +336,18 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     aᵢ = sqrt(aᵢ²)
     #These get a 3/3 since massive neutrinos behave as massless at time of ICs
     Ω_ν =  7*(3/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
-    f_ν = 1/(1 + 1/(7*(3/3)*par.N_ν/8 *(4/11)^(4/3)))
+    f_ν = 1/(1 + 1/(7*(2/3)*par.N_ν/8 *(4/11)^(4/3)))
+    Tdec = 0.8e5
+    Tγ0 = (15/ π^2 * bg.ρ_crit *par.Ω_r)^(1/4) #CMB temp today in eV
+    Tν0 = Tγ0 * (par.N_ν/3)^(1/4) *(4/11)^(1/3)
+    f_νm0 = (2/3)*(7par.N_ν/8)*(4/11)^(4/3)
+    Ω_rad_reg = par.Ω_r* aᵢ^(-4)*(1+f_νm0) #usual thing
+    Ω_rad_v_early = par.Ω_r* aᵢ^(-4)*(1+f_νm0*(Tγ0/Tν0)^4) # before neutrino decoupling, Tγ=Tνm0, and photons have not been heated wrt neutrinos yet
+    Ω_rad = (aᵢ < Tν0/Tdec) ? Ω_rad_v_early : Ω_rad_reg
     # ρ0ℳ = bg.ρ₀ℳ(xᵢ)
 
     # metric and matter perturbations
-    Φ = 1.0
+    Φ = 1.0#Φ₀
     #choosing Φ=1 forces the following value for C, the rest of the ICs follow
     C = -( (15 + 4f_ν)/(20 + 8f_ν) )
 
@@ -290,7 +380,6 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     v_b = v
 
     # neutrino hierarchy
-    # we need xᵢ to be before neutrinos decouple, as always
     𝒩[0] = Θ[0]
     𝒩[1] = Θ[1]
     𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
@@ -362,4 +451,38 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
         ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′))
     return term1 + term2 + term3
+end
+
+function source_function_ν(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x, spl_τ_ν, spl_g̃_ν,∂x_spl_g̃_ν) where T
+    # compute some quantities
+    k, ℓᵧ, par, bg, ih,nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    H₀² = bg.H₀^2
+    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
+    τₓ = spl_τ_ν(x) #, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
+    # g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
+    g̃ₓ, g̃ₓ′ = spl_g̃_ν(x), ∂x_spl_g̃_ν(x) # g with the factor of ℋ to get ̃
+    a = x2a(x)
+    # ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 * bg.ρ_crit *par.Ω_r)^(1/4)
+    Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+    Tdec = 0.8e5
+    Tγ0 = (15/ π^2 * bg.ρ_crit *par.Ω_r)^(1/4) #CMB temp today in eV
+    Tν0 = Tγ0 * (par.N_ν/3)^(1/4) *(4/11)^(1/3)
+    f_νm0 = (2/3)*(7par.N_ν/8)*(4/11)^(4/3)
+    Ω_rad_reg = par.Ω_r* a^(-4)*(1+f_νm0) #usual thing
+    Ω_rad_v_early = par.Ω_r* a^(-4)*(1+f_νm0*(Tγ0/Tν0)^4) # before neutrino decoupling, Tγ=Tνm0, and photons have not been heated wrt neutrinos yet
+    Ω_rad = (a < Tν0/Tdec) ? Ω_rad_v_early : Ω_rad_reg
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
+
+    #neglect quadrupoles
+    Ψ = -Φ #- 12H₀² / k^2 / a^2 * (par.Ω_r * Θ[2]
+                                  # + Ω_ν * 𝒩[2])
+    Ψ′ = -Φ′ #- 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
+    #                                 + Ω_ν * (𝒩′[2] - 2 * 𝒩[2]) )
+    term1 =  g̃ₓ * (𝒩[0] + Ψ ) + exp(-τₓ) * (Ψ′ - Φ′) # #no I'm leaving it, even though dropping quad drop ISW (but is this okay?? I don't think so...) + exp(-τₓ) * (Ψ′ - Φ′)
+    term2 = (-1/k) * (ℋₓ′ * g̃ₓ * v_b + ℋₓ * g̃ₓ′ * v_b + ℋₓ * g̃ₓ * v_b′)
+    return term1 + term2 #+ term3
 end

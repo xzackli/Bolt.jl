@@ -5,9 +5,10 @@ export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
 export Peebles, PeeblesI
 export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
-export Hierarchy, boltsolve, BasicNewtonian,unpack
-export source_grid, quadratic_k, cltt
-export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
+export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq, xq2q,spline,spline_∂ₓ
+export cltt,source_function_ν,quadratic_k,BasicNewtonian,Hierarchy,boltsolve
+export source_function, source_grid
+export RECFAST
 
 using Parameters
 using Unitful, UnitfulAstro, NaturallyUnitful
