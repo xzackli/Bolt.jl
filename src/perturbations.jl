@@ -33,6 +33,82 @@ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) whe
     return sol
 end
 
+function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
+    #redundant code for what we need to compute RSA perts in place in u
+    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    a = x2a(x)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    csb² = ih.csb²(x)
+    ℓ_ν = hierarchy.ℓ_ν
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+    # Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
+
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+                                  Ω_ν * 𝒩[2]
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+
+    #put a k/ℋ everywhere Blas++11 puts a k...
+    # Θ[0] = Φ + 1/(k/ℋₓ) *τₓ′ * v_b
+    # #dipole is somehow very wrong, bunch of oscillations - FIXME check units/sign on τ
+    # Θ[1] = -2Φ′ + ((k/ℋₓ)^-2)*( -τₓ′′*ℋₓ^2 * v_b + -τₓ′*ℋₓ * (ℋₓ*v_b - csb² *δ_b/(k/ℋₓ) + (k/ℋₓ)*Φ) )
+    # Θ[2] = 0
+    # #massless neutrinos
+    # 𝒩[0] = Φ
+    # 𝒩[1] = -2Φ′
+    # 𝒩[2] = 0
+
+    #fixed
+    Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+    # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+    Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+                     + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
+    Θ[2] = 0
+    #massless neutrinos
+    𝒩[0] = Φ
+    𝒩[1] = -2ℋₓ/k *Φ′
+    𝒩[2] = 0
+
+    u[1] = Θ[0]
+    u[2] = Θ[1]
+    u[3] = Θ[2]
+
+    u[2(ℓᵧ+1)+1] = 𝒩[0]
+    u[2(ℓᵧ+1)+2] = 𝒩[1]
+    u[2(ℓᵧ+1)+3] = 𝒩[2]
+
+    #zero the rest to avoid future confusion
+    for ℓ in 3:(ℓᵧ)
+        u[ℓ] = 0
+        u[(ℓᵧ+1)+ℓ] = 0
+    end
+    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
+    return nothing
+end
+
+function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+    #evolve hierarchy up to RSA switch, default value is hierarchy.xᵣ=0, i.e. no RSA
+    xᵣ = hierarchy.xᵣ
+    soln=boltsolve()
+    uᵣ = soln(xᵣ)
+    prob = ODEProblem{true}(hierarchy!, uᵣ, (xᵣ , zero(T)), hierarchy)
+    sol = solve(prob, ode_alg, reltol=reltol,
+                saveat=hierarchy.bg.x_grid[hierarchy.bg.x_grid>xᵣ],
+                dense=false,
+                # maxiters=1
+                )
+    return sol
+end
+
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     ℓᵧ = hierarchy.ℓᵧ
@@ -172,17 +248,19 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
     # if (k*ηₓ > 45) println("k condition satisfied") end
     # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = false #actual condition: (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         # println("INSIDE RSA")
         #photons
-        Θ[0] = Φ + 1/k *τₓ′ * v_b
-        Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+        Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+        # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+        Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+                         + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
         Θ[2] = 0
         #massless neutrinos
         𝒩[0] = Φ
-        𝒩[1] = -2Φ′/k
+        𝒩[1] = -2ℋₓ/k *Φ′
         𝒩[2] = 0
 
         #try manual zeroing

@@ -42,6 +42,11 @@ function quadratic_k(kmin::T, kmax::T, nk) where T
     return T[kmin + (kmax - kmin) * (i/nk)^2 for i in 1:nk]
 end
 
+function log10_k(kmin::T, kmax::T, nk) where T
+    kmin, kmax, nk = assume_nondual(kmin), assume_nondual(kmax), assume_nondual(nk)
+    return T[10 ^(log10(kmin) + (log10(kmax/kmin))*(i-1)/(nk-1))  for i in 1:nk]
+end
+
 function Θl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
     s = zero(T)
     xgrid = bg.x_grid

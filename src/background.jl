@@ -53,7 +53,7 @@ end
 
 #neglect neutrinos, this is for ionization debugging purposes only
 function oldH_a(a, par::AbstractCosmoParams)
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)                 
+    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
                         + Ω_Λ(par))
 end

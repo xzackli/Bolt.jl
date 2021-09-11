@@ -31,7 +31,7 @@ end
 # auxillary equations for saha_rhs
 const PeeblesT₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]  # TODO: make this a parameter of the ionization
 n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
-n_H(a, par) = n_b(a, par)  # ignoring helium for now
+n_H(a, par) = n_b(a, par) *(1-par.Y_p) #Adding Helium!
 saha_T_b(a, par) = PeeblesT₀ / a #j why does this take par?
 saha_rhs(a, par) = (m_e * saha_T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
     exp(-ε₀_H / saha_T_b(a, par))  # rhs of Callin06 eq. 12
@@ -188,6 +188,7 @@ function τ′(x, Xₑ_function, par, ℋ_function)
     a = x2a(x)
     #return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_a(a, par)
     return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_function(x)
+    #FIXME: n_H should include helium??
     #why not use bg spline? this is the only place "pure" ℋ_a is actually used outside of bg...
 end
 function oldτ′(x, Xₑ_function, par)
