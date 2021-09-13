@@ -231,7 +231,8 @@ function IonizationHistory(integrator::Peebles, par::ACP, bg::AB) where
     csb²_ = spline(csb²_pre * (Trad_.(x_grid) .- 1/3 *spline_∂ₓ(Trad_, x_grid).(x_grid)),x_grid)
 
 
-    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
+    #TODO NO REIONIZATION FOR PEEBLES (or just remove this)
+
     return IonizationHistory{T, IT}(
         Xₑ_,
         τ_,
