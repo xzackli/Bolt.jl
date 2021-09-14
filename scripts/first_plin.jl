@@ -4,20 +4,24 @@ using ForwardDiff
 using Plots
 using BenchmarkTools
 using Printf
+using Interpolations
+using Plots.PlotMeasures
 
 #input ingredients
 𝕡 = CosmoParams()
 n_q=15
-bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=n_q)
+bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=n_q)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)  #  𝕣 = Bolt.Peebles()
 ih = IonizationHistory(𝕣, 𝕡, bg)
 logqmin,logqmax = -6,-1
 logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
-k_grid = quadratic_k(0.1bg.H₀, 5000bg.H₀, 100) #quadratically spaced k points
 
-ℓᵧ=100 #cutoff
-ℓ_ν=100#10
-ℓ_mν=10
+kmin,kmax= 0.1bg.H₀*100,5000bg.H₀
+k_grid = log10_k(kmin,kmax,33)
+
+ℓᵧ=500 #cutoff
+ℓ_ν=500#10
+ℓ_mν=20
 reltol=1e-5 #cheaper  rtol
 x=0
 a=exp(x)
@@ -49,8 +53,8 @@ k_grid_hMpc = k_grid/(bg.H₀*3e5/100)
 
 #put together the matter transfer function (Newtonian gauge)
 #Newtonian perturbations
-δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h
-vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]* 𝕡.h
+δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]
+vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]
 ℳρN,ℳθN = ℳρ,ℳθ
 vmνN = -ℳθN./ k_grid
 
@@ -73,15 +77,24 @@ Tγ = (15/ π^2 *bg.ρ_crit *𝕡.Ω_r)^(1/4)
 #b
 plot(log10.(k_grid_hMpc),log10.(δbN))
 plot!(log10.(k_grid_hMpc),log10.(3bg.ℋ(x)*vbN./k_grid),ls=:dot)
-plot!(log10.(k_grid_hMpc),log10.(δb),ls=:dot)
+plot!(log10.(k_grid_hMpc),log10.(abs.(δb)),ls=:dot)
+
+
 #c
-plot(log10.(k_grid_hMpc),log10.(δcN))
+plot!(log10.(k_grid_hMpc),log10.(δcN))
 plot!(log10.(k_grid_hMpc),log10.(3bg.ℋ(x)*vcN./k_grid),ls=:dot)
-plot!(log10.(k_grid_hMpc),log10.(δc),ls=:dot)
+plot!(log10.(k_grid_hMpc),log10.(abs.(δc)),ls=:dot)
 #ν
-plot(log10.(k_grid_hMpc),log10.(ℳρN))
+plot!(log10.(k_grid_hMpc),log10.(ℳρN))
 plot!(log10.(k_grid_hMpc),log10.(3bg.ℋ(x)*vmνN./k_grid),ls=:dot)
-plot!(log10.(k_grid_hMpc),log10.(δmν),ls=:dot)
+plot!(log10.(k_grid_hMpc),log10.(abs.(δmν)),ls=:dot)
+
+#check that gauge transformation results in 1 at sub-horizon scales
+plot(log10.(k_grid_hMpc),k_grid_hMpc.*δbN ./ δb,label="b")
+ylims!(0.0008,.002)
+plot!(log10.(k_grid_hMpc),k_grid_hMpc.*δcN ./ δc,label="c")
+plot!(log10.(k_grid_hMpc),k_grid_hMpc.*ℳρN ./ δmν,label="n")
+hline!([1],c="black",ls=:dot)
 
 #put together gauge-invariant matter
 δm = (𝕡.Ω_m*δc + 𝕡.Ω_b*δb + Ω_ν*δmν) ./ Ωm
@@ -102,27 +115,24 @@ plot!(log10.(class_pk[1,:]),log10.(class_pk[2,:]),label="CLASS",ls=:dash)
 ylabel!(raw"$\log ~P_{L}(k)$")
 
 #interpolate to get ratio
+class_pk[1,:]
 itpclass = LinearInterpolation(class_pk[1,:],class_pk[2,:])
-minkcut=3
-
-using Plots.PlotMeasures #to be able to change padding for frac
+minkcut=1
 p2=plot(log10.(k_grid_hMpc[minkcut:end]), (PL_un[minkcut:end])./itpclass.(k_grid_hMpc[minkcut:end]),
-        legend=false,left_margin=4mm )
+        legend=false,left_margin=4mm,marker=:circle )
 hline!([1],ls=:dot,c=:black)
 ylabel!(raw"$\frac{P_{L,\rm{Bolt}}}{P_{L,\rm{CLASS}}}(k)$")
 xlabel!(raw"$\log ~k \ [h/Mpc]$")
 xlims!(log10(minimum(k_grid_hMpc)),log10(maximum(class_pk[1,:])))
-#5% agreement - tbh didnt expect much better based on other tests,
-#Especially since here not dealing with bad evolution due to small nubmer of rel multipoles
-#This is good enough to prototype the grad though
 
 
 l = @layout [a  ; b]
 plot(p1, p2, layout = l)
 title!("Plin CLASS - Bolt - z=$(@sprintf("%.0f", exp(-x)-1))")
-savefig("../compare/plin_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
+savefig("../compare/reion_plin_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
 
 #----
+#This is old
 #WIP try ForwardDiff copying Cl_TT code
 #Derivative of Ωm for plot
 
