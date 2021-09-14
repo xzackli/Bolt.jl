@@ -28,7 +28,6 @@ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) whe
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
                 saveat=hierarchy.bg.x_grid, dense=false,
-                # maxiters=1
                 )
     return sol
 end
@@ -53,23 +52,12 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
+        + 4Ω_ν * a^(-2) * 𝒩[0]
         + a^(-2) * ρℳ / bg.ρ_crit
         )
 
-    #put a k/ℋ everywhere Blas++11 puts a k...
-    # Θ[0] = Φ + 1/(k/ℋₓ) *τₓ′ * v_b
-    # #dipole is somehow very wrong, bunch of oscillations - FIXME check units/sign on τ
-    # Θ[1] = -2Φ′ + ((k/ℋₓ)^-2)*( -τₓ′′*ℋₓ^2 * v_b + -τₓ′*ℋₓ * (ℋₓ*v_b - csb² *δ_b/(k/ℋₓ) + (k/ℋₓ)*Φ) )
-    # Θ[2] = 0
-    # #massless neutrinos
-    # 𝒩[0] = Φ
-    # 𝒩[1] = -2Φ′
-    # 𝒩[2] = 0
-
-    #fixed
+    #fixed RSA
     Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-    # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
     Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
                      + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
     Θ[2] = 0
@@ -96,16 +84,22 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
 end
 
 function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
-    #evolve hierarchy up to RSA switch, default value is hierarchy.xᵣ=0, i.e. no RSA
-    xᵣ = hierarchy.xᵣ
-    soln=boltsolve()
-    uᵣ = soln(xᵣ)
-    prob = ODEProblem{true}(hierarchy!, uᵣ, (xᵣ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=hierarchy.bg.x_grid[hierarchy.bg.x_grid>xᵣ],
-                dense=false,
-                # maxiters=1
-                )
+    #call solve as usual first
+    perturb = boltsolve(hierarchy, reltol=reltol)
+    x_grid = hierarchy.bg.x_grid
+    pertlen = 2(hierarchy.ℓᵧ+1)+(hierarchy.ℓ_ν+1)+(hierarchy.ℓ_mν+1)*hierarchy.nq+5
+    results=zeros(pertlen,length(x_grid))
+    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
+    #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
+    this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
+    results_rsa = results[:,x_grid.>this_rsa_switch]
+    #(re)-compute the RSA perts so we can write them to the output vector
+    for i in 1:length(x_grid_rsa)
+        rsa_perts!(view(results_rsa,:,i),hierarchy,x_grid_rsa[i]) #to mutate need to use view...
+    end
+    results[:,x_grid.>this_rsa_switch] = results_rsa
+    sol = results
     return sol
 end
 
@@ -185,44 +179,12 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
                                   + σℳ / bg.ρ_crit /4
                                   )
 
-    # println("New - Size of terms in ij eqn. Ω_ν: ", Ω_ν * 𝒩[2]/2, " and ρℳ ",  σℳ / bg.ρ_crit /4)
-
-
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         )
-    # println("New - Size of terms in 00 eqn. Ω_ν: ", 4Ω_ν * a^(-2) * 𝒩[0]/2, " and ρℳ ",  a^(-2) * ρℳ / bg.ρ_crit )
-    #for debugging don't print dual junk, irritatingly there is no way around it except for this...
-    # if typeof(Φ)==Float64
-    #     println("x = ", x)
-    #     println("Phi' = ", Φ′)
-    #     println("Psi = ", Ψ)
-    #     println("second term = ", k^2 / (3ℋₓ^2) * Φ )
-    #     println("third term = ", H₀² / (2ℋₓ^2) * (
-    #         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
-    #         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
-    #         + a^(-2) * ρℳ / bg.ρ_crit
-    #         ))
-    #     println("third term a) (no neutrinos) = ", H₀² / (2ℋₓ^2) * (
-    #         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
-    #         # + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
-    #     #     #+ a^(-2) * ρℳ / bg.ρ_crit
-    #         ))
-    #     println("third term b) (neutrinos only)= ", H₀² / (2ℋₓ^2) * (
-    #         # Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b + 4Ω_r * a^(-2) * Θ[0]
-    #          4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
-    #         + a^(-2) * ρℳ / bg.ρ_crit
-    #         ))
-    #     println("-Phi = ", -Φ)
-    #     println("Radiation split = ", -12H₀² / k^2 / a^2 * (Ω_r * Θ[2])
-    #                                   +  H₀² / (2ℋₓ^2) * 4Ω_r * a^(-2) * Θ[0])
-    #     println("Neutrino split = ", -12H₀² / k^2 / a^2 * (Ω_ν * 𝒩[2])
-    #                                   +  H₀² / (2ℋₓ^2) * 4Ω_ν * a^(-2) * 𝒩[0])
-    #     println("Matter term = ", H₀² / (2ℋₓ^2) *( Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b ))
-    # end
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
@@ -263,19 +225,10 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         𝒩[1] = -2ℋₓ/k *Φ′
         𝒩[2] = 0
 
-        #try manual zeroing
+        # manual zeroing to avoid saving garbage
         𝒩′[:] = zeros(ℓ_ν+1)
         Θ′[:] = zeros(ℓᵧ+1)
         Θᵖ′[:] = zeros(ℓᵧ+1)
-
-        #try manual u update
-        #This doesn't work because can't mutate inside
-        # u[1] = Θ[0]
-        # u[2] = Θ[1]
-        # u[3] = Θ[2]
-        # u[2(ℓᵧ+1)+1] = 𝒩[0]
-        # u[2(ℓᵧ+1)+2] = 𝒩[1]
-        # u[2(ℓᵧ+1)+3] = 𝒩[2]
 
     else
         #do usual hierarchy
@@ -338,16 +291,6 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     Φ = 1.0
     #choosing Φ=1 forces the following value for C, the rest of the ICs follow
     C = -( (15 + 4f_ν)/(20 + 8f_ν) )
-
-    #old wrong ICs
-    # δ = 3Φ / 2
-    # δ_b = δ
-    # v = k / (2ℋₓ) * Φ
-    # v_b = v
-
-    # photon hierarchy
-    # Θ[0] = Φ / 2
-    # Θ[1] = -k * Φ / (6ℋₓ)
 
     #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4
