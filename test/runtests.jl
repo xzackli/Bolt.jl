@@ -37,5 +37,6 @@ end
     bg = Background(𝕡)
     𝕣 = Bolt.RECFAST(bg=bg, OmegaB=𝕡.Ω_b, Yp=𝕡.Y_p)
     xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
-    @test all(abs.(Xe_fort .- xe_bespoke) .< 1e-5)
+    #change to only test pre-reion (z≧50)
+    @test all(abs.(Xe_fort[1:end-5] .- xe_bespoke[1:end-5]) .< 1e-5)
 end
