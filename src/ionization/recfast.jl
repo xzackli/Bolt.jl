@@ -1,6 +1,6 @@
 
 
-@with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator @deftype T
+@with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator #@deftype T
     bg::AB  # a RECFAST has an associated background evolution
     H0_natural_unit_conversion = ustrip(u"s", unnatural(u"s", 1u"eV^-1"))
 
@@ -86,8 +86,8 @@
 
     # Cosmology
 	#FIXME other cosmo
-    Yp = 0.24
-    OmegaB = 0.046  # TODO: should replace during GREAT GENERALIZATION
+    Yp::T = 0.24
+    OmegaB::T = 0.046  # TODO: should replace during GREAT GENERALIZATION
     HO =  bg.H₀ / H0_natural_unit_conversion
     Tnow = 2.725
 
