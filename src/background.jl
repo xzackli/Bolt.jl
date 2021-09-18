@@ -118,12 +118,14 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
     #e.g. CLASS uses tolerances of 1e-5 for bg and 1e-3 for perts'
 
     #println([ρP_0(x2a(x), par,quad_pts,quad_wts) for x in x_grid])
+    # println("background T: ", T)
 
     #FIXME do the tuple juggling to avoid calling quad twice for ρ and P
     ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
     # P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
+    # println("ℋ_ T: ",typeof(ℋ_))
     return Background(
         T(H₀(par)),
         T(η(0.0, par,quad_pts,quad_wts)),

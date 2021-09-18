@@ -1,4 +1,19 @@
+abstract type IonizationIntegrator end
+abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T,1}} end
 
+struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
+	τ₀::T
+    Xₑ::IT
+    τ::IT
+    τ′::IT
+    τ′′::IT
+    g̃::IT
+    g̃′::IT
+    g̃′′::IT
+    Tmat::IT
+    csb²::IT
+    # Trad::IT #This is never used
+end
 
 @with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator #@deftype T
     bg::AB  # a RECFAST has an associated background evolution
@@ -85,11 +100,13 @@
     Heswitch::Int64 = 6
 
     # Cosmology
-	#FIXME other cosmo
     Yp::T = 0.24
     OmegaB::T = 0.046  # TODO: should replace during GREAT GENERALIZATION
     HO =  bg.H₀ / H0_natural_unit_conversion
-    Tnow = 2.725
+	OmegaG::T = 5.042e-5 #not sure this is the best way to do this
+	Tnow = (15/ π^2 *bg.ρ_crit *OmegaG)^(1/4) * 1.160218e4 #last thing is eV2K
+	# This was hardcoded originally as: Tnow = 2.725, fixes issue downstream with Duals
+	# Had to change RECFAST test temperature though - should double check this
 
     # sort out the helium abundance parameters
     mu_H = 1 / (1 - Yp)			 # Mass per H atom
@@ -309,8 +326,8 @@ function recfast_xe(𝕣::RECFAST{T};
 
     z = zinitial
     n = 𝕣.Nnow * (1 + z)^3
-    y = zeros(3)  # array is x_H, x_He, Tmat (Hydrogen ionization, Helium ionization, matter temperature)
-
+    y = zeros(T,3)  # array is x_H, x_He, Tmat (Hydrogen ionization, Helium ionization, matter temperature)
+	# println("T: ", T)
     y[3] = 𝕣.Tnow * (1 + z)
     Tmat = y[3]
 
@@ -346,7 +363,7 @@ function recfast_xe(𝕣::RECFAST{T};
             rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He2/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
             rhs = rhs*1.  # ratio of g's is 1 for He++ <-> He+
             x0 = 0.5 * (sqrt( (rhs-1-𝕣.fHe)^2 + 4*(1+2𝕣.fHe)*rhs) - (rhs-1-𝕣.fHe) )
-            y[1] = x_H0
+			y[1] = x_H0
             y[2] = x_He0
             y[3] = 𝕣.Tnow*(1+z)
 	    elseif (z > 3500.)
@@ -432,6 +449,8 @@ function recfast_xe(𝕣::RECFAST{T};
 		sol = solve(prob, alg, reltol=𝕣.tol)
 		# 3. Overwrite the Tm array before passing to csb function
 		Tmat = sol(zend)
+		# println("xe_reio ", typeof(x_reio))
+		# println("tmat sol ", typeof(Tmat))
 		out_Tmat[i] = Tmat
 	end
 
@@ -441,11 +460,10 @@ end
 RECFASTredshifts(Nz, zinitial, zfinal) =
     range(zinitial, stop=zfinal, length=Nz+1)[2:end]
 
-
-function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
-                           {T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
+function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::AbstractBackground{T}) where
+                           T#{T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
     x_grid = bg.x_grid
-
+	# println("recfast T: ", T)
     # GRAFT RECFAST ONTO BOLT. TODO: MEGA-REFACTOR ==============
     Nz = 100000 #add extra two zero for reion otherwise too low res, get wiggles (was spacing of Δz=1)
 	#FIXME treat these wiggles better!
@@ -459,6 +477,9 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
     Trad_function = x -> 𝕣.Tnow * (1 + x2z(x))
     Tmat_function = x -> (x < xinitial_RECFAST) ?
         Trad_function(x) : RECFAST_Tmat_z(x2z(x))
+	# println("Type of Xe function: ", typeof(Xₑ_function))
+	# println("Type of Trad function: ", typeof(Trad_function))
+	# println("Type of Tmat function: ", typeof(Tmat_function))
 
     # =====================================================
 	#j - do we really need bg to be passed to IonizationHistory separately from 𝕣.bg?
@@ -468,19 +489,24 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
     g̃ = g̃_function(τ, τ′)
 
     Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
+	# println("Xe_ T: ",typeof(Xₑ_))
     τ_ = spline(τ.(x_grid), x_grid)
     g̃_ = spline(g̃.(x_grid), x_grid)
-    IT = typeof(Xₑ_)
-
+    # IT = typeof(Xₑ_)
+	# println("IT", IT)
+	# println("Test ex==xe function ", Xₑ_function.(x_grid))
+	# println("Test tmat function ", Tmat_function.(x_grid))
     Tmat_ = spline(Tmat_function.(x_grid), x_grid)
-    Trad_ = spline(Trad_function.(x_grid), x_grid)
+    # Trad_ = spline(Trad_function.(x_grid), x_grid)
+	# Tmat_ = Trad_ #testing
 	#sound speed
 	csb²_pre = @.( 𝕣.C^-2 * 𝕣.k_B/𝕣.m_H * ( 1/𝕣.mu_T + (1-𝕣.Yp)*Xₑ_(x_grid) ) ) #not the most readable...
 	#probably this is not the best way to do this...
 	csb²_ = spline(csb²_pre .* (Tmat_.(x_grid) .- 1/3 *spline_∂ₓ(Tmat_, x_grid).(x_grid)),x_grid)
 
-    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {I, IT}???
-    return IonizationHistory{T, IT}(
+    # TO FIX, WHY DOES THIS CONSTRUCTOR REQUIRE {T, IT}???
+    return IonizationHistory(
+		T(τ(0.)),
         Xₑ_,
         τ_,
         spline_∂ₓ(τ_, x_grid),
@@ -491,6 +517,6 @@ function IonizationHistory(𝕣::RECFAST{T}, par::ACP, bg::AB) where
         Tmat_,
 		#spline_∂ₓ(Tmat_, x_grid),
 		csb²_,
-        Trad_
+        # Trad_ #why do we even have this?
     )
 end
