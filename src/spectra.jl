@@ -113,10 +113,8 @@ function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
     δb = δbN - 3bg.ℋ(x)*vbN ./k
     #assume neutrinos fully non-relativistic and can be described by fluid (ok at z=0)
     δmν = ℳρN - 3bg.ℋ(x)*vmνN ./k
-    # println(δb,δmν)
     δm = (𝕡.Ω_m*δc .+ 𝕡.Ω_b*δb .+ Ω_ν*δmν) ./ Ωm
-    # println(δm)
-    As=1e-10*exp(3.043)
+    As=𝕡.A#1e-10*exp(3.043)
     k_hMpc=k/(bg.H₀*3e5/100)
     Pprim = As*(k_hMpc./0.05).^(𝕡.n-1)
     PL= (2π^2 ./ k_hMpc.^3).*(δm*𝕡.h).^2 .*Pprim
