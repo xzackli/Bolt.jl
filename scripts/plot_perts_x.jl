@@ -112,8 +112,6 @@ plot(class_pxs[1,:],log10.(abs.(class_pxsnf[5,:])),
 plot!(x_grid, log10.(abs.(results_with_rsa[1+2(ℓᵧ+1),:]* 𝕡.h*4)),
       label=raw"$4 h \mathcal{N}_{0,\rm{Bolt}}$",ls=:dash)
 vline!([this_rsa_switch],label="RSA switch",ls=:dot)
-plot!(x_grid_rsa, log10.(abs.(4results_rsa[1+2(ℓᵧ+1),:]* 𝕡.h)),
-      label=raw"$4h (\Phi_{\rm{Bolt}}+ 1/k τₓ′ * v_b)$",ls=:dash)
 ylims!(-.2,1)
 xlims!(-7,0)
 #neutrino 𝒩1 dipole
@@ -191,4 +189,3 @@ xlabel!(raw"$x$")
 ylabel!(raw"$\delta_{i}(x)$")
 title!("Compare CLASS - Bolt - k=$(@sprintf("%.3f", kclass))")
 savefig("../compare/reion_both_class_bolt_perts_x_k$(@sprintf("%.3f", kclass)).png")
-# τ_grid_aligned = bg.η.(x_grid_aligned)*(bg.H₀*3e5/100)  / .7 #convert to τ to compare to CLASS2 figures
