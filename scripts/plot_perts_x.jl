@@ -14,26 +14,36 @@ bg = Background(𝕡; x_grid=-20.0:0.004:0.0, nq=n_q)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 x_grid = collect(-20:0.004:0.0)
 
-#choose k mode from the 3 I have been looking at
-kp03 =  1000bg.H₀*.3/.333 /10
-kp3 = kp03*10
-k1 = kp3 / .3
-k = kp03 #k1#kp3  #comment/uncomment this line to swap mode comparisons
-#fudge factors to match the CLASS k mode values for the saved comparisons
-fudge_class_03 = 0.029158189805725376/0.030030030030030026 #fudge factor so we get the right .03
-fudge_class_3 = 0.3000962432008842/0.3003003003003003 #fudge factor so we get the right .3
-fudge_class_1 = 0.9994488179410103/1.001001001001001#fudge_class_3 #fudge_class_03
-fudge_class = fudge_class_03
-# fudge_class_lowres_03 = 0.020881445483105634/0.029158189805725376
-kbolt = k/(bg.H₀*3e5/100)*fudge_class
-kuse = k * fudge_class
+# Choose a k-mode to compare to saved class perturbations at
+k_options = ["p03", "p3", "1p0"] #choose from k = [0.03h/Mpc, 0.3h/Mpc, 1.0h/Mpc]
+k_choice = k_options[1]
+#Read in CLASS perturbations
+#CLASS keys (for reference):
+#['k (h/Mpc)', 'd_g', 'd_b', 'd_cdm', 'd_ur', 'd_ncdm[0]', 'd_tot',
+#'phi', 'psi', 't_g', 't_b', 't_cdm', 't_ur', 't_ncdm[0]', 't_tot']
+#reading files for two diff k modes
+ret = open( @sprintf("./test/data/class_px_k%s.dat",k_choice),"r" ) do datafile #note that these should only be used for comparing nonreion
+    [parse.(Float64, split(line)) for line in eachline(datafile)]
+end
+#By default CLASS uses fluid approximation, which introduces almost 2x error for massive neutrinos at lower x
+#So compare to no fluid case to see if hierarchy is right
+retnf = open( @sprintf("./test/data/class_px_k%s_nofluid_re.dat",k_choice),"r" ) do datafile
+# an example that goes to early times -> retnf = open("./test/data/lowres_class_px_kp03_nofluid.dat","r") do datafile
+    [parse.(Float64, split(line)) for line in eachline(datafile)]
+end
+#the second column is just a repeated k value, so remember it and delete col
+kclass = retnf[2][1] #read class k mode from file (in h/Mpc)
+k = (bg.H₀*3e5/100)*kclass #get k in our units
+class_pxs = transpose(reduce(hcat,ret[1:end .!= 2]))
+class_pxsnf = transpose(reduce(hcat,retnf[1:end .!= 2]))
+dipole_fac = kclass/𝕡.h #for later normalization
 
 #see above plot but for this particular mode at this cosmology the k condition happens later
-this_rsa_switch = x_grid[argmin(abs.(kuse .* bg.η.(x_grid) .- 45))]
+this_rsa_switch = x_grid[argmin(abs.(k .* bg.η.(x_grid) .- 45))]
 
 
 xhor = x_grid[argmin(abs.(k ./ (2π* bg.ℋ.(x_grid).*𝕡.h) .- 1))] #horizon crossing ish
-println("k = ", kbolt," log10k = ", log10(kbolt), " h/Mpc")
+println("k = ", kclass," log10k = ", log10(kclass), " h/Mpc")
 
 #pert setup
 ℓᵧ=50
@@ -43,7 +53,7 @@ reltol=1e-5 #cheaper  rtol
 pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
 results=zeros(pertlen,length(x_grid))
 ℳρ,ℳσ = zeros(length(x_grid)),zeros(length(x_grid)) #arrays for the massive neutrino integrated perts
-hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, kuse, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
+hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
 #solve
 perturb = boltsolve(hierarchy; reltol=reltol)
 
@@ -61,29 +71,6 @@ end
 #I don't know how to do the DE.jl splining over all the perts at once so this is just an array...
 results_with_rsa = boltsolve_rsa(hierarchy; reltol=reltol)
 
-#Read in CLASS perturbations
-#CLASS keys (for reference):
-#['k (h/Mpc)', 'd_g', 'd_b', 'd_cdm', 'd_ur', 'd_ncdm[0]', 'd_tot',
-#'phi', 'psi', 't_g', 't_b', 't_cdm', 't_ur', 't_ncdm[0]', 't_tot']
-#reading files for two diff k modes
-# ret = open("./test/data/class_px_kp3.dat","r") do datafile
-ret = open("./test/data/class_px_kp03.dat","r") do datafile #note that these should only be used for comparing nonreion
-    [parse.(Float64, split(line)) for line in eachline(datafile)]
-end
-#By default CLASS uses fluid approximation, which introduces almost 2x error for massive neutrinos at lower x
-#So compare to no fluid case to see if hierarchy is right
-# retnf = open("./test/data/class_px_k1p0_nofluid_re.dat","r") do datafile
-# retnf = open("./test/data/class_px_kp3_nofluid.dat","r") do datafile
-retnf = open("./test/data/class_px_kp03_nofluid_re.dat","r") do datafile
-# an example that goes to early times -> retnf = open("./test/data/lowres_class_px_kp03_nofluid.dat","r") do datafile
-    [parse.(Float64, split(line)) for line in eachline(datafile)]
-end
-#the second column is just a repeated k value, so remember it and delete col
-kclass = retnf[2][1]
-class_pxs = transpose(reduce(hcat,ret[1:end .!= 2]))
-class_pxsnf = transpose(reduce(hcat,retnf[1:end .!= 2]))
-println("kclass is ", kclass, " kbolt is ",kbolt, " ratio (c/b) is ", kclass/kbolt)
-dipole_fac = k/bg.H₀/3e5*100/.7
 
 #Look at the massless species to check RSA
 
