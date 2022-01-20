@@ -2,11 +2,11 @@ module Bolt
 
 export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
-export IonizationHistory, AbstractIonizationHistory
-export Peebles
-export ρ_σ,ρP_0,f0,dlnf0dlnq #FIXME: quick hack to look at perts
-export Hierarchy, boltsolve, BasicNewtonian,unpack
-export source_grid, quadratic_k, cltt
+export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
+export Peebles, PeeblesI
+export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
+export Hierarchy, boltsolve, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa
+export source_grid, quadratic_k, cltt,log10_k,plin
 export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
 using Parameters
@@ -38,6 +38,7 @@ abstract type AbstractCosmoParams{T} end
     Ω_r = 5.042e-5  # radiation density
     Ω_b = 0.046  # baryon density
     Ω_m = 0.224  # matter density
+    A = 2.097e-9 # scalar amplitude, 1e-10*exp(3.043)
     n = 1.0  # spectral index
     Y_p = 0.24  # primordial helium fraction
     N_ν = 3.046 #effective number of relativisic species (PDG25 value)
