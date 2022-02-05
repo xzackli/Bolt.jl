@@ -6,6 +6,7 @@ export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
 export Peebles, PeeblesI
 export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
 export Hierarchy, boltsolve, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa
+export IE
 export source_grid, quadratic_k, cltt,log10_k,plin
 export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
@@ -51,6 +52,6 @@ include("ionization/ionization.jl")
 include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
-
+# include("ie.jl")
 
 end

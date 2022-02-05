@@ -66,9 +66,18 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     𝒩[1] = -2ℋₓ/k *Φ′
     𝒩[2] = 0
 
+    #set polarization to zero
+    Θᵖ[0] = 0
+    Θᵖ[1] = 0
+    Θᵖ[2] = 0
+
     u[1] = Θ[0]
     u[2] = Θ[1]
     u[3] = Θ[2]
+
+    u[(ℓᵧ+1)+1] = Θᵖ[0]
+    u[(ℓᵧ+1)+2] = Θᵖ[1]
+    u[(ℓᵧ+1)+3] = Θᵖ[2]
 
     u[2(ℓᵧ+1)+1] = 𝒩[0]
     u[2(ℓᵧ+1)+2] = 𝒩[1]
@@ -220,10 +229,16 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
                          + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
         Θ[2] = 0
+
         #massless neutrinos
         𝒩[0] = Φ
         𝒩[1] = -2ℋₓ/k *Φ′
         𝒩[2] = 0
+
+        #set polarization to zero
+        Θᵖ[0] = 0
+        Θᵖ[1] = 0
+        Θᵖ[2] = 0
 
         # manual zeroing to avoid saving garbage
         𝒩′[:] = zeros(ℓ_ν+1)
