@@ -21,7 +21,6 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_ν=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_ν,ℓ_mν, nq)
 
 
-
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)

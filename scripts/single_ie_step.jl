@@ -27,17 +27,17 @@ function g(x̃, τ′,bg)
     return @.(-τ′(x̃) * exp(-τ_integrated))
 end
 
-
 #Temperature quadrupole integrand
 function IΘ2(x, k,
-              Θ0, v_b, Φ′, Ψ,
+              Π, Θ0, v_b, Φ′, Ψ,
               ih, bg)
     #all pert variables are at all x′ < x
     τ′,η = ih.τ′,bg.η #all splines of x
     x′= bg.x_grid[bg.x_grid.<x] #points do not include current timestep
     ḡ = g(x′ ,τ′, bg)
-    y = k*( η(x)-η(x′) )#Bessel argument
-    IΘ2 = @.(  ḡ*(  ( Θ0 - Φ′/ τ′(x′) )*j2(y) + ( v_b -k*Ψ / τ′(x′) )*j2′(y)  - Π*R2(y) / 2  )  )
+    y = @.(  k*( η(x)-η(x′) )  )#Bessel argument
+    #NB we had to flip the signs here on all the collision terms to account for sign of our τ′
+    IΘ2 = @.  ḡ*(  ( -Θ0 - Φ′/ τ′(x′) )*j2(y) + ( -v_b - k*Ψ / τ′(x′) )*j2′(y)  + Π*R2(y) / 2  )
     return IΘ2
 end
 
@@ -49,7 +49,7 @@ function IΠ(x, k, Π, ih, bg)
     ḡ = g(x′ ,τ′, bg)
     # println("g max argument: ", maximum(x′))
     # println("g: ", ḡ[end-2:end])
-    y = k.*( η(x).-η.(x′) )#Bessel argument
+    y = @.(  k*( η(x)-η(x′) )  )#Bessel argument
     IE2 = @. ḡ*j2bx2(y)*Π
     # println("y = ", y[end-2:end])
     # println("j2x/x^2: ",( j2bx2.(y) )[end-2:end])
@@ -64,12 +64,13 @@ end
 #O(6) Taylor expansion expressions for small values of argument to avoid instability
 #Here I am (almost) following Kamionkowski, but modify transtions slightly to reach minimum disagreement
 #these are extremely accurate, 1e-14 tol in matching zone
+#TODO move these to utils.jl
 j2(x) = (x > 0.01) ? -( 3x*cos(x) + (x^2 - 3)*sin(x) ) / x^3 : x^2 /15 - x^4 /210 + x^6 /7560
 j2bx2(x)  =  (x > 0.06) ? -( 3x*cos(x) + (x^2 - 3)*sin(x) ) / x^5 : 1/15 - x^2 /210 + x^4 /7560 - x^6 /498960
 j2′(x) = (x > 0.01) ? ( -x*(x^2 -9)*cos(x) + (4x^2 -9)*sin(x) ) / x^4 : 2x /15 - 2x^3 /105 + x^5 /1260
 #these are less accurate, 1e-9ish tol in matching zone, have to match earlier
 j2′′(x) = (x > 0.2) ? ( x*(5x^2 -36)*cos(x) + (x^4 - 17x^2 +36)*sin(x) ) / x^5 : 2/15 - 2x^2 /35 + x^4 /252 - x^6 /8910
-R2(x) = (x > 0.2) ? -( j2(x) + 3j2′′(x) )/2 : -1/5 + 11x^2 /210 -x^4 /280 +17x^4 /166320
+R2(x) = (x > 0.2) ? -( j2(x) + 3j2′′(x) ) / 2 : -1/5 + 11x^2 /210 -x^4 /280 +17x^4 /166320
 
 # test the integrands
 𝕡 = CosmoParams()
@@ -80,16 +81,63 @@ bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=2):ret[end,1], nq=n_q)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 k = (bg.H₀*3e5/100)*kMpc
 
-# ℓᵧ=2
-# ℓ_ν=50
-# ℓ_mν=20
-# reltol=1e-5 #cheaper  rtol
-# pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
-# results=zeros(pertlen,length(x_grid))
-# ℳρ,ℳσ = zeros(length(x_grid)),zeros(length(x_grid)) #arrays for the massive neutrino integrated perts
-# ie = IE(BasicNewtonian(), 𝕡, bg, ih, k, ℓ_ν, ℓ_mν,n_q)
-# #solve
-# perturb = boltsolve(ie; reltol=reltol)
+ℓᵧ=2
+ℓ_ν=50
+ℓ_mν=20
+reltol=1e-5 #cheaper  rtol
+(ℓ_mν+1)*n_q
+pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
+results=zeros(pertlen,length(bg.x_grid))
+ℳρ,ℳσ = zeros(length(bg.x_grid)),zeros(length(bg.x_grid)) #arrays for the massive neutrino integrated perts
+ie = IE(BasicNewtonian(), 𝕡, bg, ih, k, 400, ℓ_ν, ℓ_mν, n_q)
+
+ieic = initial_conditions(bg.x_grid[1],ie)
+
+Φ′ic, Ψic = get_Φ′_Ψ(ieic,ie,bg.x_grid[1])
+Θ0ic, v_bic = ieic[1],ieic[end]
+Πic = Θ0ic + ieic[3] + ieic[4] + ieic[6]
+#first temp step
+IΘ2(bg.x_grid[1], k, Πic, Θ0ic, v_bic, Φ′ic, Ψic, ih, bg)
+#This doesn't work, cumul_integrate in τ in g uses trapz, which wants at least 2 poitns
+#^So we need at least a guess for what the value of Θ2 is after the first timestep
+# or what all the other perturbation variables are after the first time step
+#Can probably just use some analytic guess like we use to set up ICs? For one step early on not much happens anyways
+#This first step is where Kamionkowski would use some TCA approximation (I think)
+
+#punt on this and use hierarchy "answers" for now to check the integrand
+hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓ_ν, ℓ_ν, ℓ_mν,n_q)
+all_extra_perts = hcat([ [p for p in get_Φ′_Ψ(ret[i,2:end],hierarchy,bg.x_grid[i])] for i in 1:length(ret[:,1]) ]...)
+Φ′h,Ψh = all_extra_perts[1,:],all_extra_perts[2,:]
+
+#check Ψ against Φ, and Φ' qualitatively
+plot(bg.x_grid, log10.(-Φ′h))
+plot(bg.x_grid, log10.(abs.(Ψh)))
+plot!(bg.x_grid, log10.(abs.(ret[:,end-4])))
+
+Θ0h = ret[:,1+1]
+Πh, v_bh = ret[:,1+3] + ret[:,1+1+51]+ret[:,1+3+51], ret[:,end]
+
+i=length(ret[:,1])
+IΘ2(bg.x_grid[i], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg)
+
+p0=plot()
+for i in 3:length(ret[:,1])
+    plot!(p0,bg.x_grid[1:i],IΘ2(bg.x_grid[i], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg))
+end
+p0
+
+p0 = plot(ret[:,1],ret[:,1+3])
+ieresT = [ integrate( ret[:,1][ret[:,1].<ret[i,1]],#bg.η(ret[:,1][ret[:,1].<ret[i,1]]).*bg.ℋ(ret[:,1][ret[:,1].<ret[i,1]]),
+                     IΘ2(ret[i,1], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg)
+                    )
+          for i in 4:length(ret[:,1])]
+plot!(ret[4:end,1],ieresT )
+xlims!(p0,-8,-3)
+vline!(p0,[ret[1500,1]])
+hline!(p0,[0])
+
+#solve
+perturb = boltsolve(ie; reltol=reltol)
 
 # Φ′, Ψ = get_Φ′_Ψ(u,ie,x)
 
@@ -97,13 +145,34 @@ k = (bg.H₀*3e5/100)*kMpc
 #could hack and pass an ode with dy/dt = 0, but this is grosser than below
 function get_Φ′_Ψ(u,ie::IE{T},x) where T
     #TODO: can streamline hierarchy and source funcs with this also
-    k, ℓᵧ, par, bg, ih, nq = ie.k, ie.ℓᵧ, ie.par, ie.bg, ie.ih,ie.nq
+    k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih,ie.nq
     Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ =  bg.ℋ(x)
     a = x2a(x)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
     ℓ_ν = ie.ℓ_ν
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+                                  Ω_ν * 𝒩[2]
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩[0]
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+    return Φ′,Ψ
+end
+function get_Φ′_Ψ(u, hierarchy::Hierarchy{T},x) where T
+    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
+    ℋₓ =  bg.ℋ(x)
+    a = x2a(x)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    ℓ_ν = ie.ℓ_ν
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                   Ω_ν * 𝒩[2]
@@ -137,7 +206,7 @@ istep=100
 imin,imax=500,1700
 for i in imin:istep:imax
     plot!(p1,ret[1:i,1],
-         log10.(abs.(IΠ(ret[i,1], k, ret[i,1+3]+ret[i,1+1+51]+ret[i,1+3+51],ih,bg ))
+         log10.(abs.(IΠ(ret[i,1], k, ret[1:i,1+3]+ret[1:i,1+1+51]+ret[1:i,1+3+51],ih,bg ))
          ))
 end
 p1

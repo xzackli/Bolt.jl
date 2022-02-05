@@ -14,6 +14,7 @@ struct IE{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
     ℓ_mν::Int
     nq::Int
 end
+
 IE(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, Nᵧ=400, ℓ_ν=8, ℓ_mν=10, nq=15) = IE(integrator, par, bg, ih, k, Nᵧ, ℓ_ν,ℓ_mν, nq)
 
@@ -61,9 +62,18 @@ function rsa_perts!(u, ie::IE{T},x) where T
     𝒩[1] = -2ℋₓ/k *Φ′
     𝒩[2] = 0
 
+    #set polarization to zero
+    Θᵖ[0] = 0
+    Θᵖ[1] = 0
+    Θᵖ[2] = 0
+
     u[1] = Θ[0]
     u[2] = Θ[1]
     u[3] = Θ[2]
+
+    u[(ℓᵧ+1)+1] = Θᵖ[0]
+    u[(ℓᵧ+1)+2] = Θᵖ[1]
+    u[(ℓᵧ+1)+3] = Θᵖ[2]
 
     u[2(ℓᵧ+1)+1] = 𝒩[0]
     u[2(ℓᵧ+1)+2] = 𝒩[1]
@@ -100,7 +110,6 @@ end
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, ie::IE{T, BasicNewtonian}) where T
-    Nᵧ = ie.ℓᵧ
     ℓ_ν =  ie.ℓ_ν
     ℓ_mν = ie.ℓ_mν #should be smaller than others
     nq = ie.nq
@@ -113,134 +122,139 @@ function unpack(u, ie::IE{T, BasicNewtonian}) where T
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
 
-function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
-    # compute cosmological quantities at time x, and do some unpacking
-    k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih, ie.nq
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
-    a = x2a(x)
-    R = 4Ω_r / (3Ω_b * a)
-    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    csb² = ih.csb²(x)
-
-
-    ℓ_ν = ie.ℓ_ν
-    ℓ_mν =  ie.ℓ_mν
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, ie)  # will be sweetened by .. syntax in 1.6
-
-
-    #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    # metric perturbations (00 and ij FRW Einstein eqns)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]#add rel quadrupole
-                                  + σℳ / bg.ρ_crit /4
-                                  )
-
-    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-        + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
-        + a^(-2) * ρℳ / bg.ρ_crit
-        )
-
-    # matter
-    δ′ = k / ℋₓ * v - 3Φ′
-    v′ = -v - k / ℋₓ * Ψ
-    δ_b′ = k / ℋₓ * v_b - 3Φ′
-    v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
-
-    # neutrinos (massive, MB 57)
-    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
-        ϵ = √(q^2 + (a*m_ν)^2)
-        df0 = dlnf0dlnq(q,par)
-        #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
-        ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
-        for ℓ in 2:(ℓ_mν-1)
-            ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
-        end
-        ℳ′[ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case but w/ q/ϵ
-    end
-
-    # RSA equations (implementation of CLASS default switches)
-    # println("k condition ", k*ηₓ)
-    # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
-    # if (k*ηₓ > 45) println("k condition satisfied") end
-    # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
-    #*sqrt(H₀²)< 1) #is this ℋ or H0?
-    if rsa_on
-        # println("INSIDE RSA")
-        #photons
-        Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-        # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
-        Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
-                         + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
-        Θ[2] = 0
-        #massless neutrinos
-        𝒩[0] = Φ
-        𝒩[1] = -2ℋₓ/k *Φ′
-        𝒩[2] = 0
-
-        # manual zeroing to avoid saving garbage
-        𝒩′[:] = zeros(ℓ_ν+1)
-        Θ′[:] = zeros(ℓᵧ+1)
-        Θᵖ′[:] = zeros(ℓᵧ+1)
-
-    else
-        #do usual ie
-        # relativistic neutrinos (massless)
-        𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-        𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
-        for ℓ in 2:(ℓ_ν-1)
-            𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
-        end
-        #truncation (same between MB and Callin06/Dodelson)
-        𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]
-
-
-        # photons
-        Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-        #Temp IE:
-        Θ[2] = IE_solve(∫Θ₂,xᵢ,x,Nᵧ) #how to choose xᵢ?
-        Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
-        Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
-
-        # polarized photons
-        #Polzn IE:
-        Π = IE_solve(∫Π,xᵢ,x,Nᵧ)
-        Θᵖ[2] = Π - Θᵖ[0] - Θ[2]#get Θᵖ′[2] from Π again - this easy?
-
-        Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
-        Θᵖ′[1] = k / (3ℋₓ) * Θᵖ[0] - 2k / (3ℋₓ) * Θᵖ[2] + τₓ′ * Θᵖ[1] #usual ie term but just for ℓ=1
-
-    end
-    #END RSA
-
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
-    return nothing
-end
+# function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
+#     # compute cosmological quantities at time x, and do some unpacking
+#     k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih, ie.nq
+#     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+#     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+#     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+#     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+#     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+#     a = x2a(x)
+#     R = 4Ω_r / (3Ω_b * a)
+#     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+#     csb² = ih.csb²(x)
+#
+#
+#     ℓ_ν = ie.ℓ_ν
+#     ℓ_mν =  ie.ℓ_mν
+#     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+#     Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, ie)  # will be sweetened by .. syntax in 1.6
+#
+#
+#     #do the q integrals for massive neutrino perts (monopole and quadrupole)
+#     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+#     # metric perturbations (00 and ij FRW Einstein eqns)
+#     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+#                                   Ω_ν * 𝒩[2]#add rel quadrupole
+#                                   + σℳ / bg.ρ_crit /4
+#                                   )
+#
+#     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+#         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+#         + 4Ω_r * a^(-2) * Θ[0]
+#         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
+#         + a^(-2) * ρℳ / bg.ρ_crit
+#         )
+#
+#     # matter
+#     δ′ = k / ℋₓ * v - 3Φ′
+#     v′ = -v - k / ℋₓ * Ψ
+#     δ_b′ = k / ℋₓ * v_b - 3Φ′
+#     v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
+#
+#     # neutrinos (massive, MB 57)
+#     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+#         ϵ = √(q^2 + (a*m_ν)^2)
+#         df0 = dlnf0dlnq(q,par)
+#         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
+#         ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
+#         ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
+#         for ℓ in 2:(ℓ_mν-1)
+#             ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
+#         end
+#         ℳ′[ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case but w/ q/ϵ
+#     end
+#
+#     # RSA equations (implementation of CLASS default switches)
+#     # println("k condition ", k*ηₓ)
+#     # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
+#     # if (k*ηₓ > 45) println("k condition satisfied") end
+#     # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
+#     rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+#     #*sqrt(H₀²)< 1) #is this ℋ or H0?
+#     if rsa_on
+#         # println("INSIDE RSA")
+#         #photons
+#         Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+#         # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+#         Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+#                          + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
+#         Θ[2] = 0
+#         #massless neutrinos
+#         𝒩[0] = Φ
+#         𝒩[1] = -2ℋₓ/k *Φ′
+#         𝒩[2] = 0
+#
+#         #set polarization to zero
+#         Θᵖ[0] = 0
+#         Θᵖ[1] = 0
+#         Θᵖ[2] = 0
+#
+#         # manual zeroing to avoid saving garbage
+#         𝒩′[:] = zeros(ℓ_ν+1)
+#         Θ′[:] = zeros(ℓᵧ+1)
+#         Θᵖ′[:] = zeros(ℓᵧ+1)
+#
+#     else
+#         #do usual ie
+#         # relativistic neutrinos (massless)
+#         𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
+#         𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+#         for ℓ in 2:(ℓ_ν-1)
+#             𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
+#         end
+#         #truncation (same between MB and Callin06/Dodelson)
+#         𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]
+#
+#
+#         # photons
+#         Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+#         #Temp IE:
+#         Θ[2] = IE_solve(∫Θ₂,xᵢ,x,Nᵧ) #how to choose xᵢ?
+#         Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
+#         Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
+#
+#         # polarized photons
+#         #Polzn IE:
+#         Π = IE_solve(∫Π,xᵢ,x,Nᵧ)
+#         Θᵖ[2] = Π - Θᵖ[0] - Θ[2]#get Θᵖ′[2] from Π again - this easy?
+#
+#         Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
+#         Θᵖ′[1] = k / (3ℋₓ) * Θᵖ[0] - 2k / (3ℋₓ) * Θᵖ[2] + τₓ′ * Θᵖ[1] #usual ie term but just for ℓ=1
+#
+#     end
+#     #END RSA
+#
+#     du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
+#     return nothing
+# end
 
 #FIXME need to import bessel functions somewhere?
 
 # The RHSs of the IEs
-function ∫Θ₂(,,)
-
-end
-
-function ∫Π(,,)
-
-end
-
-# Volterra solver
-function IE_solve(∫f,N)
-
-end
+# function ∫Θ₂(,,)
+#
+# end
+#
+# function ∫Π(,,)
+#
+# end
+#
+# # Volterra solver
+# function IE_solve(∫f,N)
+#
+# end
 
 
 
