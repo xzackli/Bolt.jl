@@ -18,14 +18,19 @@ step1 = ret[2,:]
 
 
 # Write functions for the integrands of the photon IEs
+#---
 
 # Generalized version of our current g
-#FIXME: not sure want to do this this way...
-#returns integrand
 function g(x̃, τ′,bg)
     τ_integrated = reverse(  cumul_integrate( reverse(x̃), reverse(τ′.(x̃)) )  )
     return @.(-τ′(x̃) * exp(-τ_integrated))
 end
+
+#check g
+g(bg.x_grid[bg.x_grid.<bg.x_grid[end]] ,ih.τ′,bg)
+plot(bg.x_grid[bg.x_grid.<bg.x_grid[end]],g(bg.x_grid[bg.x_grid.<bg.x_grid[end]],ih.τ′,bg))
+plot!(bg.x_grid,ih.g̃(bg.x_grid)) #sanity check on g
+xlims!(-7.5,-6)
 
 #Temperature quadrupole integrand
 function IΘ2(x, k,
@@ -47,15 +52,9 @@ function IΠ(x, k, Π, ih, bg)
     x′= bg.x_grid[bg.x_grid.<x] #points do not include current timestep
     τ′,η = ih.τ′,bg.η #all splines of x
     ḡ = g(x′ ,τ′, bg)
-    # println("g max argument: ", maximum(x′))
-    # println("g: ", ḡ[end-2:end])
     y = @.(  k*( η(x)-η(x′) )  )#Bessel argument
     IE2 = @. ḡ*j2bx2(y)*Π
-    # println("y = ", y[end-2:end])
-    # println("j2x/x^2: ",( j2bx2.(y) )[end-2:end])
-    # println("Θ2, 9IE2: ",Θ2, " ", 9IE2[end-2:end])
     IΠ = 9IE2
-    # println("IΠ: ",IΠ[end-2:end])
     return IΠ
 end
 
@@ -72,74 +71,7 @@ j2′(x) = (x > 0.01) ? ( -x*(x^2 -9)*cos(x) + (4x^2 -9)*sin(x) ) / x^4 : 2x /15
 j2′′(x) = (x > 0.2) ? ( x*(5x^2 -36)*cos(x) + (x^4 - 17x^2 +36)*sin(x) ) / x^5 : 2/15 - 2x^2 /35 + x^4 /252 - x^6 /8910
 R2(x) = (x > 0.2) ? -( j2(x) + 3j2′′(x) ) / 2 : -1/5 + 11x^2 /210 -x^4 /280 +17x^4 /166320
 
-# test the integrands
-𝕡 = CosmoParams()
-n_q=15
-logqmin,logqmax = -6,-1
-bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=2):ret[end,1], nq=n_q)
-𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
-ih = IonizationHistory(𝕣, 𝕡, bg)
-k = (bg.H₀*3e5/100)*kMpc
-
-ℓᵧ=2
-ℓ_ν=50
-ℓ_mν=20
-reltol=1e-5 #cheaper  rtol
-(ℓ_mν+1)*n_q
-pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
-results=zeros(pertlen,length(bg.x_grid))
-ℳρ,ℳσ = zeros(length(bg.x_grid)),zeros(length(bg.x_grid)) #arrays for the massive neutrino integrated perts
-ie = IE(BasicNewtonian(), 𝕡, bg, ih, k, 400, ℓ_ν, ℓ_mν, n_q)
-
-ieic = initial_conditions(bg.x_grid[1],ie)
-
-Φ′ic, Ψic = get_Φ′_Ψ(ieic,ie,bg.x_grid[1])
-Θ0ic, v_bic = ieic[1],ieic[end]
-Πic = Θ0ic + ieic[3] + ieic[4] + ieic[6]
-#first temp step
-IΘ2(bg.x_grid[1], k, Πic, Θ0ic, v_bic, Φ′ic, Ψic, ih, bg)
-#This doesn't work, cumul_integrate in τ in g uses trapz, which wants at least 2 poitns
-#^So we need at least a guess for what the value of Θ2 is after the first timestep
-# or what all the other perturbation variables are after the first time step
-#Can probably just use some analytic guess like we use to set up ICs? For one step early on not much happens anyways
-#This first step is where Kamionkowski would use some TCA approximation (I think)
-
-#punt on this and use hierarchy "answers" for now to check the integrand
-hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓ_ν, ℓ_ν, ℓ_mν,n_q)
-all_extra_perts = hcat([ [p for p in get_Φ′_Ψ(ret[i,2:end],hierarchy,bg.x_grid[i])] for i in 1:length(ret[:,1]) ]...)
-Φ′h,Ψh = all_extra_perts[1,:],all_extra_perts[2,:]
-
-#check Ψ against Φ, and Φ' qualitatively
-plot(bg.x_grid, log10.(-Φ′h))
-plot(bg.x_grid, log10.(abs.(Ψh)))
-plot!(bg.x_grid, log10.(abs.(ret[:,end-4])))
-
-Θ0h = ret[:,1+1]
-Πh, v_bh = ret[:,1+3] + ret[:,1+1+51]+ret[:,1+3+51], ret[:,end]
-
-i=length(ret[:,1])
-IΘ2(bg.x_grid[i], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg)
-
-p0=plot()
-for i in 3:length(ret[:,1])
-    plot!(p0,bg.x_grid[1:i],IΘ2(bg.x_grid[i], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg))
-end
-p0
-
-p0 = plot(ret[:,1],ret[:,1+3])
-ieresT = [ integrate( ret[:,1][ret[:,1].<ret[i,1]],#bg.η(ret[:,1][ret[:,1].<ret[i,1]]).*bg.ℋ(ret[:,1][ret[:,1].<ret[i,1]]),
-                     IΘ2(ret[i,1], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg)
-                    )
-          for i in 4:length(ret[:,1])]
-plot!(ret[4:end,1],ieresT )
-xlims!(p0,-8,-3)
-vline!(p0,[ret[1500,1]])
-hline!(p0,[0])
-
-#solve
-perturb = boltsolve(ie; reltol=reltol)
-
-# Φ′, Ψ = get_Φ′_Ψ(u,ie,x)
+#function for generating metric inputs to IΘ2
 
 #to save these inside the equivalent of hierarchy would confuse DE solver
 #could hack and pass an ode with dy/dt = 0, but this is grosser than below
@@ -165,6 +97,7 @@ function get_Φ′_Ψ(u,ie::IE{T},x) where T
         )
     return Φ′,Ψ
 end
+#hierarchy for comparison purposes
 function get_Φ′_Ψ(u, hierarchy::Hierarchy{T},x) where T
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
     Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
@@ -187,11 +120,68 @@ function get_Φ′_Ψ(u, hierarchy::Hierarchy{T},x) where T
     return Φ′,Ψ
 end
 
-#check g
-g(bg.x_grid[bg.x_grid.<bg.x_grid[end]] ,ih.τ′,bg)
-plot(bg.x_grid[bg.x_grid.<bg.x_grid[end]],g(bg.x_grid[bg.x_grid.<bg.x_grid[end]],ih.τ′,bg))
-plot!(bg.x_grid,ih.g̃(bg.x_grid)) #sanity check on g
-xlims!(-7.5,-6)
+# test the integrands
+#---
+#generate some background/ionization history
+𝕡 = CosmoParams()
+n_q=15
+logqmin,logqmax = -6,-1
+bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=2):ret[end,1], nq=n_q)
+𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
+ih = IonizationHistory(𝕣, 𝕡, bg)
+k = (bg.H₀*3e5/100)*kMpc
+
+#test the ie integrator struct (akin to hierarchy)
+ℓᵧ=2
+ℓ_ν=50
+ℓ_mν=20
+reltol=1e-5 #cheaper  rtol
+pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
+results=zeros(pertlen,length(bg.x_grid))
+ℳρ,ℳσ = zeros(length(bg.x_grid)),zeros(length(bg.x_grid)) #arrays for the massive neutrino integrated perts
+ie = IE(BasicNewtonian(), 𝕡, bg, ih, k, 400, ℓ_ν, ℓ_mν, n_q)
+
+#check ICs
+ieic = initial_conditions(bg.x_grid[1],ie)
+Φ′ic, Ψic = get_Φ′_Ψ(ieic,ie,bg.x_grid[1])
+Θ0ic, v_bic = ieic[1],ieic[end]
+Πic = Θ0ic + ieic[3] + ieic[4] + ieic[6]
+
+#first temp step
+IΘ2(bg.x_grid[1], k, Πic, Θ0ic, v_bic, Φ′ic, Ψic, ih, bg)
+#This doesn't work, cumul_integrate in τ in g uses trapz, which wants at least 2 poitns
+#^So we need at least a guess for what the value of Θ2 is after the first timestep
+# or what all the other perturbation variables are after the first time step
+#Can probably just use some analytic guess like we use to set up ICs? For one step early on not much happens anyways
+#This first step is where Kamionkowski would use some TCA approximation (I think)
+
+#punt on this and use hierarchy "answers" for now to check the integrand
+hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓ_ν, ℓ_ν, ℓ_mν,n_q)
+all_extra_perts = hcat([ [p for p in get_Φ′_Ψ(ret[i,2:end],hierarchy,bg.x_grid[i])] for i in 1:length(ret[:,1]) ]...)
+Φ′h,Ψh = all_extra_perts[1,:],all_extra_perts[2,:]
+
+#check Ψ against Φ, and Φ' qualitatively
+plot(bg.x_grid, log10.(-Φ′h))
+plot(bg.x_grid, log10.(abs.(Ψh)))
+plot!(bg.x_grid, log10.(abs.(ret[:,end-4])))
+
+#plot integrated pert at each timestep using hierarchy "answer" for all previous steps
+Θ0h = ret[:,1+1]
+Πh, v_bh = ret[:,1+3] + ret[:,1+1+51]+ret[:,1+3+51], ret[:,end]
+p0 = plot(ret[:,1],ret[:,1+3])
+ieresT = [ integrate( ret[:,1][ret[:,1].<ret[i,1]],#bg.η(ret[:,1][ret[:,1].<ret[i,1]]).*bg.ℋ(ret[:,1][ret[:,1].<ret[i,1]]),
+                     IΘ2(ret[i,1], k, Πh[1:i-1], Θ0h[1:i-1], v_bh[1:i-1], Φ′h[1:i-1], Ψh[1:i-1], ih, bg)
+                    )
+          for i in 4:length(ret[:,1])]
+plot!(ret[4:end,1],ieresT )
+xlims!(p0,-8,-3)
+vline!(p0,[ret[1500,1]])
+hline!(p0,[0])
+#looks good!
+
+
+#---
+#Now to Π IE
 
 #check pieces of Π
 plot(ret[1:end,1],ret[1:end,1+3]+ret[1:end,1+1+51]+ret[1:end,1+3+51])
@@ -229,6 +219,7 @@ hline!([0])
 #check the ratio
 plot(ret[4:end,1],log10.(abs.(Πh[4:end] ./ ieres .-1)))
 ret[:,1][ret[:,1].<=ret[1,1]]
+#not great at early times, ok at middling/imporant times (but will want to improve), goes to zero at RSA times
 
 #Π diagnostics - what is the bessel argument doing? the function? g?
 p2,p3,p4=plot(),plot(),plot()
@@ -249,6 +240,11 @@ xlims!(p3,-8,-3)
 p4
 xlims!(p4,-8,-3)
 
+#---UNDER CONSTRUCTION
+
+#More realistic test where "answers" are not provided
+
+#Below is just pseudocode at the moment...
 
 #Integrate the integrands (without the hierarchy crutch)
 # function trapz(f,x) cumul_integrate()nd
@@ -269,13 +265,15 @@ function picard(u0,f,n_iter)
 
 end
 
+#matrix inversion?
+
 
 # Try the iteration on IE
 
 # Compare to hierarchy in a plot
 
 # Test the iteration against saved hierarchy
-function test_iter()
-
-    @assert a == b
-end
+# function test_iter()
+#
+#     @assert a == b
+# end
