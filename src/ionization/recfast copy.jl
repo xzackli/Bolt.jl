@@ -320,59 +320,14 @@ function late_Tmat(Tm, p, z)
 	return dTm
 end
 
-
-"""Tmat for z > 3500"""
-Tmat_early(z, 𝕣) = 𝕣.Tnow*(1+z)
-
-
-"""Xe until joint H/He recombination"""
-function Xe_early(z, 𝕣)
-    @assert z ≥ 3500
-    x0 = 1.0
-    if (zend > 8000.)
-        x0 = 1 + 2*𝕣.fHe
-    elseif (z > 5000.)
-        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He2/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
-        rhs = rhs*1.  # ratio of g's is 1 for He++ <-> He+
-        x0 = 0.5 * (sqrt( (rhs-1-𝕣.fHe)^2 + 4*(1+2𝕣.fHe)*rhs) - (rhs-1-𝕣.fHe) )
-    elseif (z > 3500.)
-        x0 = 1 + 𝕣.fHe
-    else
-        # attempt Helium Saha
-        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
-        rhs = rhs*4.  # ratio of g's is 4 for He+ <-> He0
-        x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
-        x0 = x_He0
-    end
-    return x0
-end
-
-# determine redshift at which we have to stop He Saha
-function z_end_of_He_Saha(z_start, Δz, 𝕣)
-    z_ep4_end = z_start
-    for z in z_ep4_end:Δz:0.0
-        x_H0 = 1.
-        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
-        rhs = rhs*4.  # ratio of g's is 4 for He+ <-> He0
-        x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
-        x0 = x_He0
-        x_He0 = (x0 - 1) / 𝕣.fHe
-        if x_He0 ≤ 0.99
-            z_ep4_end = z
-            break
-        end
-    end
-    return z_ep4_end
-end
-
 function recfast_xe(𝕣::RECFAST{T};
-        Nz::Int=1000, zinitial=10000., zfinal=0.,
+        Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial=10000., zfinal=0.,
         alg=Tsit5()) where T
 
     z = zinitial
     n = 𝕣.Nnow * (1 + z)^3
     y = zeros(T,3)  # array is x_H, x_He, Tmat (Hydrogen ionization, Helium ionization, matter temperature)
-
+	# println("T: ", T)
     y[3] = 𝕣.Tnow * (1 + z)
     Tmat = y[3]
 
@@ -382,20 +337,6 @@ function recfast_xe(𝕣::RECFAST{T};
 
     out_xe = zeros(T, Nz)
     out_Tmat = zeros(T, Nz)
-
-    
-    Δz = (zfinal - zinitial) / Nz
-
-    # during the "early" epoch, He is singly ionized
-    z_epoch_early = max(8000, zinitial):Δz:3500 
-
-    z_epoch_He_Saha_begin = max(zinital, 3500)
-    z_epoch_He_Saha_end = z_end_of_He_Saha(zinital, Δz, 𝕣)
-    z_epoch_He_Saha = z_epoch_He_Saha_begin:Δz:z_epoch_He_Saha_end
-
-    # H Saha must be integrated until a condition is met, OrdinaryDiffEq has an option I believe
-
-    # finally we do join recombination
 
     for i in 1:Nz
         # calculate the start and end redshift for the interval at each z
