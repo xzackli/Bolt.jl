@@ -46,11 +46,10 @@ eprob = EnsembleProblem(prob, prob_func = prob_func, safetycopy=false)
 #@time sol = solve(prob,KenCarp4(),EnsembleGPUArray(),trajectories=10,saveat=1.0f0) this does not work for some reason...
 #^I am matching the syntax since the below works without trying to use the GPU
 @time esol = solve(eprob,KenCarp4(),EnsembleThreads(),trajectories=length(k_grid),saveat=bg.x_grid,reltol=reltol,dense=false)
-sols=zeros(T,length(k_grid),length(bg.x_grid))
 @time for i in length(k_grid)
     hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k_grid[i], ℓᵧ, ℓ_ν, ℓ_mν,n_q)
     prob = ODEProblem{true}(Bolt.hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sols[i,:] = solve(prob,KenCarp4(),saveat=bg.x_grid,reltol=reltol,dense=false)(bg.x_grid)
+    solve(prob,KenCarp4(),saveat=bg.x_grid,reltol=reltol,dense=false)(bg.x_grid)
 end
 
 #println(esol[end]/sols)
