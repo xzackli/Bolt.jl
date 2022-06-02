@@ -235,7 +235,7 @@ function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
     # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
     # if (k*ηₓ > 45) println("k condition satisfied") end
     # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+    rsa_on = false#(k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         # println("INSIDE RSA")
