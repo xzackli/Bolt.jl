@@ -130,7 +130,9 @@ function boltsolve_rsa(ie::IE{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     results=zeros(pertlen,length(x_grid))
     for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
     #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    this_rsa_switch = x_grid[argmin(abs.(ie.k .* ie.bg.η.(x_grid) .- 45))]
+    xrsa_hor = minimum(bg.x_grid[(@. k*bg.η .> 45)])
+    xrsa_od = minimum(bg.x_grid[(@. -ih.τ′*bg.η*bg.ℋ .<5)])
+    this_rsa_switch = max(xrsa_hor,xrsa_od)
     x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
     results_rsa = results[:,x_grid.>this_rsa_switch]
     #(re)-compute the RSA perts so we can write them to the output vector
@@ -231,11 +233,7 @@ function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
     end
 
     # RSA equations (implementation of CLASS default switches)
-    # println("k condition ", k*ηₓ)
-    # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
-    # if (k*ηₓ > 45) println("k condition satisfied") end
-    # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = false#(k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+    rsa_on = false#(k*ηₓ > 45) &&  (-τₓ′*ηₓ*ℋₓ < 5)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         # println("INSIDE RSA")

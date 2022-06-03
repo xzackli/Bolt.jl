@@ -99,7 +99,10 @@ function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6)
     results=zeros(pertlen,length(x_grid))
     for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
     #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    # this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    xrsa_hor = minimum(x_grid[(@. hierarchy.k*hierarchy.bg.η .> 45)])
+    xrsa_od = minimum(x_grid[(@. -hierarchy.ih.τ′*hierarchy.bg.η*hierarchy.bg.ℋ .<5)])
+    this_rsa_switch = max(xrsa_hor,xrsa_od)
     x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
     results_rsa = results[:,x_grid.>this_rsa_switch]
     #(re)-compute the RSA perts so we can write them to the output vector
@@ -217,7 +220,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
     # if (k*ηₓ > 45) println("k condition satisfied") end
     # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+    rsa_on = (k*ηₓ > 45) &&  (-τₓ′*ηₓ*ℋₓ<5)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         # println("INSIDE RSA")
