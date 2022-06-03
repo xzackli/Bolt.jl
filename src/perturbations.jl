@@ -21,7 +21,6 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_ν=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_ν,ℓ_mν, nq)
 
 
-
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
@@ -66,9 +65,18 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     𝒩[1] = -2ℋₓ/k *Φ′
     𝒩[2] = 0
 
+    #set polarization to zero
+    Θᵖ[0] = 0
+    Θᵖ[1] = 0
+    Θᵖ[2] = 0
+
     u[1] = Θ[0]
     u[2] = Θ[1]
     u[3] = Θ[2]
+
+    u[(ℓᵧ+1)+1] = Θᵖ[0]
+    u[(ℓᵧ+1)+2] = Θᵖ[1]
+    u[(ℓᵧ+1)+3] = Θᵖ[2]
 
     u[2(ℓᵧ+1)+1] = 𝒩[0]
     u[2(ℓᵧ+1)+2] = 𝒩[1]
@@ -91,7 +99,10 @@ function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6)
     results=zeros(pertlen,length(x_grid))
     for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
     #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    # this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    xrsa_hor = minimum(x_grid[(@. hierarchy.k*hierarchy.bg.η .> 45)])
+    xrsa_od = minimum(x_grid[(@. -hierarchy.ih.τ′*hierarchy.bg.η*hierarchy.bg.ℋ .<5)])
+    this_rsa_switch = max(xrsa_hor,xrsa_od)
     x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
     results_rsa = results[:,x_grid.>this_rsa_switch]
     #(re)-compute the RSA perts so we can write them to the output vector
@@ -170,7 +181,6 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
 
-
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
@@ -210,7 +220,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
     # if (k*ηₓ > 45) println("k condition satisfied") end
     # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
+    rsa_on = (k*ηₓ > 45) &&  (-τₓ′*ηₓ*ℋₓ<5)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         # println("INSIDE RSA")
@@ -220,10 +230,16 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
                          + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
         Θ[2] = 0
+
         #massless neutrinos
         𝒩[0] = Φ
         𝒩[1] = -2ℋₓ/k *Φ′
         𝒩[2] = 0
+
+        #set polarization to zero
+        Θᵖ[0] = 0
+        Θᵖ[1] = 0
+        Θᵖ[2] = 0
 
         # manual zeroing to avoid saving garbage
         𝒩′[:] = zeros(ℓ_ν+1)

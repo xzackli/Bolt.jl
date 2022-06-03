@@ -12,7 +12,6 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     g̃′′::IT
     Tmat::IT
     csb²::IT
-    # Trad::IT #This is never used
 end
 
 @with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator #@deftype T
@@ -422,7 +421,6 @@ function recfast_xe(𝕣::RECFAST{T};
 	zre_ini,zre,α,ΔH,zHe,ΔHe,fHe = 50.,7.6711,1.5,0.5,3.5,0.5,X_fin-1 #reion params
 	# 2. Feed x_re(z) and Tm(zre_ini) into dTm/dz - essentially re-solving for y[3] at z<zre_ini
 	idx_zre_start = argmin( abs.(collect(zinitial:(zfinal-zinitial)/float(Nz):zfinal) .- zre_ini) ) #find first z s.t. z>=zre_ini
-	# println("zre_ini: ", zre_ini, "zre_closest: ", collect(zinitial:(zfinal-zinitial)/float(Nz):zfinal)[idx_zre_start])
 	Tmat = out_Tmat[idx_zre_start] #set initial Tmat, update in place as we go after
 	for i in idx_zre_start:Nz
 		# calculate the start and end redshift for the interval at each z
@@ -449,8 +447,6 @@ function recfast_xe(𝕣::RECFAST{T};
 		sol = solve(prob, alg, reltol=𝕣.tol)
 		# 3. Overwrite the Tm array before passing to csb function
 		Tmat = sol(zend)
-		# println("xe_reio ", typeof(x_reio))
-		# println("tmat sol ", typeof(Tmat))
 		out_Tmat[i] = Tmat
 	end
 
@@ -461,9 +457,8 @@ RECFASTredshifts(Nz, zinitial, zfinal) =
     range(zinitial, stop=zfinal, length=Nz+1)[2:end]
 
 function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::AbstractBackground{T}) where
-                           T#{T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
+                           T
     x_grid = bg.x_grid
-	# println("recfast T: ", T)
     # GRAFT RECFAST ONTO BOLT. TODO: MEGA-REFACTOR ==============
     Nz = 100000 #add extra two zero for reion otherwise too low res, get wiggles (was spacing of Δz=1)
 	#FIXME treat these wiggles better!
@@ -477,28 +472,16 @@ function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::Ab
     Trad_function = x -> 𝕣.Tnow * (1 + x2z(x))
     Tmat_function = x -> (x < xinitial_RECFAST) ?
         Trad_function(x) : RECFAST_Tmat_z(x2z(x))
-	# println("Type of Xe function: ", typeof(Xₑ_function))
-	# println("Type of Trad function: ", typeof(Trad_function))
-	# println("Type of Tmat function: ", typeof(Tmat_function))
-
     # =====================================================
 	#j - do we really need bg to be passed to IonizationHistory separately from 𝕣.bg?
 	#is there a reason not to just put par and bg into 𝕣?
 	ℋ_function = bg.ℋ
     τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
     g̃ = g̃_function(τ, τ′)
-
     Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
-	# println("Xe_ T: ",typeof(Xₑ_))
     τ_ = spline(τ.(x_grid), x_grid)
     g̃_ = spline(g̃.(x_grid), x_grid)
-    # IT = typeof(Xₑ_)
-	# println("IT", IT)
-	# println("Test ex==xe function ", Xₑ_function.(x_grid))
-	# println("Test tmat function ", Tmat_function.(x_grid))
     Tmat_ = spline(Tmat_function.(x_grid), x_grid)
-    # Trad_ = spline(Trad_function.(x_grid), x_grid)
-	# Tmat_ = Trad_ #testing
 	#sound speed
 	csb²_pre = @.( 𝕣.C^-2 * 𝕣.k_B/𝕣.m_H * ( 1/𝕣.mu_T + (1-𝕣.Yp)*Xₑ_(x_grid) ) ) #not the most readable...
 	#probably this is not the best way to do this...
@@ -515,7 +498,6 @@ function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::Ab
         spline_∂ₓ(g̃_, x_grid),
         spline_∂ₓ²(g̃_, x_grid),
         Tmat_,
-		#spline_∂ₓ(Tmat_, x_grid),
 		csb²_,
         # Trad_ #why do we even have this?
     )
