@@ -59,6 +59,19 @@ function Θl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
     return s
 end
 
+# For polzn we have moved the factor of (bg.η₀ - bg.η(x))^-2 from S_p to here
+function Pl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
+    s = zero(T)
+    xgrid = bg.x_grid
+    for i in x_i:length(xgrid)-1
+        x = xgrid[i]
+        sb = bes(k*(bg.η₀ - bg.η(x)))
+        source = s_itp(x, k) / (bg.η₀ - bg.η(x))^2
+        s += sb * source * (xgrid[i+1] - xgrid[i])
+    end
+    return s
+end
+
 function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
@@ -72,9 +85,51 @@ function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     return s
 end
 
+#jms 6/7/22 UNTESTED
+function clte(ℓ, s_itp_t, s_itp_e, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
+    bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
+    x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
+    s = zero(T)
+    for i in 1:length(kgrid)-1
+        k = kgrid[i]
+        dk = kgrid[i+1] - kgrid[i]
+        th = Θl(x_i, k, s_itp_t, bes, par, bg)
+        ep = Pl(x_i, k, s_itp_e, bes, par, bg)
+        k_hMpc=k/(bg.H₀*2.99792e5/100) #This is messy...
+        Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
+        s += th * ep * Pprim * dk / k
+    end
+    return s
+end
+
+function clee(ℓ, s_itp_p, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
+    bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
+    x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
+    s = zero(T)
+    for i in 1:length(kgrid)-1
+        k = kgrid[i]
+        dk = kgrid[i+1] - kgrid[i]
+        ep = Pl(x_i, k, s_itp_p, bes, par, bg)
+        k_hMpc=k/(bg.H₀*2.99792e5/100) #This is messy...
+        Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
+        s += ep^2 * Pprim *  dk / k
+    end
+    return s
+end
+
 function cltt(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
     dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
     cltt(ℓ, sf, dense_kgrid, par, bg)
+end
+
+function clte(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
+    dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
+    clte(ℓ, sf, dense_kgrid, par, bg)
+end
+
+function clee(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
+    dense_kgrid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 5000)
+    clee(ℓ, sf, dense_kgrid, par, bg)
 end
 
 function cltt(ℓ⃗, par::AbstractCosmoParams, bg, ih, sf)

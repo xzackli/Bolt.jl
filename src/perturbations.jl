@@ -365,7 +365,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (par.Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
-                                  + σℳ / bg.ρ_crit) #why am I doing this? - because H0 pulls out a factor of rho crit - just unit conversion
+                                  + σℳ / bg.ρ_crit /4) #why am I doing this? - because H0 pulls out a factor of rho crit - just unit conversion
                                                                    #this introduces a factor of bg density I cancel using the integrated bg mnu density now
 
    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
@@ -383,4 +383,25 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
         ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′))
     return term1 + term2 + term3
+end
+
+# The polarization source function (jms 6/6/22 UNTESTED!) SZ eqn 12d (in our units)
+function source_function_P(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
+    k, ℓᵧ, par, bg, ih,nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    H₀² = bg.H₀^2
+    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
+    τₓ, τₓ′, τₓ′′ = ih.τ(x), ih.τ′(x), ih.τ′′(x)
+    g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
+    a = x2a(x)
+    ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
+
+
+    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+    return (3/(4k^2)) * g̃ₓ * Π 
 end
