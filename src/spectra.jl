@@ -80,7 +80,7 @@ function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
         k = kgrid[i]
         dk = kgrid[i+1] - kgrid[i]
         th = Θl(x_i, k, s_itp, bes, par, bg)
-        s += th^2 * dk / k
+        s += th^2 * Pprim * dk / k
     end
     return s
 end
