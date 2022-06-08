@@ -8,8 +8,7 @@ using ForwardDiff
 using BenchmarkTools
 
 # bg/ion setup
-T = Float32
-𝕡 = CosmoParams{T}()
+𝕡 = CosmoParams()
 n_q=15
 logqmin,logqmax = -6,-1
 bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=n_q)
@@ -49,20 +48,24 @@ println("pre type of kgrid, ", typeof(k_grid))
 println("pre type of xi, ", typeof(xᵢ))
 u₀ = T.(u₀)
 k_grid = T.(k_grid)
+k_grid = reshape(k_grid,(size(k_grid)...,1)) #For some reason GPU very specifically wants array of 1 size arrays rather than array of floats...
 println("post type of u0, ", typeof(u₀))
 println("post type of kgrid, ", typeof(k_grid))
 dutest = zero(u₀)
 testderiv = gpu_ensemble_hierarchy!(dutest,u₀,k_grid[1],xᵢ)
 println("Succesfully evaluted gpu derivative")
 println("test deriv: ", testderiv)
+println("one element",typeof(k_grid[1]))
 
-gpu_prob = ODEProblem{true}(gpu_ensemble_hierarchy!, u₀, (xᵢ , zero(T)), k_grid[1])
-gpu_prob_func = (gpu_prob,i,repeat) -> remake(gpu_prob,p=k_grid[i])
+gpu_prob = ODEProblem{true}(gpu_ensemble_hierarchy!, u₀, (xᵢ , zero(T)), k_grid[1,:])
+gpu_prob_func = (gpu_prob,i,repeat) -> remake(gpu_prob,p=k_grid[i,:])
 eprob = EnsembleProblem(gpu_prob,prob_func=gpu_prob_func,safetycopy=false)
 #@time esol = solve(eprob,KenCarp4(),EnsembleThreads(),trajectories=length(k_grid),saveat=bg.x_grid,reltol=reltol,dense=false)
-#println("solved ensemble")
-@time gsol = solve(eprob,KenCarp4(),EnsembleGPUArray(),trajectories=33,saveat=bg.x_grid,reltol=reltol,dense=false) 
-
+#@time esol = solve(eprob,Tsit5(),EnsembleThreads(),trajectories=length(k_grid),saveat=bg.x_grid,reltol=reltol,dense=false) #this runs but aborts the solve due to instability - maybe not high enough ellmax...
+#println("solved thread ensemble")
+#@time gsol = solve(eprob,KenCarp4(),EnsembleGPUArray(),trajectories=33,saveat=bg.x_grid,reltol=reltol,dense=false) 
+@time gsol = solve(eprob,Tsit5(),EnsembleGPUArray(),trajectories=33,saveat=bg.x_grid,reltol=reltol,dense=false) 
+println("solved gpu ensemble")
 
 #serial solve
 @time for i in length(k_grid)
