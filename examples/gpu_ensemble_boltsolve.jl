@@ -8,7 +8,8 @@ using ForwardDiff
 using BenchmarkTools
 
 # bg/ion setup
-𝕡 = CosmoParams()
+T = Float32
+𝕡 = CosmoParams{T}()
 n_q=15
 logqmin,logqmax = -6,-1
 bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=n_q)
@@ -32,24 +33,41 @@ u₀ = Bolt.initial_conditions(xᵢ, hierarchy)
 T=Float32 #will not need this later when T is inferred from the function
 prob = ODEProblem{true}(Bolt.hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
 #to create the en
-prob_func = (prob,i,repeat) -> remake(prob,p=Hierarchy(prob.p.integrator,
-                                                       prob.p.par,
-                                                       prob.p.bg,
-                                                       prob.p.ih,
-                                                       k_grid[i],
-                                                       prob.p.ℓᵧ,
-                                                       prob.p.ℓ_ν,
-                                                       prob.p.ℓ_mν,
-                                                       prob.p.nq)
-                                     )
-eprob = EnsembleProblem(prob, prob_func = prob_func, safetycopy=false)
-#@time sol = solve(prob,KenCarp4(),EnsembleGPUArray(),trajectories=10,saveat=1.0f0) this does not work for some reason...
-#^I am matching the syntax since the below works without trying to use the GPU
-@time esol = solve(eprob,KenCarp4(),EnsembleThreads(),trajectories=length(k_grid),saveat=bg.x_grid,reltol=reltol,dense=false)
+
+
+# For the GPUEnsemble, wrap the hierarchy inside a function that takes k as an argument
+# Uses global knowledge of hierarchy arguments for cosntruction
+function gpu_ensemble_hierarchy!(du, u, k, x) #where T 
+    #build the hierarchy
+    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
+    #call the derivative function 
+    Bolt.hierarchy!(du,u,hierarchy,x) 
+end
+#test this function on the first step
+println("pre type of u0, ", typeof(u₀))
+println("pre type of kgrid, ", typeof(k_grid))
+println("pre type of xi, ", typeof(xᵢ))
+u₀ = T.(u₀)
+k_grid = T.(k_grid)
+println("post type of u0, ", typeof(u₀))
+println("post type of kgrid, ", typeof(k_grid))
+dutest = zero(u₀)
+testderiv = gpu_ensemble_hierarchy!(dutest,u₀,k_grid[1],xᵢ)
+println("Succesfully evaluted gpu derivative")
+println("test deriv: ", testderiv)
+
+gpu_prob = ODEProblem{true}(gpu_ensemble_hierarchy!, u₀, (xᵢ , zero(T)), k_grid[1])
+gpu_prob_func = (gpu_prob,i,repeat) -> remake(gpu_prob,p=k_grid[i])
+eprob = EnsembleProblem(gpu_prob,prob_func=gpu_prob_func,safetycopy=false)
+#@time esol = solve(eprob,KenCarp4(),EnsembleThreads(),trajectories=length(k_grid),saveat=bg.x_grid,reltol=reltol,dense=false)
+#println("solved ensemble")
+@time gsol = solve(eprob,KenCarp4(),EnsembleGPUArray(),trajectories=33,saveat=bg.x_grid,reltol=reltol,dense=false) 
+
+
+#serial solve
 @time for i in length(k_grid)
     hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k_grid[i], ℓᵧ, ℓ_ν, ℓ_mν,n_q)
     prob = ODEProblem{true}(Bolt.hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     solve(prob,KenCarp4(),saveat=bg.x_grid,reltol=reltol,dense=false)(bg.x_grid)
 end
 
-#println(esol[end]/sols)
