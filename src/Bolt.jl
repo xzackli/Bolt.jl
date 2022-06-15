@@ -52,6 +52,5 @@ include("ionization/ionization.jl")
 include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
-include("ie.jl")
 
 end
