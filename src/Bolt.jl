@@ -36,7 +36,7 @@ abstract type AbstractCosmoParams{T} end
 
 @with_kw struct CosmoParams{T} <: AbstractCosmoParams{T} @deftype T
     h = 0.7  # hubble factor
-    Ω_r = 5.042e-5  # radiation density
+    Ω_r = 5.0469e-5  # radiation density
     Ω_b = 0.046  # baryon density
     Ω_m = 0.224  # cdm density
     A = 2.097e-9 # scalar amplitude, 1e-10*exp(3.043)

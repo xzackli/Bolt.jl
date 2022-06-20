@@ -22,11 +22,11 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
 
 
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abstol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,
+    sol = solve(prob, ode_alg, reltol=reltol, abstol=abstol,
                 saveat=hierarchy.bg.x_grid, dense=false,
                 )
     return sol
@@ -83,9 +83,9 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     return nothing
 end
 
-function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abstol=1e-6) where T
     #call solve as usual first
-    perturb = boltsolve(hierarchy, reltol=reltol)
+    perturb = boltsolve(hierarchy, reltol=reltol, abstol=abstol)
     x_grid = hierarchy.bg.x_grid
     pertlen = 2(hierarchy.ℓᵧ+1)+(hierarchy.ℓ_ν+1)+(hierarchy.ℓ_mν+1)*hierarchy.nq+5
     results=zeros(pertlen,length(x_grid))
@@ -263,8 +263,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         end
 
         # photon boundary conditions: diffusion damping
-        Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θ[ℓᵧ]
-        Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θᵖ[ℓᵧ]
+        Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - ( (ℓᵧ + 1) / (ℋₓ * ηₓ) - τₓ′ ) * Θ[ℓᵧ]
+        Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - ( (ℓᵧ + 1) / (ℋₓ * ηₓ) - τₓ′ ) * Θᵖ[ℓᵧ]
 
     end
     #END RSA
@@ -292,9 +292,10 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     # ρ0ℳ = bg.ρ₀ℳ(xᵢ)
 
     # metric and matter perturbations
-    Φ = 1.0
+    ℛ = 1.0  # set curvature perturbation to 1
+    Φ = (4f_ν + 10) / (4f_ν + 15) * ℛ  # for a mode outside the horizon in radiation era
     #choosing Φ=1 forces the following value for C, the rest of the ICs follow
-    C = -( (15 + 4f_ν)/(20 + 8f_ν) )
+    C = -( (15 + 4f_ν)/(20 + 8f_ν) ) * Φ
 
     #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4

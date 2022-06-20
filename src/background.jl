@@ -78,7 +78,7 @@ H(x, par::AbstractCosmoParams,quad_pts,quad_wts) = H_a(x2a(x),par,quad_pts,quad_
 # conformal time
 function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
     #fast copy from q - need to check accuracy (#FIXME) but a plays the role of q
-    logamin,logamax=-11.75,log10(x2a(x)) #0,x2a(x)
+    logamin,logamax=-13.75,log10(x2a(x)) #0,x2a(x)
     #convert ui to a,for now pick
     Iη(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts))/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
     #return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1]
