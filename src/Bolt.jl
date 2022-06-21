@@ -11,7 +11,7 @@ export source_grid, quadratic_k, cltt,log10_k,plin
 export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
 using Parameters
-using Unitful, UnitfulAstro, NaturallyUnitful
+using Unitful, UnitfulAstro
 using NLsolve
 using OrdinaryDiffEq
 using Interpolations
@@ -27,10 +27,21 @@ import SpecialFunctions: lgamma, sphericalbesselj
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!
 
+import UnitfulCosmo, NaturallyUnitful
 
 import PhysicalConstants.CODATA2018: ElectronMass, ProtonMass,
     FineStructureConstant, ThomsonCrossSection, NewtonianConstantOfGravitation
 
+
+# set the unit system, this should be improved
+natural(x) = UnitfulCosmo.mpc(x)
+unnatural(x, y) = UnitfulCosmo.unmpc(x, y)
+# natural(x) = NaturallyUnitful.natural(x)
+# unnatural(x, y) = NaturallyUnitful.unnatural(x, y)
+
+# all unit conversions. should distribute these in-situ someday. Mpc units
+const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [Mpc^-1]
+const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation))) # [Mpc^2]
 
 abstract type AbstractCosmoParams{T} end
 

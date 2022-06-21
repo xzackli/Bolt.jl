@@ -1,6 +1,11 @@
 abstract type IonizationIntegrator end
 abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T,1}} end
 
+
+const H0_natural_unit_conversion = ustrip(unnatural(u"s", 1.0*unit(natural(1u"s"))))
+const Kelvin_natural_unit_conversion = ustrip(unnatural(1u"K", 1.0*unit(natural(1u"K")) ))
+
+
 struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
 	τ₀::T
     Xₑ::IT
@@ -17,9 +22,7 @@ end
 
 @with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator #@deftype T
     bg::AB  # a RECFAST has an associated background evolution
-    H0_natural_unit_conversion = ustrip(u"s", unnatural(u"s", 1u"eV^-1"))
-
-    bigH = 100.0e3 / (1e6 * 3.0856775807e16)	 # H₀ in s-1
+    # bigH = 100.0e3 / (1e6 * 3.0856775807e16)	 # H₀ in s-1
     C  = 2.99792458e8  # Fundamental constants in SI units
     k_B = 1.380658e-23
     h_P = 6.6260755e-34
@@ -103,8 +106,8 @@ end
     Yp::T = 0.24
     OmegaB::T = 0.046  # TODO: should replace during GREAT GENERALIZATION
     HO =  bg.H₀ / H0_natural_unit_conversion
-	OmegaG::T = 5.042e-5 #not sure this is the best way to do this
-	Tnow = (15/ π^2 *bg.ρ_crit *OmegaG)^(1/4) * 1.160218e4 #last thing is eV2K
+	OmegaG::T = 5.0469e-5 #not sure this is the best way to do this
+	Tnow = (15/ π^2 *bg.ρ_crit * OmegaG)^(1/4) * Kelvin_natural_unit_conversion #last thing is natural to K
 	# This was hardcoded originally as: Tnow = 2.725, fixes issue downstream with Duals
 	# Had to change RECFAST test temperature though - should double check this
 
@@ -165,8 +168,8 @@ function ion_recfast!(f, y, 𝕣::RECFAST, z)
 
     a = 1 / (1+z)  # scale factor
     x_a = a2x(a)
-	Hz = 𝕣.bg.ℋ(x_a) / a / 𝕣.H0_natural_unit_conversion
-	dHdz = (-𝕣.bg.ℋ′(x_a) + 𝕣.bg.ℋ(x_a)) / 𝕣.H0_natural_unit_conversion
+	Hz = 𝕣.bg.ℋ(x_a) / a / H0_natural_unit_conversion
+	dHdz = (-𝕣.bg.ℋ′(x_a) + 𝕣.bg.ℋ(x_a)) / H0_natural_unit_conversion
 	# Hz = 𝕣.HO * sqrt((1+z)^4/(1+𝕣.z_eq)*𝕣.OmegaT + 𝕣.OmegaT*(1+z)^3 + 𝕣.OmegaK*(1+z)^2 + 𝕣.OmegaL)
 	# dHdz = (𝕣.HO^2 /2/Hz)*(4*(1+z)^3/(1+𝕣.z_eq)*𝕣.OmegaT + 3*𝕣.OmegaT*(1+z)^2 + 2*𝕣.OmegaK*(1+z))
 
@@ -314,7 +317,7 @@ function late_Tmat(Tm, p, z)
 	𝕣,x = p #probably bad to mix types...
 	a = 1 / (1+z)
 	x_a = a2x(a)
-	Hz = 𝕣.bg.ℋ(x_a) / a / 𝕣.H0_natural_unit_conversion
+	Hz = 𝕣.bg.ℋ(x_a) / a / H0_natural_unit_conversion
 	Trad = 𝕣.Tnow * (1+z)
 	dTm = 𝕣.CT * (Trad^4) * x / (1+x+𝕣.fHe)* (Tm-Trad) / (Hz*(1+z)) + 2*Tm/(1+z)
 	return dTm

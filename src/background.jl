@@ -1,14 +1,11 @@
 
 # NOTE: Bolt's background functions are in terms of x ≡ ln(a), the log scale factor
 
-# derived quantities (I've chosen natural units, possibly the wrong choice)
-const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [eV]
-const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation))) #[eV^-2]
+
 const ζ = 1.2020569 #Riemann ζ(3) for phase space integrals
-#In the natural units used here, ħ=kb=c=1, G as above
 
 H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
-ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural  # [eV⁴]
+ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural
 function Ω_Λ(par::AbstractCosmoParams)
     #Below can definitely be more streamlined, I am just making it work for now
     Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
