@@ -202,6 +202,34 @@ function g̃_function(τ_x_function, τ′_x_function)
 end
 
 
+"""Convenience function to create an ionisation history from some tables"""
+function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
+
+     x_grid = bg.x_grid
+     τ, τ′ = Bolt.τ_functions(x_grid, Xₑ_function, par, bg.ℋ)
+     g̃ = Bolt.g̃_function(τ, τ′)
+     spline, spline_∂ₓ, spline_∂ₓ² = Bolt.spline, Bolt.spline_∂ₓ, Bolt.spline_∂ₓ²
+     Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
+     τ_ = spline(τ.(x_grid), x_grid)
+     g̃_ = spline(g̃.(x_grid), x_grid)
+     Tmat_ = spline(Tmat_function.(x_grid), x_grid)
+     csb²_ = spline(csb²_function.(x_grid), x_grid)
+ 
+     return IonizationHistory(
+           (τ(0.)),
+         Xₑ_,
+         τ_,
+         spline_∂ₓ(τ_, x_grid),
+         spline_∂ₓ²(τ_, x_grid),
+         g̃_,
+         spline_∂ₓ(g̃_, x_grid),
+         spline_∂ₓ²(g̃_, x_grid),
+         Tmat_,
+           csb²_,
+     )
+ end
+
+
 # this Peebles history comes from Callin+06, peep the plots from examples/
 # which match that paper perfectly
 #j we don't really need par or bg in this call anymore \/ but I will leave it

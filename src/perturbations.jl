@@ -99,7 +99,6 @@ function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,
     xrsa_od = isnothing(xrsa_hor) ? length(x_grid) : xrsa_od
 
     this_rsa_switch = x_grid[max(xrsa_hor,xrsa_od)]
-    @show this_rsa_switch
     x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
     results_rsa = results[:,x_grid.>this_rsa_switch]
     #(re)-compute the RSA perts so we can write them to the output vector
