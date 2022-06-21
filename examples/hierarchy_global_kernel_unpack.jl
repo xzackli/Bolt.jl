@@ -31,10 +31,10 @@ bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=6)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 k = 500bg.H₀
 reltol=1e-5
-ℓᵧ = 40
-ℓ_ν = 20 
-ℓ_mν  = 4
-nq = 6
+# ℓᵧ = 20
+# ℓ_ν = 20 
+# ℓ_mν  = 4
+# nq = 6
 hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ,ℓ_ν,ℓ_mν,nq)
 
 
@@ -65,7 +65,10 @@ let
         Tν =  (N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *Bolt.ρ_crit(par) *Ω_r)^(1/4)
         logqmin,logqmax=log10(Tν/30),log10(Tν*30)
         
-        for i in 1:nq a = Bolt.xq2q(bg.quad_pts[i] ,logqmin,logqmax)  end
+        # none of these work
+        # q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+        # q_pts = zero(bg.quad_pts)
+        # for i in 1:nq q_pts[i] = Bolt.xq2q(bg.quad_pts[i] ,logqmin,logqmax)  end
 
         R = 4Ω_r / (3Ω_b * a)
         Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
