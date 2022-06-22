@@ -67,7 +67,7 @@ let
         logqmin,logqmax=log10(Tν/30),log10(Tν*30)
         
         R = 4Ω_r / (3Ω_b * a)
-        Ω_ν =  7*(3/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+        Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
         # ρℳ, σℳ  =  Bolt.ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
         ϵx(x, am) = √(Bolt.xq2q(x,logqmin,logqmax)^2 + (am)^2)
         Iρ(x) = Bolt.xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m_ν) * Bolt.f0(Bolt.xq2q(x,logqmin,logqmax),par) / Bolt.dxdq(Bolt.xq2q(x,logqmin,logqmax),logqmin,logqmax)
@@ -81,9 +81,10 @@ let
 
        ρℳ, σℳ  =  0.,0.
        for i in 1:nq #have to un-broadcast this...
-            ρℳ += 4π*Iρ(xq[1])*ℳ[0*nq+i-1]*wq[i]
+            ρℳ += 4π*Iρ(xq[i])*ℳ[0*nq+i-1]*wq[i]
             σℳ += 4π*Iσ(xq[i])*ℳ[2*nq+i-1]*wq[i]
         end
+        @cuprintln("ρ,σ nu: ",ρℳ, " , ",σℳ)
 
         #start setting the perturbations
         # metric
@@ -97,6 +98,8 @@ let
             + 4Ω_ν * a^(-2) * 𝒩[0]
             + a^(-2) * ρℳ / bg.ρ_crit
         )
+        @cuprintln("Φ′ = ", Φ′ )
+
         # matter
         δ′ = k / ℋₓ * v - 3Φ′
         v′ = -v - k / ℋₓ * Ψ
@@ -113,6 +116,7 @@ let
     
         # photons
         Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+        @cuprintln("Θ′[0] = ",-k / ℋₓ * Θ[1] - Φ′ ," term1: ", -k / ℋₓ * Θ[1] )
         @set! Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
         Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
         for ℓ in 2:(ℓᵧ-1)
