@@ -185,3 +185,8 @@ du_cpu = zero(u₀_cpu)
 Bolt.hierarchy!(du_cpu,u₀_cpu,hierarchy,xᵢ_cpu)
 du_cpu
 writedlm("./test/data/cpu_correctness.dat",du_cpu)
+
+u_gpu = readdlm("./test/data/gpu_correctness.dat")
+u_cpu = readdlm("./test/data/cpu_correctness.dat")
+
+isapprox(u_gpu,u_cpu,rtol=1e-7)
