@@ -26,16 +26,17 @@ Adapt.@adapt_structure Hierarchy #give this a shot not sure it's gonna work
 
 # bg/ion setup
 𝕡 = CosmoParams()
-bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=6)
+bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=5)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 k = 500bg.H₀
 reltol=1e-5
+#FIXME run out of GPU memory with 50, 50, 20, 15 or 20 20 10 15
 # ℓᵧ = 20
 # ℓ_ν = 20 
 # ℓ_mν  = 4
 # nq = 6
-hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ,ℓ_ν,ℓ_mν,nq)
+hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10,10,8,5)
 
 
 function gpu_unpack(u)  #use Marius' trick for the ntuples to avoid size limits on tuples
@@ -65,20 +66,24 @@ let
         Tν =  (N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *Bolt.ρ_crit(par) *Ω_r)^(1/4)
         logqmin,logqmax=log10(Tν/30),log10(Tν*30)
         
-        # none of these work
-        # q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-        # q_pts = zero(bg.quad_pts)
-        # for i in 1:nq q_pts[i] = Bolt.xq2q(bg.quad_pts[i] ,logqmin,logqmax)  end
-
         R = 4Ω_r / (3Ω_b * a)
         Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    #    ρℳ, σℳ  =  Bolt.ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-        ρℳ, σℳ  =  0,0#Bolt.ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-        #FIXME THIS DOES NOT WORK BECAUSE OPERATRES ON VECTORS - putting zero for now to tes other parts
+        # ρℳ, σℳ  =  Bolt.ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+        ϵx(x, am) = √(Bolt.xq2q(x,logqmin,logqmax)^2 + (am)^2)
+        Iρ(x) = Bolt.xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m_ν) * Bolt.f0(Bolt.xq2q(x,logqmin,logqmax),par) / Bolt.dxdq(Bolt.xq2q(x,logqmin,logqmax),logqmin,logqmax)
+        Iσ(x) = Bolt.xq2q(x,logqmin,logqmax)^2  * (Bolt.xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m_ν)) * f0(Bolt.xq2q(x,logqmin,logqmax),par) / Bolt.dxdq(Bolt.xq2q(x,logqmin,logqmax),logqmin,logqmax)
+        xq,wq = bg.quad_pts,bg.quad_wts
+ 
 
         # do the unpack
         Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = gpu_unpack(u₀)
         Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = gpu_unpack(du)
+
+       ρℳ, σℳ  =  0.,0.
+       for i in 1:nq #have to un-broadcast this...
+            ρℳ += 4π*Iρ(xq[1])*ℳ[0*nq+i-1]*wq[i]
+            σℳ += 4π*Iσ(xq[i])*ℳ[2*nq+i-1]*wq[i]
+        end
 
         #start setting the perturbations
         # metric
@@ -125,7 +130,21 @@ let
         # # photon boundary conditions: diffusion damping #FIXME wrong (merge with fix branch)
         Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θ[ℓᵧ]
         Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θᵖ[ℓᵧ]
-    
+        
+        # massive neutrinos
+        #FIXME ℳ′ assignment does not work in this loop for some reason??
+        for i_q in 1:nq
+            q = Bolt.xq2q(bg.quad_pts[i_q] ,logqmin,logqmax)
+            ϵ = √(q^2 + (a*m_ν)^2)
+            df0 = dlnf0dlnq(q,par)
+            du[2(ℓᵧ+1)+(ℓ_ν+1) + 0*nq + i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* 10+i_q-1]  + Φ′ * df0 #ℳ′[0*nq+i_q-1]
+            du[2(ℓᵧ+1)+(ℓ_ν+1) + 1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0) #ℳ′[1* nq+i_q]
+            for ℓ in 2:(ℓ_mν-1)
+                du[2(ℓᵧ+1)+(ℓ_ν+1) + ℓ* nq+i_q]=  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q-1] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q-1] ) #ℳ′[ℓ* nq+i_q]
+            end
+            du[2(ℓᵧ+1)+(ℓ_ν+1) + ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q-1] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q-1] #ℳ′[ℓ_mν* nq+i_q]  MB (58) similar to rel case but w/ q/ϵ
+        end
+
         # for some reason OffsetArray values are not mutating...do it by hand...
         for i in 1:(ℓᵧ+1)
             du[i] = Θ′[i-1]
@@ -134,15 +153,18 @@ let
         for i in 1:(ℓ_ν+1)
             du[2(ℓᵧ+1)+i] = 𝒩′[i-1]
         end
-        # for i in 1:(ℓ_mν+1)*nq
-        #     du[2(ℓᵧ+1)+(ℓ_ν+1)+i] = 
+        # See above 
+        #for i in 1:(ℓ_mν+1)
+        #     for j in 1:nq
+        #         du[2(ℓᵧ+1)+(ℓ_ν+1)+i*nq + j-1] = ℳ′[0* nq+i-1]
+        #     end
         # end
 
         du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1] = Φ′
         du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+2] = δ′
-        du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+3] =v′
+        du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+3] = v′
         du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+4] = δ_b′
-        du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] =  v_b′ 
+        du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] = v_b′ 
 
        return nothing
    end
