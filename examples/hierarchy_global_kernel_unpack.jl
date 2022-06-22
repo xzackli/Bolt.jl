@@ -180,8 +180,8 @@ end
 
 ##
 
-@cuda f_kernel!(du, cu(hierarchy), xᵢ)
+@cuda f_kernel!(du, hierarchy, xᵢ)
 
-@btime CUDA.@sync @cuda f_kernel!(du, cu(hierarchy), xᵢ)
+@btime CUDA.@sync @cuda f_kernel!(du, hierarchy, xᵢ)
 
 CUDA.@allowscalar du[1]
