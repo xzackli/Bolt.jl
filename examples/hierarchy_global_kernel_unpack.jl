@@ -1,9 +1,11 @@
-using CUDA, StaticArrays, OffsetArrays,Adapt,Interpolations,DelimitedFiles
-using Pkg
-Pkg.activate("/pscratch/sd/j/jsull/julia/Bolt.jl")
+
+using CUDA, StaticArrays, OffsetArrays, Adapt, Interpolations
 using Bolt
 using BenchmarkTools
 using Setfield
+CUDA.allowscalar(false)
+
+##
 
 # re-use Bspline, Scaled Interpolations code needed for bg, ih
 function Adapt.adapt_structure(to, itp::Interpolations.BSplineInterpolation{T,N,<:Any,IT,Axs}) where {T,N,IT,Axs}
@@ -11,6 +13,7 @@ function Adapt.adapt_structure(to, itp::Interpolations.BSplineInterpolation{T,N,
     Tcoefs = typeof(coefs)
     Interpolations.BSplineInterpolation{T,N,Tcoefs,IT,Axs}(coefs, itp.parentaxes, itp.it)
 end
+
 function Adapt.adapt_structure(to, itp::Interpolations.ScaledInterpolation{T,N,ITPT,IT,<:Any}) where {T,N,ITPT,IT}
     s = Adapt.adapt_structure(to,itp.itp)
     Titp = typeof(s)
@@ -18,6 +21,17 @@ function Adapt.adapt_structure(to, itp::Interpolations.ScaledInterpolation{T,N,I
     RT=typeof(ranges)
     Interpolations.ScaledInterpolation{T,N,Titp,IT,RT}(s,ranges)
 end
+
+function gpu_unpack(u)  #use Marius' trick for the ntuples to avoid size limits on tuples
+    Θ = OffsetVector(SVector(ntuple(i -> u[i], Val(ℓᵧ+1))), 0:ℓᵧ)
+    Θᵖ = OffsetVector(SVector(ntuple(i -> u[i+(ℓᵧ+1)], Val(ℓᵧ+1))), 0:ℓᵧ)
+    𝒩 = OffsetVector(SVector(ntuple(i -> u[i+2(ℓᵧ+1)], Val(ℓ_ν+1))), 0:ℓ_ν)
+    ℳ  = OffsetVector(SVector(ntuple(i -> u[i+2(ℓᵧ+1)+(ℓ_ν+1)], Val((ℓ_mν+1)*nq))), 0:(ℓ_mν+1)*nq -1)
+    Φ, δ, v, δ_b, v_b = SVector(ntuple(i -> u[i+2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq], Val(5)))
+    return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
+end
+
+##
 
 #adapts
 Adapt.@adapt_structure Background
@@ -36,28 +50,22 @@ reltol=1e-5
 # ℓ_ν = 20 
 # ℓ_mν  = 4
 # nq = 6
-hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10,10,8,5)
+hierarchy = cu(Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10,10,8,5))
 
+#This is necessary for unpack since we can't pass the OffsetArray sizes as arguments
+const ℓᵧ = hierarchy.ℓᵧ
+const ℓ_ν = hierarchy.ℓ_ν
+const ℓ_mν  = hierarchy.ℓ_mν
+const nq = hierarchy.nq
 
-function gpu_unpack(u)  #use Marius' trick for the ntuples to avoid size limits on tuples
-    Θ = OffsetVector(SVector(ntuple(i -> u[i], Val(ℓᵧ+1))), 0:ℓᵧ)
-    Θᵖ = OffsetVector(SVector(ntuple(i -> u[i+(ℓᵧ+1)], Val(ℓᵧ+1))), 0:ℓᵧ)
-    𝒩 = OffsetVector(SVector(ntuple(i -> u[i+2(ℓᵧ+1)], Val(ℓ_ν+1))), 0:ℓ_ν)
-    ℳ  = OffsetVector(SVector(ntuple(i -> u[i+2(ℓᵧ+1)+(ℓ_ν+1)], Val((ℓ_mν+1)*nq))), 0:(ℓ_mν+1)*nq -1)
-    Φ, δ, v, δ_b, v_b = SVector(ntuple(i -> u[i+2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq], Val(5)))
-    return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
-end
+##
 
-let
-    #This is necessary for unpack since we can't pass the OffsetArray sizes as arguments
-	global const ℓᵧ = hierarchy.ℓᵧ
-	global const ℓ_ν = hierarchy.ℓ_ν
-	global const ℓ_mν  = hierarchy.ℓ_mν
-	global const nq = hierarchy.nq
-    xᵢ = first(hierarchy.bg.x_grid)
-    u₀ = cu(Bolt.initial_conditions(xᵢ, hierarchy))
-    du = cu(zero(u₀))#cu([NaN])
-    function f_kernel!(du,h,x)
+xᵢ = first(hierarchy.bg.x_grid)
+u₀ = CUDA.@allowscalar cu(Bolt.initial_conditions(xᵢ, hierarchy))
+du = cu(zero(u₀))
+
+f_kernel! = let u₀ = u₀
+    function (du,h,x)
         # get all the data
         k, par,bg,ih = h.k, h.par, h.bg,h.ih
         Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
@@ -79,12 +87,11 @@ let
         Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = gpu_unpack(u₀)
         Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = gpu_unpack(du)
 
-       ρℳ, σℳ  =  0.,0.
-       for i in 1:nq #have to un-broadcast this...
-            ρℳ += 4π*Iρ(xq[i])*ℳ[0*nq+i-1]*wq[i]
+        ρℳ, σℳ  =  0.,0.
+        for i in 1:nq #have to un-broadcast this...
+            ρℳ += 4π*Iρ(xq[1])*ℳ[0*nq+i-1]*wq[i]
             σℳ += 4π*Iσ(xq[i])*ℳ[2*nq+i-1]*wq[i]
         end
-        @cuprintln("ρ,σ nu: ",ρℳ, " , ",σℳ)
 
         #start setting the perturbations
         # metric
@@ -98,8 +105,6 @@ let
             + 4Ω_ν * a^(-2) * 𝒩[0]
             + a^(-2) * ρℳ / bg.ρ_crit
         )
-        @cuprintln("Φ′ = ", Φ′ )
-
         # matter
         δ′ = k / ℋₓ * v - 3Φ′
         v′ = -v - k / ℋₓ * Ψ
@@ -116,7 +121,6 @@ let
     
         # photons
         Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-        @cuprintln("Θ′[0] = ",-k / ℋₓ * Θ[1] - Φ′ ," term1: ", -k / ℋₓ * Θ[1] )
         @set! Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
         Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
         for ℓ in 2:(ℓᵧ-1)
@@ -158,7 +162,7 @@ let
             du[2(ℓᵧ+1)+i] = 𝒩′[i-1]
         end
         # See above 
-        #for i in 1:(ℓ_mν+1)
+        # for i in 1:(ℓ_mν+1)
         #     for j in 1:nq
         #         du[2(ℓᵧ+1)+(ℓ_ν+1)+i*nq + j-1] = ℳ′[0* nq+i-1]
         #     end
@@ -172,21 +176,12 @@ let
 
        return nothing
    end
-   @cuda f_kernel!(du,cu(hierarchy),xᵢ)
-   CUDA.@allowscalar du[end-5]
-   writedlm("./test/data/gpu_correctness.dat",du)
 end
 
+##
 
-#cpu values
-xᵢ_cpu = first(hierarchy.bg.x_grid)
-u₀_cpu = Bolt.initial_conditions(xᵢ_cpu, hierarchy)
-du_cpu = zero(u₀_cpu)
-Bolt.hierarchy!(du_cpu,u₀_cpu,hierarchy,xᵢ_cpu)
-du_cpu
-writedlm("./test/data/cpu_correctness.dat",du_cpu)
+@cuda f_kernel!(du, cu(hierarchy), xᵢ)
 
-u_gpu = readdlm("./test/data/gpu_correctness.dat")
-u_cpu = readdlm("./test/data/cpu_correctness.dat")
+@btime CUDA.@sync @cuda f_kernel!(du, cu(hierarchy), xᵢ)
 
-isapprox(u_gpu,u_cpu,rtol=1e-7)
+CUDA.@allowscalar du[1]
