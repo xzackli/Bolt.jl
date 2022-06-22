@@ -1,4 +1,4 @@
-using CUDA, StaticArrays, OffsetArrays,Adapt,Interpolations
+using CUDA, StaticArrays, OffsetArrays,Adapt,Interpolations,DelimitedFiles
 using Pkg
 Pkg.activate("/pscratch/sd/j/jsull/julia/Bolt.jl")
 using Bolt
@@ -67,7 +67,7 @@ let
         logqmin,logqmax=log10(Tν/30),log10(Tν*30)
         
         R = 4Ω_r / (3Ω_b * a)
-        Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+        Ω_ν =  7*(3/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
         # ρℳ, σℳ  =  Bolt.ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
         ϵx(x, am) = √(Bolt.xq2q(x,logqmin,logqmax)^2 + (am)^2)
         Iρ(x) = Bolt.xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m_ν) * Bolt.f0(Bolt.xq2q(x,logqmin,logqmax),par) / Bolt.dxdq(Bolt.xq2q(x,logqmin,logqmax),logqmin,logqmax)
@@ -169,5 +169,15 @@ let
        return nothing
    end
    @cuda f_kernel!(du,cu(hierarchy),xᵢ)
-   CUDA.@allowscalar du[1]
+   CUDA.@allowscalar du[end-5]
+   writedlm("./test/data/gpu_correctness.dat",du)
 end
+
+
+#cpu values
+xᵢ_cpu = first(hierarchy.bg.x_grid)
+u₀_cpu = Bolt.initial_conditions(xᵢ_cpu, hierarchy)
+du_cpu = zero(u₀_cpu)
+Bolt.hierarchy!(du_cpu,u₀_cpu,hierarchy,xᵢ_cpu)
+du_cpu
+writedlm("./test/data/cpu_correctness.dat",du_cpu)
