@@ -7,6 +7,11 @@ CUDA.allowscalar(false)
 
 ##
 
+storage = CUDA.CuArrayAdaptor{Mem.DeviceBuffer}() # for Float32 CuArray
+# storage = nothing # for Array
+
+##
+
 # re-use Bspline, Scaled Interpolations code needed for bg, ih
 function Adapt.adapt_structure(to, itp::Interpolations.BSplineInterpolation{T,N,<:Any,IT,Axs}) where {T,N,IT,Axs}
     coefs = Adapt.adapt_structure(to, itp.coefs)
@@ -50,7 +55,7 @@ reltol=1e-5
 # ℓ_ν = 20 
 # ℓ_mν  = 4
 # nq = 6
-hierarchy = cu(Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10,10,8,5))
+hierarchy = adapt(storage, Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10,10,8,5))
 
 #This is necessary for unpack since we can't pass the OffsetArray sizes as arguments
 const ℓᵧ = hierarchy.ℓᵧ
@@ -61,11 +66,12 @@ const nq = hierarchy.nq
 ##
 
 xᵢ = first(hierarchy.bg.x_grid)
-u₀ = CUDA.@allowscalar cu(Bolt.initial_conditions(xᵢ, hierarchy))
-du = cu(zero(u₀))
+u₀ = CUDA.@allowscalar adapt(storage, Bolt.initial_conditions(xᵢ, hierarchy))
+du = zero(u₀)
 
-f_kernel! = let u₀ = u₀
-    function (du,h,x)
+f_kernel!, batch_f_kernel! = let u₀ = u₀, h = hierarchy
+    
+    function f_kernel!(du, x)
         # get all the data
         k, par,bg,ih = h.k, h.par, h.bg,h.ih
         Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
@@ -175,13 +181,29 @@ f_kernel! = let u₀ = u₀
         du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] = v_b′ 
 
        return nothing
-   end
+    end
+
+    function batch_f_kernel!(du_batch, xᵢ_batch)
+        i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+        f_kernel!(@view(du_batch[:,i]), xᵢ_batch[1,i])
+        nothing
+    end
+
+    f_kernel!, batch_f_kernel!
+
 end
 
 ##
 
-@cuda f_kernel!(du, hierarchy, xᵢ)
+## gpu (single kernel)
+bench_f_kernel!(du, xᵢ) = CUDA.@sync @cuda f_kernel!(du, xᵢ)
+@btime bench_f_kernel!($du, $xᵢ); # 121μs
 
-@btime CUDA.@sync @cuda f_kernel!(du, hierarchy, xᵢ)
+## gpu (8192-batched kernel)
+du_batch = du .* cu(ones(128*64)')
+xᵢ_batch = xᵢ .* cu(ones(128*64)')
+bench_batch_f_kernel!(du_batch, xᵢ_batch) = @cuda threads=128 blocks=64 batch_f_kernel!(du_batch, xᵢ_batch)
+@btime CUDA.@sync bench_batch_f_kernel!(du_batch, xᵢ_batch); # 180μs
 
-CUDA.@allowscalar du[1]
+## cpu (single thread)
+@btime f_kernel!(du, xᵢ) # 4.3μs
