@@ -105,15 +105,12 @@ end
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
-    ℓᵧ = hierarchy.ℓᵧ
-    ℓ_ν =  hierarchy.ℓ_ν
-    ℓ_mν = hierarchy.ℓ_mν #should be smaller than others
-    nq = hierarchy.nq
-    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
-    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
-    𝒩 = OffsetVector(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1)) , 0:ℓ_ν)  # indexed 0 through ℓ_ν
-    ℳ = OffsetVector(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq )) , 0:(ℓ_mν+1)*nq -1)  # indexed 0 through ℓ_mν
-    Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5)) #getting a little messy...
+    (;ℓᵧ, ℓ_ν, ℓ_mν, nq) = hierarchy
+    Θ = Origin(0)(u.Θ)
+    Θᵖ = Origin(0)(u.Θᵖ)
+    𝒩 = Origin(0)(u.𝒩)
+    ℳ = Origin(0)(u.ℳ)
+    (;Φ, δ, v, δ_b, v_b) = u
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
 
@@ -270,29 +267,31 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 end
 
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
-function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where T
-    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih, hierarchy.nq
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    ℓ_ν = hierarchy.ℓ_ν
-    ℓ_mν =  hierarchy.ℓ_mν
-    u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
+function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where {T}
+
+    (;k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
+
+    Tν = (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/π^2 * ρ_crit(par) * par.Ω_r)^(1/4)
+    (logqmin, logqmax) = log10(Tν/30), log10(Tν*30)
+    q_pts = xq2q.(bg.quad_pts, logqmin, logqmax)
+
+    u = ComponentVector{T}(Φ=0, δ=0, v=0, δ_b=0, v_b=0, Θ=zeros(ℓᵧ+1), Θᵖ=zeros(ℓᵧ+1), 𝒩=zeros(ℓ_ν+1), ℳ=zeros((ℓ_mν+1)*nq))
+
+    ℋₓ, ηₓ, τₓ′ = bg.ℋ(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
-    #These get a 3/3 since massive neutrinos behave as massless at time of ICs
-    Ω_ν =  7*(3/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
-    f_ν = 1/(1 + 1/(7*(3/3)*par.N_ν/8 *(4/11)^(4/3)))
+    # These get a 3/3 since massive neutrinos behave as massless at time of ICs
+    Ω_ν = (7/8) * (3/3) * par.N_ν * (4/11)^(4/3) * par.Ω_r
+    f_ν = 1 / (1 + 1 / ((7/8) * (3/3) * par.N_ν * (4/11)^(4/3)))
     # ρ0ℳ = bg.ρ₀ℳ(xᵢ)
 
     # metric and matter perturbations
     Φ = 1.0
-    #choosing Φ=1 forces the following value for C, the rest of the ICs follow
-    C = -( (15 + 4f_ν)/(20 + 8f_ν) )
+    # choosing Φ=1 forces the following value for C, the rest of the ICs follow
+    C = -((15 + 4f_ν) / (20 + 8f_ν))
 
-    #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
+    # trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4
     Θ[1] = 10C/(15 + 4f_ν) * (k^2 * ηₓ) / (3*k)
     Θ[2] = -8k / (15ℋₓ * τₓ′) * Θ[1]
@@ -300,21 +299,21 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     Θᵖ[1] = -k / (4ℋₓ * τₓ′) * Θ[2]
     Θᵖ[2] = (1/4) * Θ[2]
     for ℓ in 3:ℓᵧ
-        Θ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θ[ℓ-1]
+        Θ[ℓ]  = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θ[ℓ-1]
         Θᵖ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θᵖ[ℓ-1]
     end
 
-    δ = 3/4 *(4Θ[0]) #the 4 converts δγ_MB -> Dodelson convention
+    δ = 3/4 * 4Θ[0] # the 4 converts δγ_MB -> Dodelson convention
     δ_b = δ
-    #we have that Θc = Θb = Θγ = Θν, but need to convert Θ = - k v (i absorbed in v)
-    v = -3k*Θ[1]
+    # we have that Θc = Θb = Θγ = Θν, but need to convert Θ = - k v (i absorbed in v)
+    v = -3k * Θ[1]
     v_b = v
 
     # neutrino hierarchy
     # we need xᵢ to be before neutrinos decouple, as always
     𝒩[0] = Θ[0]
     𝒩[1] = Θ[1]
-    𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
+    𝒩[2] = -(k^2 * ηₓ^2)/15 * 1 / (1 + 2/5 * f_ν) * Φ / 2 #MB
     #FIXME^put the C here for consistency
     # println("MB nu quad: ", - (k^2 *ηₓ^2)/30 * 1 / (1 + 2/(5) *f_ν) * Φ)
     # println("Callin nu quad ", - (k^2 *aᵢ²*Φ) / (12H₀² * Ω_ν) * 1 / (1 + 5/(2*f_ν)))
@@ -328,17 +327,23 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     #It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
-        df0 = dlnf0dlnq(q,par)
-        ℳ[0* nq+i_q] = -𝒩[0]  *df0
-        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0
-        ℳ[2* nq+i_q] = -𝒩[2]  *df0  #drop quadratic+ terms in (ma/q) as in MB
+        df0 = dlnf0dlnq(q, par)
+        ℳ[0 * nq + i_q] = -𝒩[0] * df0
+        ℳ[1 * nq + i_q] = -ϵ/q * 𝒩[1] *df0
+        ℳ[2 * nq + i_q] = -𝒩[2] * df0  #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
-            ℳ[ℓ* nq+i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
+            ℳ[ℓ * nq + i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
         end
     end
 
-    u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
+    u.Φ = Φ
+    u.δ = δ
+    u.v = v
+    u.δ_b = δ_b
+    u.v_b = v_b
+
     return u
+
 end
 
 # TODO: this could be extended to any Newtonian gauge integrator if we specify the

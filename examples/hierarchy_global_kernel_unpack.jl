@@ -1,9 +1,18 @@
 
-using CUDA, StaticArrays, OffsetArrays, Adapt, Interpolations, OrdinaryDiffEq, PyPlot
-using Bolt
-using BenchmarkTools
-using Setfield
+using Adapt, BenchmarkTools, Bolt, CUDA, ComponentArrays, Interpolations, 
+    OffsetArrays, OrdinaryDiffEq, PyPlot, Setfield, StaticArrays
+
 CUDA.allowscalar(false)
+
+##
+
+function Adapt.adapt_structure(to, x::ComponentArray)
+    ComponentArray{getaxes(x)}(Adapt.adapt_structure(to, getdata(x)))
+end
+function CUDA.GPUArrays._copyto!(dest::ComponentArray, bc::Base.Broadcast.Broadcasted)
+    CUDA.GPUArrays._copyto!(getdata(dest), bc)
+    dest
+end
 
 ##
 
@@ -28,18 +37,9 @@ function Adapt.adapt_structure(to, itp::Interpolations.ScaledInterpolation{T,N,I
     Interpolations.ScaledInterpolation{T,N,Titp,IT,RT}(s,ranges)
 end
 
-function gpu_unpack(u)  #use Marius' trick for the ntuples to avoid size limits on tuples
-    Θ = OffsetVector(SVector(ntuple(i -> u[i], Val(ℓᵧ+1))), 0:ℓᵧ)
-    Θᵖ = OffsetVector(SVector(ntuple(i -> u[i+(ℓᵧ+1)], Val(ℓᵧ+1))), 0:ℓᵧ)
-    𝒩 = OffsetVector(SVector(ntuple(i -> u[i+2(ℓᵧ+1)], Val(ℓ_ν+1))), 0:ℓ_ν)
-    ℳ  = OffsetVector(SVector(ntuple(i -> u[i+2(ℓᵧ+1)+(ℓ_ν+1)], Val((ℓ_mν+1)*nq))), 0:(ℓ_mν+1)*nq -1)
-    Φ, δ, v, δ_b, v_b = SVector(ntuple(i -> u[i+2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq], Val(5)))
-    return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
-end
-
 ##
 
-#adapts
+# adapts
 Adapt.@adapt_structure Background
 Adapt.@adapt_structure IonizationHistory
 Adapt.@adapt_structure Hierarchy #give this a shot not sure it's gonna work
@@ -51,28 +51,19 @@ bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=5)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 k = 500bg.H₀
 reltol=1e-5
-#FIXME run out of GPU memory with 50, 50, 20, 15 or 20 20 10 15
-# ℓᵧ = 20
-# ℓ_ν = 20 
-# ℓ_mν  = 4
-# nq = 6
-hierarchy = adapt(storage, Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10,10,8,5))
-
-#This is necessary for unpack since we can't pass the OffsetArray sizes as arguments
-const ℓᵧ = hierarchy.ℓᵧ
-const ℓ_ν = hierarchy.ℓ_ν
-const ℓ_mν  = hierarchy.ℓ_mν
-const nq = hierarchy.nq
+hierarchy = adapt(storage, Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 10, 10, 8, 5));
 
 ##
 
 xᵢ = first(hierarchy.bg.x_grid)
-u₀ = CUDA.@allowscalar adapt(storage, Bolt.initial_conditions(xᵢ, hierarchy))
-du = zero(u₀)
+u₀ = CUDA.@allowscalar adapt(storage, Bolt.initial_conditions(xᵢ, hierarchy));
+du = zero(u₀);
 
-function f_kernel!(du, u, h, x)
+function f_kernel!(du, u, hierarchy, x)
+
     # get all the data
-    k, par,bg,ih = h.k, h.par, h.bg,h.ih
+    (;ℓᵧ, ℓ_ν, ℓ_mν, nq, k, par, bg, ih) = hierarchy
+
     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′, csb² = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x),ih.csb²(x)
     a = x2a(x)
@@ -89,8 +80,8 @@ function f_kernel!(du, u, h, x)
 
 
     # do the unpack
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = gpu_unpack(u)
-    Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = gpu_unpack(du)
+    Θ,  Θᵖ,  𝒩,  ℳ,  Φ,  δ,  v,  δ_b,  v_b =  unpack(u, hierarchy)
+    Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
     ρℳ, σℳ  =  0.,0.
     for i in 1:nq #have to un-broadcast this...
@@ -98,7 +89,7 @@ function f_kernel!(du, u, h, x)
         σℳ += 4π*Iσ(xq[i])*ℳ[2*nq+i-1]*wq[i]
     end
 
-    #start setting the perturbations
+    # start setting the perturbations
     # metric
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                     Ω_ν * 𝒩[2]
@@ -117,7 +108,7 @@ function f_kernel!(du, u, h, x)
     v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
 
     # relativistic neutrinos (massless)
-    @set! 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′ #for some reason need set here...
+    𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′ #for some reason need set here...
     𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
     for ℓ in 2:(ℓ_ν-1)
         𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
@@ -126,7 +117,7 @@ function f_kernel!(du, u, h, x)
 
     # photons
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-    @set! Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
+    Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
     Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
     for ℓ in 2:(ℓᵧ-1)
         Θ′[ℓ] = ℓ * k / ((2ℓ+1) * ℋₓ) * Θ[ℓ-1] -
@@ -134,18 +125,18 @@ function f_kernel!(du, u, h, x)
     end
 
     # # polarized photons
-    @set! Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
+    Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
     for ℓ in 1:(ℓᵧ-1)
         Θᵖ′[ℓ] = ℓ * k / ((2ℓ+1) * ℋₓ) * Θᵖ[ℓ-1] -
             (ℓ+1) * k / ((2ℓ+1) * ℋₓ) * Θᵖ[ℓ+1] + τₓ′ * (Θᵖ[ℓ] - Π * Bolt.δ_kron(ℓ, 2) / 10)
     end
 
-    # # photon boundary conditions: diffusion damping #FIXME wrong (merge with fix branch)
+    # photon boundary conditions: diffusion damping #FIXME wrong (merge with fix branch)
     Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θ[ℓᵧ]
     Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θᵖ[ℓᵧ]
     
     # massive neutrinos
-    #FIXME ℳ′ assignment does not work in this loop for some reason??
+    # FIXME ℳ′ assignment does not work in this loop for some reason??
     for i_q in 1:nq
         q = Bolt.xq2q(bg.quad_pts[i_q] ,logqmin,logqmax)
         ϵ = √(q^2 + (a*m_ν)^2)
@@ -173,18 +164,23 @@ function f_kernel!(du, u, h, x)
     #     end
     # end
 
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1] = Φ′
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+2] = δ′
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+3] = v′
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+4] = δ_b′
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] = v_b′ 
+    du.Φ = Φ′
+    du.δ = δ′
+    du.v = v′
+    du.δ_b = δ_b′
+    du.v_b = v_b′ 
 
     return nothing
 end
 
-cudacall_f_kernel!(du, u, h, x) = @cuda f_kernel!(du, u, h, x)
+cudacall_f_kernel!(du, u, h, x) = @cuda threads=1 blocks=1 f_kernel!(du, u, h, x)
 
 ##
 
-prob = ODEProblem{true}(cudacall_f_kernel!, u₀, (T(xᵢ), T(0)), hierarchy)
+# works
+cudacall_f_kernel!(du, u₀, hierarchy, xᵢ)
+
+
+prob = ODEProblem{true}(cudacall_f_kernel!, u₀, (T(xᵢ), T(0)), hierarchy);
+# broken, probably need to define a few more ::ComponentArray{<:CuArray} stuff to make it work
 sol = @time solve(prob, KenCarp4(), reltol=1e-4, saveat=hierarchy.bg.x_grid, dense=false)
