@@ -8,7 +8,7 @@ using BenchmarkTools
 
 function pkc(Ω_c::DT,k_grid) where DT
     𝕡 = CosmoParams{DT}(Ω_c=Ω_c)
-    bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=1)
+    bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=15)
     𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
     ih = IonizationHistory(𝕣, 𝕡, bg)
     # sf = source_grid(𝕡, bg, ih, k_grid, BasicNewtonian())

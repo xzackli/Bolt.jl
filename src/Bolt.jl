@@ -51,7 +51,7 @@ abstract type AbstractCosmoParams{T} end
     Ω_b = 0.046  # baryon density
     Ω_c = 0.224  # cdm density
     A = 2.097e-9 # scalar amplitude, 1e-10*exp(3.043)
-    n = 1.0  # spectral index
+    n = 1.0  # scalar spectral index
     Y_p = 0.24  # primordial helium fraction
     N_ν = 3.046 #effective number of relativisic species (PDG25 value)
     Σm_ν = 0.06 #sum of neutrino masses (eV), Planck 15 default ΛCDM value
