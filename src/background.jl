@@ -1,7 +1,6 @@
 
 # NOTE: Bolt's background functions are in terms of x ≡ ln(a), the log scale factor
 
-
 const ζ = 1.2020569 #Riemann ζ(3) for phase space integrals
 
 H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
@@ -57,9 +56,7 @@ end
 
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
-    #ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) # we don't atually need pressure?
     ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
-    #ρ_ν = ρℳ(a2x(a))
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
@@ -74,11 +71,8 @@ H(x, par::AbstractCosmoParams,quad_pts,quad_wts) = H_a(x2a(x),par,quad_pts,quad_
 
 # conformal time
 function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
-    #fast copy from q - need to check accuracy (#FIXME) but a plays the role of q
-    logamin,logamax=-13.75,log10(x2a(x)) #0,x2a(x)
-    #convert ui to a,for now pick
+    logamin,logamax=-13.75,log10(x2a(x))
     Iη(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts))/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
-    #return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1]
     return sum(Iη.(quad_pts).*quad_wts)
 end
 
@@ -105,24 +99,13 @@ struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     η′::IT
     η′′::IT
     ρ₀ℳ::IT
-    # P₀ℳ::IT
 end
 
 function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
-    quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative
-    #Passing the quad pts/wts gets a little busy but eliminates quadgk
-    #We may want to fix the quad points to be more/less for bg compared to perts
-    #e.g. CLASS uses tolerances of 1e-5 for bg and 1e-3 for perts'
-
-    #println([ρP_0(x2a(x), par,quad_pts,quad_wts) for x in x_grid])
-    # println("background T: ", T)
-
-    #FIXME do the tuple juggling to avoid calling quad twice for ρ and P
+    quad_pts, quad_wts =  gausslegendre( nq ) 
     ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
-    # P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
-    η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
-    # println("ℋ_ T: ",typeof(ℋ_))
+    η_  = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     return Background(
         T(H₀(par)),
         T(η(0.0, par,quad_pts,quad_wts)),
@@ -141,6 +124,5 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         spline_∂ₓ(η_, x_grid),
         spline_∂ₓ²(η_, x_grid),
         ρ₀ℳ_,
-        # P₀ℳ_,
     )
 end
