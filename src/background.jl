@@ -12,7 +12,7 @@ function Ω_Λ(par::AbstractCosmoParams)
     #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
     Ω_ν = par.Σm_ν*νfac/par.h^2
     return 1 - (par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
-                                         + par.Ω_b + par.Ω_m
+                                         + par.Ω_b + par.Ω_c
                                          + Ω_ν
                                          ) #assume massive nus are non-rel today
 end
@@ -49,7 +49,7 @@ end
 
 #neglect neutrinos, this is for ionization debugging purposes only
 function oldH_a(a, par::AbstractCosmoParams)
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
+    return H₀(par) * √((par.Ω_c + par.Ω_b ) * a^(-3)
                         + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
                         + Ω_Λ(par))
 end
@@ -57,7 +57,7 @@ end
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
     ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
+    return H₀(par) * √((par.Ω_c + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
                         + Ω_Λ(par))
