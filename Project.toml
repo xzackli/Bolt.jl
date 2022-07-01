@@ -26,10 +26,13 @@ ThreadPools = "b189fb0b-2eb5-4ed4-bc0c-d34c51242431"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 UnitfulAstro = "6112ee07-acf9-5e0f-b108-d242c714bf9f"
+UnitfulCosmo = "961331e1-62bb-46d9-b9e3-f058129f1391"
 
 [extras]
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 
 [targets]
-test = ["Test", "DelimitedFiles"]
+test = ["Test", "DelimitedFiles", "Printf", "DataInterpolations"]

@@ -84,7 +84,7 @@ end
 
 
 function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
-              n_q=15,ℓᵧ=500,ℓ_ν=500,ℓ_mν=20,x=0) where T
+              n_q=15,ℓᵧ=50,ℓ_ν=50,ℓ_mν=20,x=0) where T
     #copy code abvoe
     hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ,ℓ_ν,ℓ_mν,n_q) #shoddy quality test values
     perturb = boltsolve(hierarchy; reltol=1e-5)
@@ -106,15 +106,15 @@ function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
     νfac = (90 * ζ /(11 * π^4)) * (𝕡.Ω_r * 𝕡.h^2 / Tγ) *((𝕡.N_ν/3)^(3/4))
     #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
     Ω_ν = 𝕡.Σm_ν*νfac/𝕡.h^2
-    Ωm = 𝕡.Ω_m+𝕡.Ω_b+Ω_ν
+    Ωm = 𝕡.Ω_c+𝕡.Ω_b+Ω_ν
 
     #construct gauge-invariant versions of density perturbations
     δc = δcN - 3bg.ℋ(x)*vcN ./k
     δb = δbN - 3bg.ℋ(x)*vbN ./k
     #assume neutrinos fully non-relativistic and can be described by fluid (ok at z=0)
     δmν = ℳρN - 3bg.ℋ(x)*vmνN ./k
-    δm = (𝕡.Ω_m*δc .+ 𝕡.Ω_b*δb .+ Ω_ν*δmν) ./ Ωm
-    As=𝕡.A#1e-10*exp(3.043)
+    δm = (𝕡.Ω_c*δc .+ 𝕡.Ω_b*δb .+ Ω_ν*δmν) ./ Ωm
+    As=𝕡.A
     k_hMpc=k/(bg.H₀*3e5/100)
     Pprim = As*(k_hMpc./0.05).^(𝕡.n-1)
     PL= (2π^2 ./ k_hMpc.^3).*(δm*𝕡.h).^2 .*Pprim
