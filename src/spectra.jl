@@ -86,19 +86,16 @@ end
 function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
               n_q=15,ℓᵧ=500,ℓ_ν=500,ℓ_mν=20,x=0) where T
     #copy code abvoe
-    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ,ℓ_ν,ℓ_mν,n_q) #shoddy quality test values
+    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν, n_q)
     perturb = boltsolve(hierarchy; reltol=1e-5)
-    results = perturb(x)
-    ℳρ,_ = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q],
-                            results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q],
-                            bg,exp(x),𝕡)./ bg.ρ₀ℳ(x)
+    (Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b) = unpack(perturb(x), hierarchy)
+    ℳρ, = ρ_σ(ℳ[0,:], ℳ[2,:], bg, exp(x), 𝕡) ./ bg.ρ₀ℳ(x)
     #Below assumes negligible neutrino pressure for the normalization (fine at z=0)
-    ℳθ = k*θ(results[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+2n_q],
-                     bg,exp(x),𝕡)./ bg.ρ₀ℳ(x)
+    ℳθ = k * θ(ℳ[0,:], bg,exp(x), 𝕡) ./ bg.ρ₀ℳ(x)
     #Also using the fact that a=1 at z=0
-    δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h
-    vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]* 𝕡.h
-    ℳρN,ℳθN = ℳρ,ℳθ
+    δcN, δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h
+    vcN, vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]* 𝕡.h
+    ℳρN, ℳθN = ℳρ, ℳθ
     vmνN = -ℳθN ./ k
     #omegas to get weighted sum for total matter in background
     Tγ = (15/ π^2 *bg.ρ_crit *𝕡.Ω_r)^(1/4)
