@@ -2,7 +2,7 @@
 # ensure in right directory and environment
 cd(dirname(@__FILE__))
 using Pkg
-pkg"activate ."
+Pkg.activate(".")
 using Bolt
 using Documenter
 ENV["GKSwstype"] = 100 # https://github.com/jheinen/GR.jl/issues/318#issuecomment-651890036
@@ -60,7 +60,6 @@ rm.(md_filenames)
 
 deploydocs(;
     repo="github.com/xzackli/Bolt.jl",
-    devbranch = "main",
     push_preview = true,
     forcepush = true
 )

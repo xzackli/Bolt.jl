@@ -2,7 +2,6 @@
 Bolt = "d94d39b4-3f51-4e5a-bfd8-f3b08e8f2b62"
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-GR = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 ThreadTools = "dbf13d8f-d36e-4350-8970-f3a99faba1a8"
