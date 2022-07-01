@@ -11,14 +11,12 @@ jobs:
       matrix:
         version:
           - '1.5'
-          - 'nightly'
+          - '1.6'
+          - '1.7'
         os:
           - ubuntu-latest
-          - macOS-latest
-          - windows-latest
         arch:
           - x64
-          - x86
         exclude:
           - os: macOS-latest
             arch: x86
@@ -52,16 +50,6 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1'
-      - run: |
-          julia --project=docs -e '
-            using Pkg
-            Pkg.develop(PackageSpec(path=pwd()))
-            Pkg.instantiate()'
-      - run: |
-          julia --project=docs -e '
-            using Documenter: doctest
-            using Bolt
-            doctest(Bolt)'
       - run: julia --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
