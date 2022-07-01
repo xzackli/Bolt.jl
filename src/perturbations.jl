@@ -41,8 +41,7 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
     csb² = ih.csb²(x)
     ℓ_ν = hierarchy.ℓ_ν
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    # Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
+    (Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b) = unpack(u, hierarchy)
 
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
@@ -104,14 +103,13 @@ function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6)
 end
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
-function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
-    (;ℓᵧ, ℓ_ν, ℓ_mν, nq) = hierarchy
+function unpack(u, ::Hierarchy{<:Any,BasicNewtonian})
     Θ = Origin(0)(u.Θ)
     Θᵖ = Origin(0)(u.Θᵖ)
     𝒩 = Origin(0)(u.𝒩)
-    ℳ = Origin(0)(u.ℳ)
-    (;Φ, δ, v, δ_b, v_b) = u
-    return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
+    ℳ = Origin(0,1)(u.ℳ)
+    @unpack (Φ, δ, v, δ_b, v_b) = u
+    return (Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b)
 end
 
 function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
@@ -150,7 +148,7 @@ end
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
 function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
-    (;k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
+    @unpack (k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -161,12 +159,12 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
     csb² = ih.csb²(x)
 
-    Θ,  Θᵖ,  𝒩,  ℳ, Φ, δ, v, δ_b, v_b = unpack(u,  hierarchy)
-    Θ′, Θᵖ′, 𝒩′, ℳ′                   = unpack(du, hierarchy)
+    (Θ,  Θᵖ,  𝒩,  ℳ, Φ, δ, v, δ_b, v_b) = unpack(u,  hierarchy)
+    (Θ′, Θᵖ′, 𝒩′, ℳ′)                   = unpack(du, hierarchy)
 
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    ρℳ, σℳ = @views ρ_σ(ℳ[0,:], ℳ[2,:], bg, a, par) # monopole (energy density, 00 part), quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                   Ω_ν * 𝒩[2]#add rel quadrupole
@@ -187,16 +185,17 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
 
     # neutrinos (massive, MB 57)
-    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+    # TODO: it might be possible to transpose this loop and get it hardware vectorized
+    for (qᵢ, q) in enumerate(q_pts)
         ϵ = √(q^2 + (a*m_ν)^2)
-        df0 = dlnf0dlnq(q,par)
-        #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
-        ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
+        df0 = dlnf0dlnq(q, par)
+        # need these factors of 4 on Φ, Ψ terms due to MB pert defn
+        ℳ′[0,qᵢ] = - k / ℋₓ *  q/ϵ * ℳ[1,qᵢ]  + Φ′ * df0
+        ℳ′[1,qᵢ] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0,qᵢ] - 2ℳ[2,qᵢ])  - ϵ/q * Ψ  * df0)
         for ℓ in 2:(ℓ_mν-1)
-            ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
+            ℳ′[ℓ,qᵢ] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[ℓ-1,qᵢ] - (ℓ+1)*ℳ[ℓ+1,qᵢ] )
         end
-        ℳ′[ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case but w/ q/ϵ
+        ℳ′[ℓ_mν,qᵢ] =  q / ϵ * k / ℋₓ * ℳ[ℓ_mν-1,qᵢ] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[ℓ_mν,qᵢ] #MB (58) similar to rel case but w/ q/ϵ
     end
 
     # RSA equations (implementation of CLASS default switches)
@@ -259,28 +258,25 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     end
     #END RSA
 
-    du.Φ = Φ′
-    du.δ = δ′
-    du.v = v′
-    du.δ_b = δ_b′
-    du.v_b = v_b′
-
+    (Φ=Φ′; δ=δ′; v=v′; δ_b=δ_b′; v_b=v_b′)
+    @pack! du = (Φ, δ, v, δ_b, v_b)
+    
     return nothing
 end
 
 # BasicNewtonian Integrator (dispatches on hierarchy.integrator)
 function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where {T}
 
-    (;k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
+    @unpack (k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
 
     Tν = (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/π^2 * ρ_crit(par) * par.Ω_r)^(1/4)
     (logqmin, logqmax) = log10(Tν/30), log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts, logqmin, logqmax)
 
-    u = ComponentVector{T}(Φ=0, δ=0, v=0, δ_b=0, v_b=0, Θ=zeros(ℓᵧ+1), Θᵖ=zeros(ℓᵧ+1), 𝒩=zeros(ℓ_ν+1), ℳ=zeros((ℓ_mν+1)*nq))
+    u = ComponentVector{T}(Φ=0, δ=0, v=0, δ_b=0, v_b=0, Θ=zeros(ℓᵧ+1), Θᵖ=zeros(ℓᵧ+1), 𝒩=zeros(ℓ_ν+1), ℳ=zeros(ℓ_mν+1,nq))
 
     ℋₓ, ηₓ, τₓ′ = bg.ℋ(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ)
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    (Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b) = unpack(u, hierarchy)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
     # These get a 3/3 since massive neutrinos behave as massless at time of ICs
@@ -325,24 +321,20 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
         𝒩[ℓ] = k/((2ℓ+1)ℋₓ) * 𝒩[ℓ-1] #standard truncation
     end
 
-    #massive neutrino hierarchy
-    #It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
-    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+    # massive neutrino hierarchy
+    # It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
+    for (qᵢ, q) in enumerate(q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
         df0 = dlnf0dlnq(q, par)
-        ℳ[0 * nq + i_q] = -𝒩[0] * df0
-        ℳ[1 * nq + i_q] = -ϵ/q * 𝒩[1] *df0
-        ℳ[2 * nq + i_q] = -𝒩[2] * df0  #drop quadratic+ terms in (ma/q) as in MB
+        ℳ[0,qᵢ] = -𝒩[0] * df0
+        ℳ[1,qᵢ] = -ϵ/q * 𝒩[1] *df0
+        ℳ[2,qᵢ] = -𝒩[2] * df0  #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
-            ℳ[ℓ * nq + i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
+            ℳ[ℓ,qᵢ] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[ℓ-1,qᵢ] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
         end
     end
 
-    u.Φ = Φ
-    u.δ = δ
-    u.v = v
-    u.δ_b = δ_b
-    u.v_b = v_b
+    @pack! u = (Φ, δ, v, δ_b, v_b)
 
     return u
 
@@ -363,8 +355,8 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
-    Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
+    (Θ,  Θᵖ,  𝒩,  ℳ,  Φ,  δ,  v,  δ_b,  v_b ) = unpack(u,  hierarchy)
+    (Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′) = unpack(du, hierarchy)
 
     # recalulate these since we didn't save them (Callin eqns 39-42)
     #^Also have just copied from before, but should save these maybe?
