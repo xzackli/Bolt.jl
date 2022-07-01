@@ -150,7 +150,7 @@ end
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
 function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
-    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    (;k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -161,11 +161,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
     csb² = ih.csb²(x)
 
-
-    ℓ_ν = hierarchy.ℓ_ν
-    ℓ_mν =  hierarchy.ℓ_mν
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
+    Θ,  Θᵖ,  𝒩,  ℳ, Φ, δ, v, δ_b, v_b = unpack(u,  hierarchy)
+    Θ′, Θᵖ′, 𝒩′, ℳ′                   = unpack(du, hierarchy)
 
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
@@ -262,7 +259,12 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     end
     #END RSA
 
-    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
+    du.Φ = Φ′
+    du.δ = δ′
+    du.v = v′
+    du.δ_b = δ_b′
+    du.v_b = v_b′
+
     return nothing
 end
 
