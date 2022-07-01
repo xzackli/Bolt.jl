@@ -6,7 +6,6 @@ version = "0.1.0"
 [deps]
 AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
-DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 DiffResults = "163ba53b-c6d8-5494-b064-1a9d43ac40c5"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
@@ -32,6 +31,8 @@ UnitfulCosmo = "961331e1-62bb-46d9-b9e3-f058129f1391"
 [extras]
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 
 [targets]
 test = ["Test", "DelimitedFiles"]

@@ -4,6 +4,7 @@ using DelimitedFiles
 using LinearAlgebra
 using ForwardDiff
 using Interpolations, DataInterpolations
+using Printf
 
 @testset "FFTLog" begin
     N = 64
