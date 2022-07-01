@@ -35,4 +35,4 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 
 [targets]
-test = ["Test", "DelimitedFiles"]
+test = ["Test", "DelimitedFiles", "Printf", "DataInterpolations"]

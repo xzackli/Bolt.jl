@@ -139,7 +139,6 @@ end
 
 """Convenience function to create an ionisation history from some tables"""
 function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
-
      x_grid = bg.x_grid
      τ, τ′ = Bolt.τ_functions(x_grid, Xₑ_function, par, bg.ℋ)
      g̃ = Bolt.g̃_function(τ, τ′)
@@ -161,5 +160,5 @@ function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
          spline_∂ₓ²(g̃_, x_grid),
          Tmat_,
            csb²_,
-     )
- end
+    )
+end
