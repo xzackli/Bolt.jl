@@ -112,24 +112,23 @@ function unpack(u, ::Hierarchy{<:Any,BasicNewtonian})
     return (Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b)
 end
 
-function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
-    #Do q integrals to get the massive neutrino metric perturbations
-    #MB eqn (55)
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    #^Replace this with bg.ρ_crit? I think it is using an imported function ρ_crit
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-
-    #FIXME: avoid repeating code? and maybe put general integrals in utils?
+function ρ_σ(ℳ0, ℳ2, bg, a, par::AbstractCosmoParams)
+    # Do q integrals to get the massive neutrino metric perturbations
+    # MB eqn (55)
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
+    logqmin, logqmax = log10(Tν/30), log10(Tν*30)
+    # FIXME: avoid repeating code? and maybe put general integrals in utils?
     m = par.Σm_ν
-    nq = length(ℳ0) #assume we got this right
     ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
-    Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    Iσ(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    xq,wq = bg.quad_pts,bg.quad_wts
-    ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
-    σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
+    Iρ(x) = xq2q(x,logqmin,logqmax)^2 * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    Iσ(x) = xq2q(x,logqmin,logqmax)^2 * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    ρ = σ = zero(Tν)
+    for qᵢ in 1:length(bg.quad_pts)
+        ρ += Iρ(bg.quad_pts[qᵢ]) * ℳ0[qᵢ] * bg.quad_wts[qᵢ]
+        σ += Iσ(bg.quad_pts[qᵢ]) * ℳ2[qᵢ] * bg.quad_wts[qᵢ]
+    end
     # #a-dependence has been moved into Einstein eqns, as have consts in σ
-    return ρ,σ
+    return 4π*ρ, 4π*σ
 end
 
 #need a separate function for θ (really(ρ̄+P̄)θ) for plin gauge change
@@ -149,9 +148,8 @@ end
 function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
     @unpack (k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
@@ -186,7 +184,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 
     # neutrinos (massive, MB 57)
     # TODO: it might be possible to transpose this loop and get it hardware vectorized
-    for (qᵢ, q) in enumerate(q_pts)
+    for qᵢ in 1:length(bg.quad_pts)
+        q = xq2q(bg.quad_pts[qᵢ], logqmin, logqmax)
         ϵ = √(q^2 + (a*m_ν)^2)
         df0 = dlnf0dlnq(q, par)
         # need these factors of 4 on Φ, Ψ terms due to MB pert defn
@@ -206,22 +205,21 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
     #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
-        # println("INSIDE RSA")
-        #photons
+        # photons
         Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
         # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
         Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
                          + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
         Θ[2] = 0
-        #massless neutrinos
+        # massless neutrinos
         𝒩[0] = Φ
         𝒩[1] = -2ℋₓ/k *Φ′
         𝒩[2] = 0
 
         # manual zeroing to avoid saving garbage
-        𝒩′[:] = zeros(ℓ_ν+1)
-        Θ′[:] = zeros(ℓᵧ+1)
-        Θᵖ′[:] = zeros(ℓᵧ+1)
+        𝒩′ .= 0
+        Θ′ .= 0
+        Θᵖ′ .= 0
 
     else
         #do usual hierarchy
@@ -269,7 +267,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
 
     @unpack (k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
 
-    Tν = (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/π^2 * ρ_crit(par) * par.Ω_r)^(1/4)
+    Tν = (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
     (logqmin, logqmax) = log10(Tν/30), log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts, logqmin, logqmax)
 
@@ -351,7 +349,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
     a = x2a(x)
     ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
     Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)

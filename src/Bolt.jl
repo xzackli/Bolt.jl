@@ -19,6 +19,7 @@ using OffsetArrays: OffsetArray, Origin
 using OrdinaryDiffEq
 using Parameters
 using QuadGK
+using Requires
 using ThreadPools
 using Unitful, UnitfulAstro, NaturallyUnitful
 
@@ -52,6 +53,7 @@ include("ionization/ionization.jl")
 include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
+@init @require CUDA="052768ef-5323-5732-b1bb-66c8b64840ba" include("gpu.jl")
 
 
 end
