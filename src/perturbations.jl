@@ -287,7 +287,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
     # metric and matter perturbations
     ℛ = 1.0  # set curvature perturbation to 1
     Φ = (4f_ν + 10) / (4f_ν + 15) * ℛ  # for a mode outside the horizon in radiation era
-    C = -((15 + 4f_ν) / (20 + 8f_ν))
+    C = -((15 + 4f_ν) / (20 + 8f_ν)) * Φ
 
     # trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4
@@ -330,7 +330,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
         ℳ[1,qᵢ] = -ϵ/q * 𝒩[1] *df0
         ℳ[2,qᵢ] = -𝒩[2] * df0  #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
-            ℳ[ℓ,qᵢ] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[ℓ-1,qᵢ] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
+            ℳ[ℓ,qᵢ] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[ℓ-1,qᵢ] #approximation equivalent to MB, but add q/ϵ - leaving as 0 makes no big difference
         end
     end
 
