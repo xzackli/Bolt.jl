@@ -1,14 +1,10 @@
 
 # NOTE: Bolt's background functions are in terms of x ≡ ln(a), the log scale factor
 
-# derived quantities (I've chosen natural units, possibly the wrong choice)
-const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [eV]
-const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation))) #[eV^-2]
 const ζ = 1.2020569 #Riemann ζ(3) for phase space integrals
-#In the natural units used here, ħ=kb=c=1, G as above
 
 H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
-ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural  # [eV⁴]
+ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural
 function Ω_Λ(par::AbstractCosmoParams)
     #Below can definitely be more streamlined, I am just making it work for now
     Tγ = (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
@@ -16,7 +12,7 @@ function Ω_Λ(par::AbstractCosmoParams)
     #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
     Ω_ν = par.Σm_ν*νfac/par.h^2
     return 1 - (par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
-                                         + par.Ω_b + par.Ω_m
+                                         + par.Ω_b + par.Ω_c
                                          + Ω_ν
                                          ) #assume massive nus are non-rel today
 end
@@ -53,17 +49,15 @@ end
 
 #neglect neutrinos, this is for ionization debugging purposes only
 function oldH_a(a, par::AbstractCosmoParams)
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
+    return H₀(par) * √((par.Ω_c + par.Ω_b ) * a^(-3)
                         + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
                         + Ω_Λ(par))
 end
 
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
-    #ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) # we don't atually need pressure?
     ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
-    #ρ_ν = ρℳ(a2x(a))
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
+    return H₀(par) * √((par.Ω_c + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
                         + Ω_Λ(par))
@@ -77,11 +71,8 @@ H(x, par::AbstractCosmoParams,quad_pts,quad_wts) = H_a(x2a(x),par,quad_pts,quad_
 
 # conformal time
 function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
-    #fast copy from q - need to check accuracy (#FIXME) but a plays the role of q
-    logamin,logamax=-11.75,log10(x2a(x)) #0,x2a(x)
-    #convert ui to a,for now pick
+    logamin,logamax=-13.75,log10(x2a(x))
     Iη(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts))/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
-    #return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1]
     return sum(Iη.(quad_pts).*quad_wts)
 end
 
@@ -108,24 +99,13 @@ struct Background{T, IT, GT, U, AT<:AbstractArray{U,1}} <: AbstractBackground{T,
     η′::IT
     η′′::IT
     ρ₀ℳ::IT
-    # P₀ℳ::IT
 end
 
 function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) where T
-    quad_pts, quad_wts =  gausslegendre( nq ) #12 should get 1e-3, 15 conservative
-    #Passing the quad pts/wts gets a little busy but eliminates quadgk
-    #We may want to fix the quad points to be more/less for bg compared to perts
-    #e.g. CLASS uses tolerances of 1e-5 for bg and 1e-3 for perts'
-
-    #println([ρP_0(x2a(x), par,quad_pts,quad_wts) for x in x_grid])
-    # println("background T: ", T)
-
-    #FIXME do the tuple juggling to avoid calling quad twice for ρ and P
+    quad_pts, quad_wts =  gausslegendre( nq ) 
     ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
-    # P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
-    η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
-    # println("ℋ_ T: ",typeof(ℋ_))
+    η_  = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     return Background(
         T(H₀(par)),
         T(η(0.0, par,quad_pts,quad_wts)),
@@ -146,6 +126,5 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         spline_∂ₓ(η_, x_grid),
         spline_∂ₓ²(η_, x_grid),
         ρ₀ℳ_,
-        # P₀ℳ_,
     )
 end

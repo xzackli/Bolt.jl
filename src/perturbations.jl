@@ -22,11 +22,11 @@ Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::Abst
 
 
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abstol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,
+    sol = solve(prob, ode_alg, reltol=reltol, abstol=abstol,
                 saveat=hierarchy.bg.x_grid, dense=false,
                 )
     return sol
@@ -35,7 +35,7 @@ end
 function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     #redundant code for what we need to compute RSA perts in place in u
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
-    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    Ω_r, Ω_b, Ω_c, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
@@ -49,7 +49,7 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
                                   + σℳ / bg.ρ_crit /4
                                   )
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0]
         + a^(-2) * ρℳ / bg.ρ_crit
@@ -82,15 +82,22 @@ function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
     return nothing
 end
 
-function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abstol=1e-6) where T
     #call solve as usual first
-    perturb = boltsolve(hierarchy, reltol=reltol)
+    perturb = boltsolve(hierarchy, reltol=reltol, abstol=abstol)
     x_grid = hierarchy.bg.x_grid
     pertlen = 2(hierarchy.ℓᵧ+1)+(hierarchy.ℓ_ν+1)+(hierarchy.ℓ_mν+1)*hierarchy.nq+5
     results=zeros(pertlen,length(x_grid))
     for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
     #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    #this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+
+    xrsa_hor = findfirst(>(240), @. hierarchy.k * hierarchy.bg.η)
+    xrsa_od = findfirst(>(100), @. -hierarchy.ih.τ′*hierarchy.bg.ℋ/hierarchy.bg.η)
+    xrsa_hor = isnothing(xrsa_hor) ? length(x_grid) : xrsa_hor
+    xrsa_od = isnothing(xrsa_hor) ? length(x_grid) : xrsa_od
+
+    this_rsa_switch = x_grid[max(xrsa_hor,xrsa_od)]
     x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
     results_rsa = results[:,x_grid.>this_rsa_switch]
     #(re)-compute the RSA perts so we can write them to the output vector
@@ -150,7 +157,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     @unpack (k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq) = hierarchy
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    Ω_r, Ω_b, Ω_c, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
@@ -170,7 +177,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
                                   )
 
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
@@ -198,16 +205,11 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     end
 
     # RSA equations (implementation of CLASS default switches)
-    # println("k condition ", k*ηₓ)
-    # println("tau condition ", -5τₓ′*ηₓ*ℋₓ)
-    # if (k*ηₓ > 45) println("k condition satisfied") end
-    # if -5τₓ′*ηₓ*sqrt(H₀²)< 1 println("tau condition satisfied") end
-    rsa_on = (k*ηₓ > 45) &&  (-5τₓ′*ηₓ*ℋₓ<1)
-    #*sqrt(H₀²)< 1) #is this ℋ or H0?
+    rsa_on = (k*ηₓ > 240) &&  (-τₓ′*ℋₓ / ηₓ > 100)
     if rsa_on
         # photons
         Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-        # Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
+        Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
         Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
                          + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
         Θ[2] = 0
@@ -250,8 +252,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         end
 
         # photon boundary conditions: diffusion damping
-        Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θ[ℓᵧ]
-        Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - (ℓᵧ + 1) / (ℋₓ * ηₓ) + τₓ′ * Θᵖ[ℓᵧ]
+        Θ′[ℓᵧ] = k / ℋₓ * Θ[ℓᵧ-1] - ( (ℓᵧ + 1) / (ℋₓ * ηₓ) - τₓ′ ) * Θ[ℓᵧ]
+        Θᵖ′[ℓᵧ] = k / ℋₓ * Θᵖ[ℓᵧ-1] - ( (ℓᵧ + 1) / (ℋₓ * ηₓ) - τₓ′ ) * Θᵖ[ℓᵧ]
 
     end
     #END RSA
@@ -283,8 +285,8 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
     # ρ0ℳ = bg.ρ₀ℳ(xᵢ)
 
     # metric and matter perturbations
-    Φ = 1.0
-    # choosing Φ=1 forces the following value for C, the rest of the ICs follow
+    ℛ = 1.0  # set curvature perturbation to 1
+    Φ = (4f_ν + 10) / (4f_ν + 15) * ℛ  # for a mode outside the horizon in radiation era
     C = -((15 + 4f_ν) / (20 + 8f_ν))
 
     # trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
@@ -338,6 +340,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
 
 end
 
+#FIXME this is pretty old code that hasn't been tested in a while!
 # TODO: this could be extended to any Newtonian gauge integrator if we specify the
 # Bardeen potential Ψ and its derivative ψ′ for an integrator, or we saved them
 function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
@@ -358,7 +361,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
 
     # recalulate these since we didn't save them (Callin eqns 39-42)
     #^Also have just copied from before, but should save these maybe?
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    _, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (par.Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole

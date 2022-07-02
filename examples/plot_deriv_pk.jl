@@ -7,7 +7,7 @@ using BenchmarkTools
 # P(k) as a function of Ω_c
 
 function pkc(Ω_c::DT,k_grid) where DT
-    𝕡 = CosmoParams{DT}(Ω_m=Ω_c)
+    𝕡 = CosmoParams{DT}(Ω_c=Ω_c)
     bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=15)
     𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
     ih = IonizationHistory(𝕣, 𝕡, bg)
@@ -15,22 +15,22 @@ function pkc(Ω_c::DT,k_grid) where DT
     nk=length(k_grid)
     a=zeros(DT,nk)
     for i = 1:nk
-              pl = plin(k_grid[i],𝕡,bg,ih)
-              println(i)
+            #   pl = plin(k_grid[i],𝕡,bg,ih)
+            #   println(i)
               a[i] = plin(k_grid[i],𝕡,bg,ih)[1] #not sure why this is returning a vector and not a T...
           end
    return a
 end
 
 #clean this up by specifying k in h/Mpc
-𝕡 = CosmoParams(Ω_m=0.224)
+𝕡 = CosmoParams(Ω_c=0.224)
 bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=15)
 kmin,kmax= 0.1bg.H₀*100,5000bg.H₀
 k_grid = log10_k(kmin,kmax,33)
 k_grid_hMpc = k_grid/(bg.H₀*3e5/100)
 fc(Ω_c) = pkc(Ω_c,k_grid)
-@time pk = fc(0.224)
-@time ∂pk = ForwardDiff.derivative(fc, 0.224)  # you can just ForwardDiff the whole thing
+@btime pk = fc(0.224)
+@btime ∂pk = ForwardDiff.derivative(fc, 0.224)  # you can just ForwardDiff the whole thing
 pk
 ##
 ∂pk.>0
