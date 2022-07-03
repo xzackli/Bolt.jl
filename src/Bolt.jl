@@ -10,17 +10,19 @@ export IE,initial_conditions,unpack,ie_unpack
 export source_grid, quadratic_k, cltt,log10_k,plin
 export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
-using Parameters
-using Unitful, UnitfulAstro
-using NLsolve
-using OrdinaryDiffEq
-using Interpolations
-using OffsetArrays
-using QuadGK
-using ThreadPools
-using ForwardDiff, DiffResults
-using NumericalIntegration
+using ComponentArrays
 using FastGaussQuadrature
+using ForwardDiff, DiffResults
+using Interpolations
+using NLsolve
+using NumericalIntegration
+using OffsetArrays: OffsetArray, Origin
+using OrdinaryDiffEq
+using Parameters
+using QuadGK
+using Requires
+using ThreadPools
+using Unitful, UnitfulAstro, NaturallyUnitful
 
 using FFTW
 import SpecialFunctions: lgamma, sphericalbesselj
@@ -63,5 +65,6 @@ include("ionization/ionization.jl")
 include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
+@init @require CUDA="052768ef-5323-5732-b1bb-66c8b64840ba" include("gpu.jl")
 
 end
