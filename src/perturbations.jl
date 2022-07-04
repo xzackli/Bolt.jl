@@ -124,24 +124,23 @@ function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
 
-function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
-    #Do q integrals to get the massive neutrino metric perturbations
-    #MB eqn (55)
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    #^Replace this with bg.ρ_crit? I think it is using an imported function ρ_crit
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-
-    #FIXME: avoid repeating code? and maybe put general integrals in utils?
+function ρ_σ(ℳ0, ℳ2, bg, a, par::AbstractCosmoParams)
+    # Do q integrals to get the massive neutrino metric perturbations
+    # MB eqn (55)
+    Tν =  (par.N_ν/3)^(1/4) * (4/11)^(1/3) * (15/ π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
+    logqmin, logqmax = log10(Tν/30), log10(Tν*30)
+    # FIXME: avoid repeating code? and maybe put general integrals in utils?
     m = par.Σm_ν
-    nq = length(ℳ0) #assume we got this right
     ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
-    Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    Iσ(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    xq,wq = bg.quad_pts,bg.quad_wts
-    ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
-    σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
+    @inline Iρ(x) = xq2q(x,logqmin,logqmax)^2 * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    @inline Iσ(x) = xq2q(x,logqmin,logqmax)^2 * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    ρ = σ = zero(Tν)
+    for qᵢ in 1:length(bg.quad_pts)
+        ρ += Iρ(bg.quad_pts[qᵢ]) * ℳ0[qᵢ] * bg.quad_wts[qᵢ]
+        σ += Iσ(bg.quad_pts[qᵢ]) * ℳ2[qᵢ] * bg.quad_wts[qᵢ]
+    end
     # #a-dependence has been moved into Einstein eqns, as have consts in σ
-    return ρ,σ
+    return 4π*ρ, 4π*σ
 end
 
 #need a separate function for θ (really(ρ̄+P̄)θ) for plin gauge change
@@ -179,7 +178,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
 
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                   Ω_ν * 𝒩[2]#add rel quadrupole
@@ -227,9 +226,9 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         𝒩[2] = 0
 
         # manual zeroing to avoid saving garbage
-        𝒩′[:] = zeros(ℓ_ν+1)
-        Θ′[:] = zeros(ℓᵧ+1)
-        Θᵖ′[:] = zeros(ℓᵧ+1)
+        𝒩′ .= zero(T)
+        Θ′ .= zero(T)
+        Θᵖ′ .= zero(T)
 
     else
         #do usual hierarchy
