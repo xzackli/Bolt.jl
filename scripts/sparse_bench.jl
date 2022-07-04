@@ -4,6 +4,8 @@ using Plots
 using Printf
 using Interpolations, DataInterpolations
 using DelimitedFiles
+using LinearAlgebra
+BLAS.set_num_threads(1)
 
 # bg/ion setup
 𝕡 = CosmoParams()
@@ -48,8 +50,7 @@ pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
 results=zeros(pertlen,length(x_grid))
 ℳρ,ℳσ = zeros(length(x_grid)),zeros(length(x_grid)) #arrays for the massive neutrino integrated perts
 hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν,n_q)
-#solve (with rsa)
-##
+
 using BenchmarkTools, OrdinaryDiffEq, LinearSolve
 using Symbolics
 xᵢ = (hierarchy.bg.x_grid)[1]
@@ -63,15 +64,15 @@ jac_sparsity = Symbolics.jacobian_sparsity(hf,du_dummy,u₀)
 function test(hierarchy, alg, sparsity; reltol=1e-9, abstol=1e-9)
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
-    f = ODEFunction(Bolt.hierarchy!; jac_prototype=float.(sparsity))
+    f = ODEFunction(Bolt.hierarchy!; jac_prototype=sparsity)
     prob = ODEProblem{true}(f, u₀, (xᵢ , 0.0), hierarchy)
     sol = solve(prob, alg, reltol=reltol, abstol=abstol,
                 saveat=hierarchy.bg.x_grid, dense=false,
                 )
 end
 
-@btime test(hierarchy, KenCarp4(linsolve=KLUFactorization()), jac_sparsity; reltol=reltol, abstol=abstol); # 486 ms
-@btime test(hierarchy, KenCarp4(), jac_sparsity; reltol=reltol, abstol=abstol); # 1.028 s
+@btime test(hierarchy, KenCarp4(linsolve=KLUFactorization()), float.(jac_sparsity); reltol=reltol, abstol=abstol); # 391 ms
+@btime test(hierarchy, KenCarp4(), nothing; reltol=reltol, abstol=abstol); # 1.288s
 
 ##
 @profview test(hierarchy, KenCarp4(linsolve=KLUFactorization()), jac_sparsity; reltol=reltol, abstol=abstol);
