@@ -48,6 +48,7 @@ ylims!(-0.3, 0.5)
 bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=15)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
 ih = IonizationHistory(𝕣, 𝕡, bg)
+k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100)
 sf_t = source_grid(𝕡, bg, ih, k_grid, BasicNewtonian())
 sf_e = source_grid_P(𝕡, bg, ih, k_grid, BasicNewtonian())
 
@@ -58,18 +59,14 @@ Cℓee = clee(ℓs, 𝕡, bg, ih, sf_e)
 
 ℓfac = ℓs.*(ℓs.+1)
 plot(ℓs, @. ( ℓfac * Cℓtt))
+xlabel!(raw"$\ell$")
+ylabel!(raw"$\ell(\ell+1)C^{TT}_{\ell}$")
+# savefig("./test/cltt.png")
 plot(ℓs, @. (ℓfac *Cℓte))
+xlabel!(raw"$\ell$")
+ylabel!(raw"$\ell(\ell+1)C^{TE}_{\ell}$")
+# savefig("./test/clte.png")
 plot(ℓs, @. (ℓfac * Cℓee))
-
-
-start_idx=5
-plot(ℓs[start_idx:end], @. (ℓs*(ℓs+1) * Cℓtt)[start_idx:end])
-plot(ℓs[start_idx:end], @. (ℓfac * ℓs*(ℓs+1) *Cℓte)[start_idx:end])
-plot(ℓs[start_idx:end], @. (ℓfac^2 * ℓs*(ℓs+1) * Cℓee)[start_idx:end])
-
-# ℓfac = @. sqrt((ℓs+2)*(ℓs+1)*ℓs*(ℓs-1)) #spin 2 factor
-
-
-# plot(ℓs[start_idx:end], @. log10(ℓfac^2 * ℓs*(ℓs+1) * Cℓee)[start_idx:end])
-# bg.η(-10)^2
-# k_grid[1]*(bg.η(bg.x_grid[end]) - bg.η(-1))
+xlabel!(raw"$\ell$")
+ylabel!(raw"$\ell(\ell+1)C^{EE}_{\ell}$")
+# savefig("./test/clee.png")

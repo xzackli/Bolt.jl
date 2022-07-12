@@ -109,6 +109,7 @@ end
 #jms 6/7/22 UNTESTED
 function clte(ℓ, s_itp_t, s_itp_e, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     bes = Bolt.bessel_interpolator(ℓ, kgrid[end] * bg.η₀)
+    ℓð = sqrt((ℓ+2)*(ℓ+1)*ℓ*(ℓ-1)) #spin factor
     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
     s = zero(T)
     for i in 1:length(kgrid)-1
