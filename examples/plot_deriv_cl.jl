@@ -1,3 +1,4 @@
+using Revise
 using Bolt
 using ForwardDiff
 # using PyPlot
@@ -39,3 +40,36 @@ ylabel!(raw"$\ell^2 C_{\ell}^{TT}$")
 xlabel!(raw"$\ell$")
 ylims!(-0.3, 0.5)
 # savefig("docs/assets/example_spectrum.png")
+
+
+#
+
+𝕡 = CosmoParams()
+bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=15)
+𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
+ih = IonizationHistory(𝕣, 𝕡, bg)
+sf_t = source_grid(𝕡, bg, ih, k_grid, BasicNewtonian())
+sf_e = source_grid_P(𝕡, bg, ih, k_grid, BasicNewtonian())
+
+ℓs = 10:20:1200
+Cℓtt = cltt(ℓs, 𝕡, bg, ih, sf_t)
+Cℓte = clte(ℓs, 𝕡, bg, ih, sf_t,sf_e)
+Cℓee = clee(ℓs, 𝕡, bg, ih, sf_e)
+
+ℓfac = ℓs.*(ℓs.+1)
+plot(ℓs, @. ( ℓfac * Cℓtt))
+plot(ℓs, @. (ℓfac *Cℓte))
+plot(ℓs, @. (ℓfac * Cℓee))
+
+
+start_idx=5
+plot(ℓs[start_idx:end], @. (ℓs*(ℓs+1) * Cℓtt)[start_idx:end])
+plot(ℓs[start_idx:end], @. (ℓfac * ℓs*(ℓs+1) *Cℓte)[start_idx:end])
+plot(ℓs[start_idx:end], @. (ℓfac^2 * ℓs*(ℓs+1) * Cℓee)[start_idx:end])
+
+# ℓfac = @. sqrt((ℓs+2)*(ℓs+1)*ℓs*(ℓs-1)) #spin 2 factor
+
+
+# plot(ℓs[start_idx:end], @. log10(ℓfac^2 * ℓs*(ℓs+1) * Cℓee)[start_idx:end])
+# bg.η(-10)^2
+# k_grid[1]*(bg.η(bg.x_grid[end]) - bg.η(-1))

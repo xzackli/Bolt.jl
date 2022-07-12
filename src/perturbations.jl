@@ -401,7 +401,7 @@ function source_function_P(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wh
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
-
+    y = k*(bg.η(bg.x_grid[end]) - bg.η(x))
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-    return (3/(4k^2)) * g̃ₓ * Π 
+    return (3/(4y^2)) * g̃ₓ * Π 
 end
