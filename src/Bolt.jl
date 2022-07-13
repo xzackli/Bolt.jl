@@ -6,7 +6,7 @@ export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
 export Peebles, PeeblesI
 export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
 export Hierarchy, boltsolve, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa
-export IE,initial_conditions,unpack,ie_unpack
+export IE,initial_conditions,unpack,ie_unpack, IEν
 export source_grid, quadratic_k, cltt,log10_k,plin
 export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
@@ -36,9 +36,10 @@ abstract type AbstractCosmoParams{T} end
 
 @with_kw struct CosmoParams{T} <: AbstractCosmoParams{T} @deftype T
     h = 0.7  # hubble factor
-    Ω_r = 5.042e-5  # radiation density
+    # Ω_r = 5.042e-5  # radiation density
+    Ω_r = 5.047e-5  # radiation density
     Ω_b = 0.046  # baryon density
-    Ω_m = 0.224  # matter density
+    Ω_m = 0.224  # cdm density
     A = 2.097e-9 # scalar amplitude, 1e-10*exp(3.043)
     n = 1.0  # spectral index
     Y_p = 0.24  # primordial helium fraction

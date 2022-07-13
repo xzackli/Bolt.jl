@@ -17,13 +17,15 @@ function Ω_Λ(par::AbstractCosmoParams)
     Ω_ν = par.Σm_ν*νfac/par.h^2
     return 1 - (par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))  # dark energy density
                                          + par.Ω_b + par.Ω_m
-                                         + Ω_ν
+                                         + Ω_ν 
                                          ) #assume massive nus are non-rel today
 end
 
 #background FD phase space
 function f0(q,par::AbstractCosmoParams)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    # Tν =  (par.N_ν/3)^(1/4) * 0.7166 * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
@@ -38,35 +40,28 @@ function ρP_0(a,par::AbstractCosmoParams,quad_pts,quad_wts)
     #Do q integrals to get the massive neutrino metric perturbations
     #MB eqn (55)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+
     #Not allowed to set Neff=0 o.w. breaks this #FIXME add an error message
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
     m = par.Σm_ν
     ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
     Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    # IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
     xq,wq =quad_pts,quad_wts
     ρ = 4π * a^(-4) * sum(Iρ.(xq).*wq)
-    P = 4π/3 * a^(-4) *sum(IP.(xq).*wq)
-    return ρ,P
-end
-
-#neglect neutrinos, this is for ionization debugging purposes only
-function oldH_a(a, par::AbstractCosmoParams)
-    return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
-                        + par.Ω_r*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3)) * a^(-4)
-                        + Ω_Λ(par))
+    # P = 4π/3 * a^(-4) *sum(IP.(xq).*wq)
+    return ρ, nothing#,P
 end
 
 # Hubble parameter ȧ/a in Friedmann background
 function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
-    #ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) # we don't atually need pressure?
     ρ_ν,_ = ρP_0(a,par,quad_pts,quad_wts) #FIXME dropped pressure, need to decide if we want it for tests?
-    #ρ_ν = ρℳ(a2x(a))
     return H₀(par) * √((par.Ω_m + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
-                        + Ω_Λ(par))
+                        + Ω_Λ(par)
+                        )
 end
 # conformal time Hubble parameter, aH
 ℋ_a(a, par::AbstractCosmoParams,quad_pts,quad_wts) = a * H_a(a, par,quad_pts,quad_wts)
@@ -78,11 +73,24 @@ H(x, par::AbstractCosmoParams,quad_pts,quad_wts) = H_a(x2a(x),par,quad_pts,quad_
 # conformal time
 function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
     #fast copy from q - need to check accuracy (#FIXME) but a plays the role of q
-    logamin,logamax=-11.75,log10(x2a(x)) #0,x2a(x)
+    logamin,logamax=-13.75,log10(x2a(x)) #0,x2a(x)
     #convert ui to a,for now pick
     Iη(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts))/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
     #return quadgk(a -> 1.0 / (a * ℋ_a(a, par)), 0.0, x2a(x),rtol=1e-6)[1]
     return sum(Iη.(quad_pts).*quad_wts)
+end
+
+# neutrino horizon
+function χν(x, q, m, par::AbstractCosmoParams,quad_pts,quad_wts) 
+    # adding m here is a bit annoying but we need the ability to use massless neutrinos
+    logamin,logamax=-13.75,log10(x2a(x)) #0,x2a(x)
+    #convert ui to a,for now pick
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+
+    ϵ(a,q) = √(q^2 + (a*par.Σm_ν)^2 )
+    Iχν(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts) * ϵ(xq2q(y,logamin,logamax),q)
+                   )/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
+    return q*sum(Iχν.(quad_pts).*quad_wts)
 end
 
 # now build a Background with these functions
@@ -125,7 +133,8 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
     # P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
-    # println("ℋ_ T: ",typeof(ℋ_))
+    # χν_   = spline([χν(x, q, par,quad_pts,quad_wts) for x in x_grid], x_grid)
+
     return Background(
         T(H₀(par)),
         T(η(0.0, par,quad_pts,quad_wts)),
