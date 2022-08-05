@@ -21,9 +21,15 @@ using ThreadPools
 using ForwardDiff, DiffResults
 using NumericalIntegration
 using FastGaussQuadrature
+using StaticArrays
+using DoubleFloats
+using MuladdMacro
+using LinearAlgebra
+
 
 using FFTW
-import SpecialFunctions: lgamma, sphericalbesselj
+import SpecialFunctions: lgamma, gamma, besselj, sphericalbesselj
+import HypergeometricFunctions: pochhammer, errcheck
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!
 
@@ -58,6 +64,8 @@ abstract type AbstractCosmoParams{T} end
 end
 
 include("util.jl")
+include("bessel/cheb.jl")
+include("bessel/moments.jl")
 include("background.jl")
 include("ionization/ionization.jl")
 include("ionization/recfast.jl")

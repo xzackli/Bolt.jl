@@ -27,7 +27,7 @@ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abs
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol, abstol=abstol,
-                saveat=hierarchy.bg.x_grid, dense=false,
+                # saveat=hierarchy.bg.x_grid, dense=false,  # don't save a grid
                 )
     return sol
 end
