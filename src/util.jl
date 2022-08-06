@@ -74,7 +74,7 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
 end
 
 
-U_μ(μ, x) = exp(x * log(2.) - _lgamma(0.5 * (μ + 1 - x)) + _lgamma(0.5 * (μ + 1 + x)))
+U_μ(μ, x) = exp(x * log(2.) - loggamma(0.5 * (μ + 1 - x)) + loggamma(0.5 * (μ + 1 + x)))
 uₘ(m, μ, q, dlnr, k₀r₀, N) = (k₀r₀)^(-2π * im * m / (dlnr * N)) * U_μ(μ, q + 2π * im * m / (dlnr * N) )
 
 function k₀r₀_low_ringing(N, μ, q, L, k₀r₀=1.0)
@@ -83,8 +83,8 @@ function k₀r₀_low_ringing(N, μ, q, L, k₀r₀=1.0)
     xp = (μ + 1 + q) / 2
     xm = (μ + 1 - q) / 2
     y = π * im / 2 / dlnr
-    zp = _lgamma(xp + y)
-    zm = _lgamma(xm + y)
+    zp = loggamma(xp + y)
+    zm = loggamma(xm + y)
     arg = log(2 / k₀r₀) / dlnr + imag(zp + zm) / π
     return k₀r₀ * exp((arg - round(arg))* dlnr)
 end

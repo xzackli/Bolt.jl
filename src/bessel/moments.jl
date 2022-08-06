@@ -45,8 +45,8 @@ J_moment_asymptotic_lommel_prefactor(::Type{T}, ν, α) where T = exp(
     besselj_3_2 = sinx * x⁻¹ - cosx
     besselj_5_2 = 3 * sinx * x⁻¹ * x⁻¹ - sinx - 3 * cosx * x⁻¹
     return prefactor + c₁ * x * (
-        besselj_5_2 * s⁽²⁾(x, α_minus_half-1, T(3//2)) -
-        besselj_3_2 * s⁽²⁾(x, α_minus_half,   T(5//2)))
+        (α_minus_half + 2) * besselj_5_2 * s⁽²⁾(x, α_minus_half-1, T(3)/2) -
+        besselj_3_2 * s⁽²⁾(x, α_minus_half,   T(5)/2))
 end
 
 
@@ -54,18 +54,22 @@ end
 # moments xᵏ jᵥ(x) over (0,x)
 
 @inline sph_j_moment_asymptotic_lommel_prefactor(::Type{T}, ν, k) where T =
-    exp(log(T(2)) * (k - T(1//2)) + _lgamma(T(ν + k + 1)/2) - _lgamma(T(ν - k)/2)) * √(T(π)/2)
+    J_moment_asymptotic_lommel_prefactor(T, ν + one(T)/2, k - one(T)/2) * √(T(π)/2)
 
 # spherical Bessel j moment generated from asymptotics of the Lommel function
 function sph_j_moment_asymptotic_lommel(x::T, ν, k) where T
-    ν₁, ν₂ = ν + T(1//2), ν - T(1//2)
-    return sph_j_moment_asymptotic_lommel_prefactor(T, ν, k) + x * √(T(π)/2) * (
-        (k + ν - 1) * besselj(ν₁, x) *  s⁽²⁾(x, k-2, ν₂) -
-        besselj(ν₂, x) *  s⁽²⁾(x, k-1, ν₁))
+    return J_moment_asymptotic_lommel(x, ν + one(T)/2, k - one(T)) * √(T(π)/2)
 end
 
-# spherical Bessel j from specialized Lommel function asymptotic for j_nu with ν = 2
-@muladd function sph_j_moment_asymptotic_nu_2(x::T, k, prefactor) where T
+# spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
+function sph_j_moment_weniger_₁F₂(x::T, ν, α, cache) where T
+    ν′ = ν + T(3//2)
+    return (1/(α+ν+1)) * exp((α+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
+         weniger1F2(T(1+α+ν)/2, SVector{2,T}((3+α+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
+end
+
+@muladd function sph_j_moment_asymptotic_nu_five_halves(x::T, k, prefactor) where T
+    α_minus_half = k - 1
     sinx = sin(x)
     cosx = cos(x)
     x⁻¹ = one(T) / x
@@ -73,13 +77,6 @@ end
     besselj_3_2 = sinx * x⁻¹ - cosx
     besselj_5_2 = 3 * sinx * x⁻¹ * x⁻¹ - sinx - 3 * cosx * x⁻¹
     return prefactor + c₁ * x * (
-        besselj_5_2 * s⁽²⁾(x, k-2, T(3//2)) -
-        besselj_3_2 * s⁽²⁾(x, k-1, T(5//2)))
-end
-
-# Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
-function sph_j_moment_weniger_₁F₂(x::T, ν, α, cache) where T
-    ν′ = ν + T(3//2)
-    return (1/(α+ν+1)) * exp((α+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
-         weniger1F2(T(1+α+ν)/2, SVector{2,T}((3+α+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
+        (α_minus_half + 2) * besselj_5_2 * s⁽²⁾(x, α_minus_half-1, T(3)/2) -
+        besselj_3_2 * s⁽²⁾(x, α_minus_half,   T(5)/2))
 end
