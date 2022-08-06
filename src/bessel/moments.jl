@@ -8,7 +8,7 @@ function s⁽²⁾(t::T, α_minus_half, ν; kmax=20, tol=1e-16) where T <: Real
     t⁻¹ = one(T) / t
     t⁻² = t⁻¹^2
     ν² = ν^2
-    αm1 = α_minus_half - T(1//2)
+    αm1 = α_minus_half - one(T)/2
     @fastmath for k in 0:kmax
         sₖ *= (ν² - (αm1 - 2k)^2) * t⁻²
         s += sₖ
@@ -27,7 +27,7 @@ end
 
 # Bessel J moment generated from asymptotics of the Lommel function
 function J_moment_asymptotic_lommel(x::T, ν, α_minus_half) where T
-    α = α_minus_half + T(1//2)
+    α = α_minus_half + one(T)/2
     return J_moment_asymptotic_lommel_prefactor(T, ν, α) + x * (
         (α + ν - 1) * besselj(ν, x) *  s⁽²⁾(x, α_minus_half-1, ν-1) -
         besselj(ν-1, x) *  s⁽²⁾(x, α_minus_half, ν))
@@ -63,7 +63,7 @@ end
 
 # spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
 function sph_j_moment_weniger_₁F₂(x::T, ν, α, cache) where T
-    ν′ = ν + T(3//2)
+    ν′ = ν + T(3)/2
     return (1/(α+ν+1)) * exp((α+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
          weniger1F2(T(1+α+ν)/2, SVector{2,T}((3+α+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
 end
