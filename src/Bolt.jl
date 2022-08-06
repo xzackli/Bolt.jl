@@ -28,10 +28,11 @@ using LinearAlgebra
 
 
 using FFTW
-import SpecialFunctions: logabsgamma, loggamma, gamma, besselj, sphericalbesselj
+import SpecialFunctions: logabsgamma, loggamma, gamma, sphericalbesselj
 import HypergeometricFunctions: pochhammer, errcheck
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!
+import Bessels: besselj
 
 import UnitfulCosmo, NaturallyUnitful
 

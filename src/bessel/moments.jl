@@ -46,7 +46,7 @@ J_moment_asymptotic_prefactor(::Type{T}, ν, α) where T = exp(
     besselj_5_2 = 3 * sinx * x⁻¹ * x⁻¹ - sinx - 3 * cosx * x⁻¹
     return prefactor + c₁ * x * (
         (α_minus_half + 2) * besselj_5_2 * s⁽²⁾(x, α_minus_half-1, T(3)/2) -
-        besselj_3_2 * s⁽²⁾(x, α_minus_half,   T(5)/2))
+        besselj_3_2 * s⁽²⁾(x, α_minus_half, T(5)/2))
 end
 
 
@@ -57,9 +57,15 @@ end
     J_moment_asymptotic_prefactor(T, ν + one(T)/2, k - one(T)/2) * √(T(π)/2)
 
 # spherical Bessel j moment generated from asymptotics of the Lommel function
-function sph_j_moment_asymptotic(x::T, ν, k) where T
-    return J_moment_asymptotic(x, ν + one(T)/2, k - one(T)) * √(T(π)/2)
+function sph_j_moment_asymptotic(x::T, ν, k, prefactor) where T
+    ν₊ = ν + one(T)/2
+    ν₋ = ν - one(T)/2
+    return prefactor + x * √(T(π)/2) * (
+        (k + ν - 1) * besselj(ν₊, x) * s⁽²⁾(x, k-2, ν₋) -
+        besselj(ν₋, x) * s⁽²⁾(x, k-1, ν₊))
 end
+sph_j_moment_asymptotic(x::T, ν, k) where T = sph_j_moment_asymptotic(x, ν, k, 
+    sph_j_moment_asymptotic_prefactor(T, ν, k))
 
 # spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
 function sph_j_moment_weniger_₁F₂(x::T, ν, k, cache) where T
@@ -68,7 +74,7 @@ function sph_j_moment_weniger_₁F₂(x::T, ν, k, cache) where T
          weniger1F2(T(1+k+ν)/2, SVector{2,T}((3+k+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
 end
 
-@muladd function sph_j_moment_asymptotic_nu_five_halves(x::T, k, prefactor) where T
+@muladd function sph_j_moment_asymptotic_nu_2(x::T, k, prefactor) where T
     α_minus_half = k - 1
     sinx = sin(x)
     cosx = cos(x)
@@ -79,4 +85,20 @@ end
     return prefactor + c₁ * x * (
         (α_minus_half + 2) * besselj_5_2 * s⁽²⁾(x, α_minus_half-1, T(3)/2) -
         besselj_3_2 * s⁽²⁾(x, α_minus_half,   T(5)/2))
+end
+
+@muladd function sph_j_moment_asymptotic_nu_3(x::T, k, prefactor) where T
+    α_minus_half = k - 1
+    sinx = sin(x)
+    cosx = cos(x)
+    x⁻¹ = one(T) / x
+    x⁻² = x⁻¹ * x⁻¹
+    x⁻³ = x⁻² * x⁻¹
+
+    c₁ = sqrt(x⁻¹)
+    besselj_7_2 = 15sinx * x⁻³ - 15cosx * x⁻² - 6sinx * x⁻¹ + cosx 
+    besselj_5_2 = 3 * sinx * x⁻² - sinx - 3 * cosx * x⁻¹
+    return prefactor + c₁ * x * (
+        (α_minus_half + 3) * besselj_7_2 * s⁽²⁾(x, α_minus_half-1, T(5)/2) -
+        besselj_5_2 * s⁽²⁾(x, α_minus_half,   T(7)/2))
 end
