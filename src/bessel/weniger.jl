@@ -1,6 +1,6 @@
-# Adapted from HypergeometricFunctions, this computes ₁F₂ with 
-# a sequence sequence transformation from Weniger. I've modified it 
-# to avoid allocations so when we generate the moment table, we can multithread.
+# Adapted from HypergeometricFunctions, this computes ₁F₂ with a sequence transformation 
+# from Weniger. I've modified it to avoid allocations so when we generate the moment 
+# table, so we can multithread when generating the table.
 
 struct WenigerCache1F2{T}
     C::Vector{T}

@@ -1,6 +1,8 @@
-
-
-## moment Interpolations
+# Generate tables to interpolate for the moments of spherical bessel functions
+# This is mostly to avoid ₁F₂ for kη < 50, but also still provides a nice 7x speedup over 
+# evaluating the asymptotic derived from the Lommel function.
+# TODO: use maclaurin series for small arguments?
+# TODO: store interpolation tables as artifacts?
 
 # parametrize the internal type T, the output type TX, and the Bessel multipole NU
 struct MomentTableConfig{T, TX, NU}
@@ -33,7 +35,7 @@ end
 
 # it's important for this general function to be fast, for source function integration.
 # For general Cₗ, we can't afford to store a full interpolator.
-# TODO: we can make this 30% faster by removing redundant calculations between the different k
+# TODO: we can make this 30% faster by removing redundant calculations between the different m
 @inline function sph_j_moment_asymptotic_0_1_2(config::MomentTableConfig{T, TX, V}, x,
                                                pref0, pref1, pref2) where {T,TX,V}
     ν = config.ν

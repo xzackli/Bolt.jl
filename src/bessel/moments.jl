@@ -1,16 +1,16 @@
 # Compute moments x^α J_nu over (0,x)
 
 # Lommel function asymptotic for large t
-# we use α - 3/2 for speed when computing the moments xᵏ jᵥ with k∈(0,1,2). pow is slow
-function s⁽²⁾(t::T, α_minus_half, ν; kmax=20, tol=1e-16) where T <: Real
+# we use α - 3/2 for speed when computing the moments xᵏ jᵥ with m∈(0,1,2). pow is slow
+function s⁽²⁾(t::T, α_minus_half, ν; jmax=20, tol=1e-16) where T <: Real
     s = one(T)
     sₖ = one(T)
     t⁻¹ = one(T) / t
     t⁻² = t⁻¹^2
     ν² = ν^2
     αm1 = α_minus_half - one(T)/2
-    @fastmath for k in 0:kmax
-        sₖ *= (ν² - (αm1 - 2k)^2) * t⁻²
+    @fastmath for j in 0:jmax
+        sₖ *= (ν² - (αm1 - 2j)^2) * t⁻²
         s += sₖ
         if abs(sₖ) < tol * abs(s)
             break
@@ -53,29 +53,29 @@ end
 # Spherical Bessel Functions: 
 # moments xᵏ jᵥ(x) over (0,x)
 
-@inline sph_j_moment_asymptotic_prefactor(::Type{T}, ν, k) where T =
-    J_moment_asymptotic_prefactor(T, ν + one(T)/2, k - one(T)/2) * √(T(π)/2)
+@inline sph_j_moment_asymptotic_prefactor(::Type{T}, ν, m) where T =
+    J_moment_asymptotic_prefactor(T, ν + one(T)/2, m - one(T)/2) * √(T(π)/2)
 
 # spherical Bessel j moment generated from asymptotics of the Lommel function
-function sph_j_moment_asymptotic(x::T, ν, k, prefactor) where T
+function sph_j_moment_asymptotic(x::T, ν, m, prefactor) where T
     ν₊ = ν + one(T)/2
     ν₋ = ν - one(T)/2
     return prefactor + x * √(T(π)/2) * (
-        (k + ν - 1) * besselj(ν₊, x) * s⁽²⁾(x, k-2, ν₋) -
-        besselj(ν₋, x) * s⁽²⁾(x, k-1, ν₊))
+        (m + ν - 1) * besselj(ν₊, x) * s⁽²⁾(x, m-2, ν₋) -
+        besselj(ν₋, x) * s⁽²⁾(x, m-1, ν₊))
 end
-sph_j_moment_asymptotic(x::T, ν, k) where T = sph_j_moment_asymptotic(x, ν, k, 
-    sph_j_moment_asymptotic_prefactor(T, ν, k))
+sph_j_moment_asymptotic(x::T, ν, m) where T = sph_j_moment_asymptotic(x, ν, m, 
+    sph_j_moment_asymptotic_prefactor(T, ν, m))
 
 # spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
-function sph_j_moment_weniger_₁F₂(x::T, ν, k, cache) where T
+function sph_j_moment_weniger_₁F₂(x::T, ν, m, cache) where T
     ν′ = ν + T(3)/2
-    return (1/(k+ν+1)) * exp((k+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
-         weniger1F2(T(1+k+ν)/2, SVector{2,T}((3+k+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
+    return (1/(m+ν+1)) * exp((m+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
+         weniger1F2(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
 end
 
-@muladd function sph_j_moment_asymptotic_nu_2(x::T, k, prefactor) where T
-    α_minus_half = k - 1
+@muladd function sph_j_moment_asymptotic_nu_2(x::T, m, prefactor) where T
+    α_minus_half = m - 1
     sinx = sin(x)
     cosx = cos(x)
     x⁻¹ = one(T) / x
@@ -87,8 +87,8 @@ end
         besselj_3_2 * s⁽²⁾(x, α_minus_half,   T(5)/2))
 end
 
-@muladd function sph_j_moment_asymptotic_nu_3(x::T, k, prefactor) where T
-    α_minus_half = k - 1
+@muladd function sph_j_moment_asymptotic_nu_3(x::T, m, prefactor) where T
+    α_minus_half = m - 1
     sinx = sin(x)
     cosx = cos(x)
     x⁻¹ = one(T) / x
