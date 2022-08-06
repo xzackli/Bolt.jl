@@ -66,6 +66,7 @@ end
 include("util.jl")
 include("bessel/weniger.jl")
 include("bessel/moments.jl")
+include("bessel/interpolator.jl")
 include("background.jl")
 include("ionization/ionization.jl")
 include("ionization/recfast.jl")

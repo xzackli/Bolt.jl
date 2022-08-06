@@ -12,8 +12,8 @@ using DoubleFloats
         T = Float64
         x, ν = T(200.0), T(2.5)
         α_minus_half = T(α - 1//2)  # Lommel-based stuff takes α-1/2 as input
-        I1 = Bolt.J_moment_asymptotic_lommel(x, ν, α_minus_half)
-        prefactor = Bolt.Bolt.J_moment_asymptotic_lommel_prefactor(T, ν, α)
+        I1 = Bolt.J_moment_asymptotic(x, ν, α_minus_half)
+        prefactor = Bolt.Bolt.J_moment_asymptotic_prefactor(T, ν, α)
         I2 = Bolt.J_moment_asymptotic_nu_five_halves(x, α_minus_half, prefactor)
 
         # Weniger does not perform well with very large arguments, check convergence
@@ -55,8 +55,8 @@ end
     for (k, ref) ∈ zip( (0, 1, 2), refs) 
         T = Float64
         x, ν = T(200.0), T(2)
-        I1 = Bolt.sph_j_moment_asymptotic_lommel(x, ν, k)
-        prefactor = Bolt.sph_j_moment_asymptotic_lommel_prefactor(T, ν, k)
+        I1 = Bolt.sph_j_moment_asymptotic(x, ν, k)
+        prefactor = Bolt.sph_j_moment_asymptotic_prefactor(T, ν, k)
         I2 = Bolt.sph_j_moment_asymptotic_nu_five_halves(x, k, prefactor)
 
         # # Weniger does not perform well with very large arguments, check convergence
@@ -70,3 +70,29 @@ end
         @test abs(1 - I3 / ref) < 1e-15
     end
 end
+
+##
+
+@testset "moments: spherical Bessel J, small argument" begin
+    T = Double64
+    x, ν, α = T(0.1), T(2), T(1)
+    cache = Bolt.WenigerCache1F2(T)
+    I3 = Bolt.sph_j_moment_weniger_₁F₂(x, ν, α, cache)
+
+    ref = big"1.66587318119689113603548520948514e-6"
+    @test abs(1 - I3 / ref) < 1e-15
+
+    x, ν, α = T(0.1), T(2), T(0)
+    I3 = Bolt.sph_j_moment_weniger_₁F₂(x, ν, α, cache)
+    ref = big"0.0000222127003021204915961147418458393"
+    @test abs(1 - I3 / ref) < 1e-15
+
+    x, ν, α = T(0.01), T(2), T(2)
+    I3 = Bolt.sph_j_moment_weniger_₁F₂(x, ν, α, cache)
+    ref = big"1.33332653062694211665894244946280e-12"
+    @test abs(1 - I3 / ref) < 1e-15
+
+end
+
+
+# moment expansion spends most of the time working on stuff that could be saved!

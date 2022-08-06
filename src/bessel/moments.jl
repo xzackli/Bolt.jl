@@ -26,14 +26,14 @@ function J_moment_weniger_₁F₂(x::T, ν, α, cache) where T
 end
 
 # Bessel J moment generated from asymptotics of the Lommel function
-function J_moment_asymptotic_lommel(x::T, ν, α_minus_half) where T
+function J_moment_asymptotic(x::T, ν, α_minus_half) where T
     α = α_minus_half + one(T)/2
-    return J_moment_asymptotic_lommel_prefactor(T, ν, α) + x * (
+    return J_moment_asymptotic_prefactor(T, ν, α) + x * (
         (α + ν - 1) * besselj(ν, x) *  s⁽²⁾(x, α_minus_half-1, ν-1) -
         besselj(ν-1, x) *  s⁽²⁾(x, α_minus_half, ν))
 end
 
-J_moment_asymptotic_lommel_prefactor(::Type{T}, ν, α) where T = exp(
+J_moment_asymptotic_prefactor(::Type{T}, ν, α) where T = exp(
     log(T(2)) * α + _lgamma((ν + α + 1)/2) - _lgamma((ν - α + 1)/2))
 
 # Bessel J from specialized Lommel function asymptotic for J_nu with ν = 2 + 1/2
@@ -53,19 +53,19 @@ end
 # Spherical Bessel Functions: 
 # moments xᵏ jᵥ(x) over (0,x)
 
-@inline sph_j_moment_asymptotic_lommel_prefactor(::Type{T}, ν, k) where T =
-    J_moment_asymptotic_lommel_prefactor(T, ν + one(T)/2, k - one(T)/2) * √(T(π)/2)
+@inline sph_j_moment_asymptotic_prefactor(::Type{T}, ν, k) where T =
+    J_moment_asymptotic_prefactor(T, ν + one(T)/2, k - one(T)/2) * √(T(π)/2)
 
 # spherical Bessel j moment generated from asymptotics of the Lommel function
-function sph_j_moment_asymptotic_lommel(x::T, ν, k) where T
-    return J_moment_asymptotic_lommel(x, ν + one(T)/2, k - one(T)) * √(T(π)/2)
+function sph_j_moment_asymptotic(x::T, ν, k) where T
+    return J_moment_asymptotic(x, ν + one(T)/2, k - one(T)) * √(T(π)/2)
 end
 
 # spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
-function sph_j_moment_weniger_₁F₂(x::T, ν, α, cache) where T
+function sph_j_moment_weniger_₁F₂(x::T, ν, k, cache) where T
     ν′ = ν + T(3)/2
-    return (1/(α+ν+1)) * exp((α+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
-         weniger1F2(T(1+α+ν)/2, SVector{2,T}((3+α+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
+    return (1/(k+ν+1)) * exp((k+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
+         weniger1F2(T(1+k+ν)/2, SVector{2,T}((3+k+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
 end
 
 @muladd function sph_j_moment_asymptotic_nu_five_halves(x::T, k, prefactor) where T
