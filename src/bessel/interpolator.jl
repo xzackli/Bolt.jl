@@ -23,6 +23,17 @@ end
         sph_j_moment_asymptotic_nu_3((x), 2, pref2))
 end
 
+@inline function sph_j_moment_asymptotic_0_1_2(config::MomentTableConfig{T, TX, 2}, x,
+                                                    pref0, pref1, pref2) where {T,TX}
+    return SVector{3,TX}(
+        sph_j_moment_asymptotic_nu_2((x), 0, pref0),
+        sph_j_moment_asymptotic_nu_2((x), 1, pref1),
+        sph_j_moment_asymptotic_nu_2((x), 2, pref2))
+end
+
+# it's important for this general function to be fast, for source function integration.
+# For general Cₗ, we can't afford to store a full interpolator.
+# TODO: we can make this 30% faster by removing redundant calculations between the different k
 @inline function sph_j_moment_asymptotic_0_1_2(config::MomentTableConfig{T, TX, V}, x,
                                                pref0, pref1, pref2) where {T,TX,V}
     ν = config.ν

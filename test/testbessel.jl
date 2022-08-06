@@ -1,7 +1,7 @@
 using Bolt, Test
 using DoubleFloats
 
-const TOL = 1e-13  # number of digits in a Float64
+const TOL = 1e-13  # tolerance for these moments
 
 # for moderate-sizes arguments, both Weniger and asymptotic Lommel can work
 @testset "moments: Bessel J, moderate argument" begin
@@ -74,7 +74,6 @@ end
 end
 
 ##
-
 @testset "moments: spherical Bessel J, small argument quadrupole" begin
     T = Double64
     x, ν, α = T(0.1), T(2), T(1)
@@ -120,13 +119,14 @@ end
     end
 end
 
-##
-@testset "moments: spherical Bessel J, large argument octupole" begin
-    refs = (big"0.662361624450783328243409501185093",
-        big"1.49770949285120051392753792923852",
-        big"-163.183648420458825380490472539234")
+## interpolation tests
+@testset "interpolator: spherical Bessel J, large argument quadrupole" begin
+    refs = (
+        big"0.78787782588093298580386838516258",
+        big"2.50028713446521582908074317765179",
+        big"105.635871208275569897958010677779")
 
-    itp = Bolt.sph_bessel_interpolator(3, 0.0, 1.6e4, 1_000_000)
+    itp = Bolt.sph_bessel_interpolator(2, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(200.0)
     for i in 1:3
@@ -134,10 +134,26 @@ end
     end
 end
 
+@testset "interpolator: spherical Bessel J, large argument octupole" begin
+    refs = (big"0.662361624450783328243409501185093",
+        big"1.49770949285120051392753792923852",
+        big"-163.183648420458825380490472539234")
 
-# using Plots
+    itp = Bolt.sph_bessel_interpolator(3, 0.0, 1.6e4, 2_000_000)
+    
+    moms = itp(200.0)
+    for i in 1:3
+        @test abs(1 - moms[i] / refs[i]) < 1e-12  # interpolation error hurts!
+    end
+end
 
-# itp = Bolt.sph_bessel_interpolator(3, 0.0, 1.6e4, 1_000_000)
-# xs = 0.0:0.1:500.0
-# x1 = [itp(x)[3] for x in xs]
-# plot(xs, x1)
+@testset "interpolator: spherical Bessel J, small argument quadrupole" begin
+    refs = (2.380070697034449e-7,1.904006180460421e-8,1.586640331877486e-9)
+
+    itp = Bolt.sph_bessel_interpolator(3, 0.0, 1.6e4, 2_000_000)
+    
+    moms = itp(0.1)
+    for i in 1:3
+        @test abs(moms[i] - refs[i]) < 1e-12  # interpolation error hurts!
+    end
+end
