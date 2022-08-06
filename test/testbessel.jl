@@ -14,9 +14,9 @@ const TOL = 1e-13  # tolerance for these moments
         T = Float64
         x, ν = T(200.0), T(2.5)
         α_minus_half = T(α - 1//2)  # Lommel-based stuff takes α-1/2 as input
-        I1 = Bolt.J_moment_asymptotic(x, ν, α_minus_half)
-        prefactor = Bolt.Bolt.J_moment_asymptotic_prefactor(T, ν, α)
-        I2 = Bolt.J_moment_asymptotic_nu_five_halves(x, α_minus_half, prefactor)
+        I1 = Bolt.J_moment_asymp(x, ν, α_minus_half)
+        prefactor = Bolt.Bolt.J_moment_asymp_prefactor(T, ν, α)
+        I2 = Bolt.J_moment_asymp_nu_five_halves(x, α_minus_half, prefactor)
 
         # Weniger does not perform well with very large arguments, check convergence
         T = Double64  # use more precision
@@ -57,9 +57,9 @@ end
     for (k, ref) ∈ zip( (0, 1, 2), refs) 
         T = Float64
         x, ν = T(200.0), T(2)
-        I1 = Bolt.sph_j_moment_asymptotic(x, ν, k)
-        prefactor = Bolt.sph_j_moment_asymptotic_prefactor(T, ν, k)
-        I2 = Bolt.sph_j_moment_asymptotic_nu_2(x, k, prefactor)
+        I1 = Bolt.sph_j_moment_asymp(x, ν, k)
+        prefactor = Bolt.sph_j_moment_asymp_prefactor(T, ν, k)
+        I2 = Bolt.sph_j_moment_asymp_nu_2(x, k, prefactor)
 
         # # Weniger does not perform well with very large arguments, check convergence
         T = Double64  # use more precision
@@ -103,9 +103,9 @@ end
     for (k, ref) ∈ zip( (0, 1, 2), refs) 
         T = Float64
         x, ν = T(200.0), T(3)
-        I1 = Bolt.sph_j_moment_asymptotic(x, ν, k)
-        prefactor = Bolt.sph_j_moment_asymptotic_prefactor(T, ν, k)
-        I2 = Bolt.sph_j_moment_asymptotic_nu_3(x, k, prefactor)
+        I1 = Bolt.sph_j_moment_asymp(x, ν, k)
+        prefactor = Bolt.sph_j_moment_asymp_prefactor(T, ν, k)
+        I2 = Bolt.sph_j_moment_asymp_nu_3(x, k, prefactor)
 
         # # Weniger does not perform well with very large arguments, check convergence
         T = Double64  # use more precision
@@ -126,7 +126,9 @@ end
         big"2.50028713446521582908074317765179",
         big"105.635871208275569897958010677779")
 
-    itp = Bolt.sph_bessel_interpolator(2, 0.0, 1.6e4, 2_000_000)
+    max_order = 3
+    ν = 2
+    itp = Bolt.sph_bessel_interpolator(ν, max_order, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(200.0)
     for i in 1:3
@@ -139,7 +141,9 @@ end
         big"1.49770949285120051392753792923852",
         big"-163.183648420458825380490472539234")
 
-    itp = Bolt.sph_bessel_interpolator(3, 0.0, 1.6e4, 2_000_000)
+    max_order = 3
+    ν = 3
+    itp = Bolt.sph_bessel_interpolator(ν, max_order, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(200.0)
     for i in 1:3
@@ -150,7 +154,9 @@ end
 @testset "interpolator: spherical Bessel J, small argument quadrupole" begin
     refs = (2.380070697034449e-7,1.904006180460421e-8,1.586640331877486e-9)
 
-    itp = Bolt.sph_bessel_interpolator(3, 0.0, 1.6e4, 2_000_000)
+    max_order = 3
+    ν = 3
+    itp = Bolt.sph_bessel_interpolator(ν, max_order, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(0.1)
     for i in 1:3
