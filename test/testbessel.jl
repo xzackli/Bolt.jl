@@ -54,7 +54,7 @@ end
     T = Double64
     x = T(x)
     cache = Bolt.WenigerCache1F2(T)
-    I3 = Bolt.sph_j_moment_weniger_₁F₂(x, ν, α, cache)
+    I3 = Bolt.sph_j_moment_weniger_₁F₂(x, ν, k, cache)
 
     ref =  big"0.78787782588093298580386838516257535260203002954637130336515957836491"
     @test abs(1 - I1 / ref) < 1e-15
