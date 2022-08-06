@@ -1,5 +1,4 @@
-
-using Test
+using Bolt, Test
 using DoubleFloats
 
 # for moderate-sizes arguments, both Weniger and asymptotic Lommel can work
@@ -37,5 +36,28 @@ end
     x, ν, α = T(0.1), T(2.5), T(-1//2)
     I3 = Bolt.J_moment_weniger_₁F₂(x, ν, α, cache)
     ref = big"0.00001772317062480308"
+    @test abs(1 - I3 / ref) < 1e-15
+end
+
+##
+@testset "moments: spherical Bessel J, large argument" begin
+    T = Float64
+
+    x = T(200.0)
+    ν = 2
+    k = 0
+
+    I1 = Bolt.sph_j_moment_asymptotic_lommel(x, ν, k)
+    prefactor = Bolt.Bolt.sph_j_moment_asymptotic_lommel_prefactor(T, ν, k)
+    I2 = Bolt.sph_j_moment_asymptotic_nu_2(x, k, prefactor)
+
+    T = Double64
+    x = T(x)
+    cache = Bolt.WenigerCache1F2(T)
+    I3 = Bolt.sph_j_moment_weniger_₁F₂(x, ν, α, cache)
+
+    ref =  big"0.78787782588093298580386838516257535260203002954637130336515957836491"
+    @test abs(1 - I1 / ref) < 1e-15
+    @test abs(1 - I2 / ref) < 1e-15
     @test abs(1 - I3 / ref) < 1e-15
 end
