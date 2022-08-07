@@ -2,6 +2,8 @@ using Bolt, Test
 using DoubleFloats
 
 const TOL = 1e-13  # tolerance for these moments
+# if a higher tolerance is desired, the fault is in Bessels.jl's approximations.
+# SpecialFunctions offers a more precise asymptotic behavior (1-2 digits at the end)
 
 # for moderate-sizes arguments, both Weniger and asymptotic Lommel can work
 @testset "moments: Bessel J, moderate argument" begin
@@ -126,9 +128,9 @@ end
         big"2.50028713446521582908074317765179",
         big"105.635871208275569897958010677779")
 
-    max_order = 3
+    order = 3
     ν = 2
-    itp = Bolt.sph_bessel_interpolator(ν, max_order, 0.0, 1.6e4, 2_000_000)
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(200.0)
     for i in 1:3
@@ -141,9 +143,9 @@ end
         big"1.49770949285120051392753792923852",
         big"-163.183648420458825380490472539234")
 
-    max_order = 3
+    order = 3
     ν = 3
-    itp = Bolt.sph_bessel_interpolator(ν, max_order, 0.0, 1.6e4, 2_000_000)
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(200.0)
     for i in 1:3
@@ -151,15 +153,41 @@ end
     end
 end
 
-@testset "interpolator: spherical Bessel J, small argument quadrupole" begin
+@testset "interpolator: spherical Bessel J, small argument octupole" begin
     refs = (2.380070697034449e-7,1.904006180460421e-8,1.586640331877486e-9)
 
-    max_order = 3
+    order = 3
     ν = 3
-    itp = Bolt.sph_bessel_interpolator(ν, max_order, 0.0, 1.6e4, 2_000_000)
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
     
     moms = itp(0.1)
     for i in 1:3
         @test abs(moms[i] - refs[i]) < 1e-12  # interpolation error hurts!
+    end
+end
+
+
+@testset "interpolator: spherical Bessel J, 4th order, moderate arg" begin
+    refs = (big"0.00229425677577922706134041736035369", big"0.00183049831049510967778943596015052",
+        big"0.00152235376642692867152374927665023", big"0.00130283667913981697274149102492971")
+
+    order = 4
+    ν = 3
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
+    moms = itp(1.0)
+    for i in 1:4
+        @test abs(moms[i] - refs[i]) < 1e-12  # interpolation error hurts!
+    end
+end
+##
+@testset "interpolator: spherical Bessel J, 4th order, asymptotic arg" begin
+    refs = (big"0.667496353968182420081865144062472", big"3.18644086496078566989171654620754",
+        big"838.803790872929501155031335384019",big"831383.108409725479693899756952862")
+    order = 4
+    ν = 3
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
+    moms = itp(1000.0)
+    for i in 1:4
+        @test abs(1 - moms[i] / refs[i]) < 1e-12  # interpolation error hurts!
     end
 end
