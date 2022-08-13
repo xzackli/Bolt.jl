@@ -27,6 +27,6 @@ function _loop_integrate_sph_bessel_filon(f, f′, f″, k, a, b, itp, itp_ka)
     itp_kb = itp(k * b)
     ΔI = itp_kb - itp_ka  # reuse last interpolator
     s = (c₀ * k⁻¹) * ΔI[1] + (c₁ * k⁻²) * ΔI[2]  + (c₂ * k⁻³) * ΔI[3]
-    return s, itp_kb  # itp_kb will become itp_ka
+    return s, itp_kb
 end
 
