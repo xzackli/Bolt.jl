@@ -198,12 +198,15 @@ end
     itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
     
     f(x) = 3x^2 - 0.2x + 4
+
+    refs = [big"0.365287615501162668736682652658444", big"0.219009396999160523658045931736310",
+        big"0.146278218502002145078636720922135"]
     
-    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 2., itp) - 0.365287615501162668736682652658444) < TOL
-    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 1., itp) - 0.219009396999160523658045931736310) < TOL
-    @test abs(Bolt.integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp) - 0.146278218502002145078636720922135) < TOL
+    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 2., itp) - refs[1]) < TOL
+    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 1., itp) - refs[2]) < TOL
+    @test abs(Bolt.integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp) - refs[3]) < TOL
     
     itp_ka = itp(10 * 1.)  # k*a
     s, _ = Bolt._loop_integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp, itp_ka)
-    @test abs(s - 0.146278218502002145078636720922135) < TOL
+    @test abs(s - refs[3]) < TOL
 end

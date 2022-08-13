@@ -1,5 +1,9 @@
 
 
+"""
+integrates a quadratic polynomial with moments f, f′, f″ evaluated at a, over
+interval (a,b). Uses a preconstructed interpolator for the moments.
+"""
 function integrate_sph_bessel_filon(f, f′, f″, k, a, b, itp)
     c₂ = f″ / 2
     af″ = a * f″
@@ -14,7 +18,10 @@ function integrate_sph_bessel_filon(f, f′, f″, k, a, b, itp)
     return s
 end
 
-
+"""
+same as above but suitable for use in a piecewise integrator. 
+re-use the moment I(ka) which was I(kb) previously
+"""
 function _loop_integrate_sph_bessel_filon(f, f′, f″, k, a, b, itp, itp_ka)
     c₂ = f″ / 2
     af″ = a * f″
