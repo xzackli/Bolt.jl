@@ -52,7 +52,7 @@ end
 
 
 
-struct MomentTable{T, TX, O, ITP, C, W}
+struct MomentTable{T, TX, O, C, ITP, W}
     itp::ITP
     config::C
     prefactors::NTuple{O,T}
@@ -67,14 +67,14 @@ function (m::MomentTable{T,TX,O})(x::TX) where {T,TX,O}
     if m.kη_min ≤ x ≤ m.kη_max
         return m.itp(x)::SVector{O,TX}
     elseif x > m.kη_max
-        return sph_j_moment_asymp_all_orders(m.config, x, m.prefs...)::SVector{O,TX}
+        return sph_j_moment_asymp_all_orders(m.config, x, m.prefactors...)::SVector{O,TX}
     else 
         # return sph_j_moment_weniger_all_orders(m.config, x, m.cache)::SVector{3,TX}
         error("Do not extrapolate the moment table downwards. kη_min = $(m.kη_min) > $(x).")
     end
 end
 
-Base.show(io::IO, itp::MomentTable{T, TX, O, ITP, MomentTableConfig{T, TX, NU}}) where {T, TX, O, ITP, NU} = 
+Base.show(io::IO, itp::MomentTable{T, TX, O, MomentTableConfig{T, TX, NU, O}}) where {T, TX, O, NU} = 
     print(io, "MomentTable($T internal, $TX output, ν=$NU) of order $O with kη over $(first(itp.itp.ranges))")
 
 # T is internal precision, TX is output precision
@@ -88,7 +88,7 @@ function sph_bessel_interpolator(::Type{T}, ::Type{TX}, ν::Int, order, kη_min,
     config = MomentTableConfig{T, TX, ν, order}(ν)
 
     itp = _fill_sph_bessel_interp(config, kη_min, kη_max, N, cache, weniger_cut, prefactors)
-    return MomentTable{T, TX, order, typeof(itp), typeof(config), WenigerCache1F2}(
+    return MomentTable{T, TX, order, typeof(config), typeof(itp), WenigerCache1F2}(
         itp, config, prefactors, kη_min, kη_max, cache, c₁, c₂)
 end
 sph_bessel_interpolator(ν::Int, args...; kwargs...) =

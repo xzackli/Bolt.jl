@@ -166,7 +166,6 @@ end
     end
 end
 
-
 @testset "interpolator: spherical Bessel J, 4th order, moderate arg" begin
     refs = (big"0.00229425677577922706134041736035369", big"0.00183049831049510967778943596015052",
         big"0.00152235376642692867152374927665023", big"0.00130283667913981697274149102492971")
@@ -179,7 +178,7 @@ end
         @test abs(moms[i] - refs[i]) < 1e-12  # interpolation error hurts!
     end
 end
-##
+
 @testset "interpolator: spherical Bessel J, 4th order, asymptotic arg" begin
     refs = (big"0.667496353968182420081865144062472", big"3.18644086496078566989171654620754",
         big"838.803790872929501155031335384019",big"831383.108409725479693899756952862")
@@ -190,4 +189,21 @@ end
     for i in 1:4
         @test abs(1 - moms[i] / refs[i]) < 1e-12  # interpolation error hurts!
     end
+end
+
+##
+@testset "3rd order filon integration using the interpolator" begin
+
+    ν, order = 3, 3
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
+    
+    f(x) = 3x^2 - 0.2x + 4
+    
+    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 2., itp) - 0.365287615501162668736682652658444) < TOL
+
+    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 1., itp) - 0.219009396999160523658045931736310) < TOL
+    
+    
+    @test abs(Bolt.integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp) - 0.146278218502002145078636720922135) < TOL
+    
 end
