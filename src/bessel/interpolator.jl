@@ -127,10 +127,7 @@ end
         _sjw(T(x), ν, 2, cache), _sjw(T(x), ν, 3, cache))
 end
 
-@inline function sph_j_moment_weniger_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 4}}, 
-                                                 x) where {T,TX,O,V}
-    return SVector{4,TX}(_sjw(T(x), 0, mt), _sjw(T(x), 1, mt), _sjw(T(x), 2, mt), _sjw(T(x), 3, mt))
-end
+
 
 @inline function sph_j_moment_maclaurin_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 4}}, 
     x) where {T,TX,O,V}
@@ -146,6 +143,11 @@ end
 #     ν = getnu(mt)
 #     return (√(T(π)/2)/(m+ν+1)) * exp((m+ν+1) * log(x) - mt.c₂) * 
 #          weniger1F2(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν + T(3)/2)), -x^2/4, mt.cache)
+# end
+
+# @inline function sph_j_moment_weniger_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 4}}, 
+#     x) where {T,TX,O,V}
+# return SVector{4,TX}(_sjw(T(x), 0, mt), _sjw(T(x), 1, mt), _sjw(T(x), 2, mt), _sjw(T(x), 3, mt))
 # end
 
 # this converts to internal type T (typically Double64) and then converts back to output type Tx)

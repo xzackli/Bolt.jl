@@ -32,7 +32,7 @@ const TOL = 1e-13  # tolerance for these moments
     end
 end
 
-## for small arguments (x < 50), we use Weniger + high precision floats
+## for small arguments (1 < x < 50), we use Weniger + high precision floats
 @testset "moments: Bessel J, small argument" begin
     T = Double64
     x, ν, α = T(10.0), T(2.5), T(1.5)
@@ -241,25 +241,6 @@ end
 end
 
 ##
-@testset "3rd order filon integration using the interpolator" begin
-
-    ν, order = 3, 3
-    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
-    
-    f(x) = 3x^2 - 0.2x + 4
-
-    refs = [big"0.365287615501162668736682652658444", big"0.219009396999160523658045931736310",
-        big"0.146278218502002145078636720922135"]
-    
-    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 2., itp) - refs[1]) < TOL
-    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 1., itp) - refs[2]) < TOL
-    @test abs(Bolt.integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp) - refs[3]) < TOL
-    
-    itp_ka = itp(10 * 1.)  # k*a
-    s, _ = Bolt._loop_integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp, itp_ka)
-    @test abs(s - refs[3]) < TOL
-end
-
 @testset "interpolator: maclaurin series vanishing argument octupole" begin
     ν = 3
     order = 3
@@ -287,3 +268,38 @@ end
     @test abs(1 - I1 / refs[2]) < TOL
     @test abs(1 - I2 / refs[3]) < TOL
 end
+
+
+##
+@testset "3rd order filon integration using the interpolator" begin
+
+    ν, order = 3, 3
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
+    
+    f(x) = 3x^2 - 0.2x + 4
+
+    refs = [big"0.365287615501162668736682652658444", big"0.219009396999160523658045931736310",
+        big"0.146278218502002145078636720922135",  big"0.000548758594228308158105260833682184"]
+    
+    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 2., itp) - refs[1]) < TOL
+    @test abs(Bolt.integrate_sph_bessel_filon(4., -0.2, 6.0, 10.0, 0., 1., itp) - refs[2]) < TOL
+    @test abs(Bolt.integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp) - refs[3]) < TOL
+    @test abs(Bolt.integrate_sph_bessel_filon(15.6,11.8, 6., 10.0, 2., 4., itp) - refs[4]) < TOL
+    
+    itp_ka = itp(10 * 1.)  # k*a
+    s, _ = Bolt._loop_integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp, itp_ka)
+    @test abs(s - refs[3]) < TOL
+
+    # test maclaurin and lommel
+    itp = Bolt.sph_bessel_interpolator(ν, order, 2.0, 50.0, 20)
+    refs = [big"1.42547119945725017346111489855163e-6", big"1.42843411313369992225631279186481e-10",
+        big"3.21068375645105591375937123607342", 
+        big"-9.05287087052870811987403003972375", big"61.7007662060909735341421714015349"]
+    @test abs((Bolt.integrate_sph_bessel_filon(3.9983,-0.14,6., 10.0, 0.01, 0.02, itp) - refs[1])/refs[1]) < TOL
+    @test abs((Bolt.integrate_sph_bessel_filon(3999803/1000000,-(97/500),6., 10.0, 0.001, 0.002, itp) - refs[2])/refs[2]) < TOL
+
+    @test abs((Bolt.integrate_sph_bessel_filon(7494.,299.8,6., 10.0, 50.0, 100.0, itp) - refs[3])/refs[3]) < TOL
+    @test abs((Bolt.integrate_sph_bessel_filon(119964.,1199.8,6., 10., 200., 201., itp) - refs[4])/refs[4]) < TOL
+    @test abs((Bolt.integrate_sph_bessel_filon(74999004,149999/5,6., 10., 5000., 5100., itp) - refs[5])/refs[5]) < TOL
+end
+
