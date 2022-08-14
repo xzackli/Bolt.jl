@@ -1,7 +1,7 @@
 
 
 """
-integrates a quadratic polynomial with moments f, f′, f″ evaluated at a, over
+integrates a quadratic polynomial with moments. input f, f′, f″ are those evaluated at a, over
 interval (a,b). Uses a preconstructed interpolator for the moments.
 """
 function integrate_sph_bessel_filon(f, f′, f″, k, a, b, itp)

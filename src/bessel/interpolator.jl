@@ -14,7 +14,6 @@ sph_j_moment_asymp(config::MomentTableConfig{T, TX, 2}, x, m, pref) where {T,TX}
     sph_j_moment_asymp_nu_2(x, m, pref)
 sph_j_moment_asymp(config::MomentTableConfig{T, TX, 3}, x, m, pref) where {T,TX} =
     sph_j_moment_asymp_nu_3(x, m, pref)
-sph_j_moment_asymp(config::MomentTableConfig, x, m, pref) = sph_j_moment_asymp(x, config.ν, m, pref)
 
 # it's important for this general function to be fast, for source function integration.
 # For general Cₗ, we can't afford to store a full interpolator.
@@ -52,20 +51,6 @@ getnu(::MomentTable{T, TX, O, C}) where {T,TX,O,V,C<:MomentTableConfig{T, TX, V}
 getorder(::MomentTable{T, TX, O}) where {T,TX,O} = O
 
 
-# spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
-# this version stores the constant c₂ = (ν + 1/2) log(2) + Γ(ν + 3/2)
-function sph_j_moment_weniger_₁F₂(x::T, m, mt::MomentTable) where T
-    ν = getnu(mt)
-    return (√(T(π)/2)/(m+ν+1)) * exp((m+ν+1) * log(x) - mt.c₂) * 
-         weniger1F2(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν + T(3)/2)), -x^2/4, mt.cache)
-end
-
-# this converts to internal type T (typically Double64) and then converts back to output type Tx)
-@inline function sph_j_moment_weniger_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 3}}, 
-                                                 x) where {T,TX,O,V}
-    return SVector{3,TX}(_sjw(T(x), 0, mt), _sjw(T(x), 1, mt), _sjw(T(x), 2, mt))
-end
-
 # spherical Bessel J moment generated from Maclaurin series of hypergeometric ₁F₂
 function sph_j_moment_maclaurin_₁F₂(x::T, m, mt::MomentTable) where T
     ν = getnu(mt)
@@ -85,7 +70,7 @@ function (mt::MomentTable{T,TX,O})(x::TX) where {T,TX,O}
     elseif x > mt.kη_max
         return sph_j_moment_asymp_all_orders(mt.config, x, mt.prefactors...)::SVector{O,TX}
     else 
-        return sph_j_moment_maclaurin_all_orders(mt, x)::SVector{3,TX}
+        return sph_j_moment_maclaurin_all_orders(mt, x)::SVector{O,TX}
     end
 end
 
@@ -151,3 +136,22 @@ end
     x) where {T,TX,O,V}
     return SVector{4,TX}(_sjm(T(x), 0, mt), _sjm(T(x), 1, mt), _sjm(T(x), 2, mt), _sjm(T(x), 3, mt))
 end
+
+
+# we generally always use an interpolator for weniger transformation, so these are un-used
+
+# spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
+# this version stores the constant c₂ = (ν + 1/2) log(2) + Γ(ν + 3/2)
+# function sph_j_moment_weniger_₁F₂(x::T, m, mt::MomentTable) where T
+#     ν = getnu(mt)
+#     return (√(T(π)/2)/(m+ν+1)) * exp((m+ν+1) * log(x) - mt.c₂) * 
+#          weniger1F2(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν + T(3)/2)), -x^2/4, mt.cache)
+# end
+
+# this converts to internal type T (typically Double64) and then converts back to output type Tx)
+# @inline function sph_j_moment_weniger_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 3}}, 
+#                                                  x) where {T,TX,O,V}
+#     return SVector{3,TX}(_sjw(T(x), 0, mt), _sjw(T(x), 1, mt), _sjw(T(x), 2, mt))
+# end
+
+# sph_j_moment_asymp(config::MomentTableConfig, x, m, pref) = sph_j_moment_asymp(x, config.ν, m, pref)

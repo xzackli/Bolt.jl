@@ -189,6 +189,7 @@ end
     order = 3
     ν = 3
     itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
+    @test Bolt.getorder(itp) == order
     
     moms = itp(0.1)
     for i in 1:3
@@ -196,6 +197,7 @@ end
     end
 end
 
+##
 @testset "interpolator: spherical Bessel J, 4th order, moderate arg" begin
     refs = (big"0.00229425677577922706134041736035369", big"0.00183049831049510967778943596015052",
         big"0.00152235376642692867152374927665023", big"0.00130283667913981697274149102492971")
@@ -203,12 +205,22 @@ end
     order = 4
     ν = 3
     itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 1.6e4, 2_000_000)
+    @test Bolt.getorder(itp) == order
+
+    moms = itp(1.0)
+    for i in 1:4
+        @test abs(moms[i] - refs[i]) < 1e-12  # interpolation error hurts!
+    end
+
+    # check maclaurin
+    itp = Bolt.sph_bessel_interpolator(ν, order, 2.0, 1.6e4, 20)
     moms = itp(1.0)
     for i in 1:4
         @test abs(moms[i] - refs[i]) < 1e-12  # interpolation error hurts!
     end
 end
 
+##
 @testset "interpolator: spherical Bessel J, 4th order, asymptotic arg" begin
     refs = (big"0.667496353968182420081865144062472", big"3.18644086496078566989171654620754",
         big"838.803790872929501155031335384019",big"831383.108409725479693899756952862")
@@ -220,6 +232,7 @@ end
         @test abs(1 - moms[i] / refs[i]) < 1e-12  # interpolation error hurts!
     end
     
+    # check lommel
     itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 500, 20)
     moms = itp(1000.0)
     for i in 1:4
@@ -274,4 +287,3 @@ end
     @test abs(1 - I1 / refs[2]) < TOL
     @test abs(1 - I2 / refs[3]) < TOL
 end
-
