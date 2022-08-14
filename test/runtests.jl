@@ -6,6 +6,8 @@ using ForwardDiff
 using Interpolations, DataInterpolations
 using Printf
 
+include("testbessel.jl")
+
 @testset "FFTLog" begin
     N = 64
     μ = 0
