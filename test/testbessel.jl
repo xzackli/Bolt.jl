@@ -121,6 +121,36 @@ end
     end
 end
 
+
+@testset "moments: maclaurin series vanishing argument octupole" begin
+
+    ν = 3
+
+    I0 = Bolt.sph_j_moment_maclaurin_₁F₂(0.01, ν, 0)
+    I1 = Bolt.sph_j_moment_maclaurin_₁F₂(0.01, ν, 1)
+    I2 = Bolt.sph_j_moment_maclaurin_₁F₂(0.01, ν, 2)
+
+    refs = [big"2.38094356262526052651053721655034e-11",big"1.90475434619627872194611999598176e-13",
+        big"1.58729497355699854415133110569146e-15"]
+
+    @test abs(1 - I0 / refs[1]) < TOL
+    @test abs(1 - I1 / refs[2]) < TOL
+    @test abs(1 - I2 / refs[3]) < TOL
+
+    I0 = Bolt.sph_j_moment_maclaurin_₁F₂(0.001, ν, 0)
+    I1 = Bolt.sph_j_moment_maclaurin_₁F₂(0.001, ν, 1)
+    I2 = Bolt.sph_j_moment_maclaurin_₁F₂(0.001, ν, 2)
+
+    refs = [big"2.38095229276896093875259000259011e-15",big"1.90476182917611622651303789471188e-18",
+        big"1.58730152116402236652235367513154e-21"]
+
+    @test abs(1 - I0 / refs[1]) < TOL
+    @test abs(1 - I1 / refs[2]) < TOL
+    @test abs(1 - I2 / refs[3]) < TOL
+
+end
+
+
 ## interpolation tests
 @testset "interpolator: spherical Bessel J, large argument quadrupole" begin
     refs = (
@@ -189,6 +219,12 @@ end
     for i in 1:4
         @test abs(1 - moms[i] / refs[i]) < 1e-12  # interpolation error hurts!
     end
+    
+    itp = Bolt.sph_bessel_interpolator(ν, order, 0.0, 500, 20)
+    moms = itp(1000.0)
+    for i in 1:4
+        @test abs(1 - moms[i] / refs[i]) < 1e-12  # interpolation error hurts!
+    end
 end
 
 ##
@@ -210,3 +246,32 @@ end
     s, _ = Bolt._loop_integrate_sph_bessel_filon(6.8, 5.8, 6.0, 10.0, 1., 2., itp, itp_ka)
     @test abs(s - refs[3]) < TOL
 end
+
+@testset "interpolator: maclaurin series vanishing argument octupole" begin
+    ν = 3
+    order = 3
+    itp = Bolt.sph_bessel_interpolator(ν, order, 1.0, 1.6e4, 2_000_000)  # NOTE: min is > all x here
+
+    refs = [big"2.38094356262526052651053721655034e-11",big"1.90475434619627872194611999598176e-13",
+        big"1.58729497355699854415133110569146e-15"]
+    I0, I1, I2 = Bolt.sph_j_moment_maclaurin_all_orders(itp, 0.01)
+    @test abs(1 - I0 / refs[1]) < TOL
+    @test abs(1 - I1 / refs[2]) < TOL
+    @test abs(1 - I2 / refs[3]) < TOL
+    I0, I1, I2 = itp(0.01)
+    @test abs(1 - I0 / refs[1]) < TOL
+    @test abs(1 - I1 / refs[2]) < TOL
+    @test abs(1 - I2 / refs[3]) < TOL
+
+    refs = [big"2.38095229276896093875259000259011e-15",big"1.90476182917611622651303789471188e-18",
+        big"1.58730152116402236652235367513154e-21"]
+    I0, I1, I2 = Bolt.sph_j_moment_maclaurin_all_orders(itp, 0.001)
+    @test abs(1 - I0 / refs[1]) < TOL
+    @test abs(1 - I1 / refs[2]) < TOL
+    @test abs(1 - I2 / refs[3]) < TOL
+    I0, I1, I2 = itp(0.001)
+    @test abs(1 - I0 / refs[1]) < TOL
+    @test abs(1 - I1 / refs[2]) < TOL
+    @test abs(1 - I2 / refs[3]) < TOL
+end
+

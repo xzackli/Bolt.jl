@@ -233,3 +233,17 @@ function weniger1F2(α::T, β::AbstractVector{T}, z::T, cache; kmax::Int = 100_0
     end
     return isfinite(R[r+1]) ? R[r+1] : R[r]
 end
+
+
+function maclaurin_₁F₂(a::T, b::SVector{2,T}, z::T) where T
+    S₀, S₁, j = one(T), one(T)+prod(a)*z/prod(b), 1
+    while errcheck(S₀, S₁, 10eps(real(T))) || j ≤ 1
+        rⱼ = inv(j+one(T))
+        rⱼ *= a+j
+        rⱼ /= (b[1]+j) * (b[2]+j)
+        S₀, S₁ = S₁, S₁+(S₁-S₀)*rⱼ*z
+        j += 1
+    end
+    return S₁
+end
+

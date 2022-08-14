@@ -29,7 +29,7 @@ using LinearAlgebra
 
 using FFTW
 import SpecialFunctions: logabsgamma, loggamma, gamma, sphericalbesselj
-import HypergeometricFunctions: pochhammer, errcheck
+import HypergeometricFunctions: pochhammer, errcheck, pFqmaclaurin
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!
 import LinearAlgebra: mul!, ldiv!
 import Bessels: besselj

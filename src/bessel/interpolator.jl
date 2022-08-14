@@ -20,8 +20,9 @@ sph_j_moment_asymp(config::MomentTableConfig, x, m, pref) = sph_j_moment_asymp(x
 # For general Cₗ, we can't afford to store a full interpolator.
 # TODO: we can make this 2x faster by removing redundant calculations between the different m
 
-const _sja = sph_j_moment_asymp
+const _sjm = sph_j_moment_maclaurin_₁F₂
 const _sjw = sph_j_moment_weniger_₁F₂
+const _sja = sph_j_moment_asymp
 
 # 3rd order: up to quadratic terms
 @inline function sph_j_moment_asymp_all_orders(config::MomentTableConfig{T, TX, V, 3}, x,
@@ -31,26 +32,10 @@ end
 
 # this converts to internal type T (typically Doubble64) and then converts back to output type Tx)
 @inline function sph_j_moment_weniger_all_orders(config::MomentTableConfig{T, TX, V, 3}, 
-                                                  x, cache) where {T,TX,V}
+                                                 x, cache) where {T,TX,V}
     ν = config.ν
     return SVector{3,TX}(_sjw(T(x), ν, 0, cache), _sjw(T(x), ν, 1, cache), _sjw(T(x), ν, 2, cache))
 end
-
-# 4th order: up to cubic terms
-@inline function sph_j_moment_asymp_all_orders(config::MomentTableConfig{T, TX, V, 4}, x,
-                                              p0, p1, p2, p3) where {T,TX,V}
-    return SVector{4,TX}(_sja(config, x, 0, p0), _sja(config, x, 1, p1), 
-        _sja(config, x, 2, p2), _sja(config, x, 3, p3))
-end
-
-@inline function sph_j_moment_weniger_all_orders(config::MomentTableConfig{T, TX, V, 4}, 
-                                                 x, cache) where {T,TX,V}
-    ν = config.ν
-    return SVector{4,TX}(_sjw(T(x), ν, 0, cache), _sjw(T(x), ν, 1, cache), 
-        _sjw(T(x), ν, 2, cache), _sjw(T(x), ν, 3, cache))
-end
-
-
 
 struct MomentTable{T, TX, O, C, ITP, W}
     itp::ITP
@@ -59,37 +44,66 @@ struct MomentTable{T, TX, O, C, ITP, W}
     kη_min::T
     kη_max::T
     cache::W
-    c₁::TX
-    c₂::TX
+    c₂::TX  # (ν + T(1)/2) * log(T(2)) + _lgamma(ν + T(3)/2)
 end
 
-function (m::MomentTable{T,TX,O})(x::TX) where {T,TX,O}
-    if m.kη_min ≤ x ≤ m.kη_max
-        return m.itp(x)::SVector{O,TX}
-    elseif x > m.kη_max
-        return sph_j_moment_asymp_all_orders(m.config, x, m.prefactors...)::SVector{O,TX}
+# trait to extract ν from type of MomentTable, it's a little buried...
+getnu(::MomentTable{T, TX, O, C}) where {T,TX,O,V,C<:MomentTableConfig{T, TX, V}} = V
+getorder(::MomentTable{T, TX, O}) where {T,TX,O} = O
+
+
+# spherical Bessel J moment generated from Weniger transformation of hypergeometric ₁F₂
+# this version stores the constant c₂ = (ν + 1/2) log(2) + Γ(ν + 3/2)
+function sph_j_moment_weniger_₁F₂(x::T, m, mt::MomentTable) where T
+    ν = getnu(mt)
+    return (√(T(π)/2)/(m+ν+1)) * exp((m+ν+1) * log(x) - mt.c₂) * 
+         weniger1F2(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν + T(3)/2)), -x^2/4, mt.cache)
+end
+
+# this converts to internal type T (typically Double64) and then converts back to output type Tx)
+@inline function sph_j_moment_weniger_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 3}}, 
+                                                 x) where {T,TX,O,V}
+    return SVector{3,TX}(_sjw(T(x), 0, mt), _sjw(T(x), 1, mt), _sjw(T(x), 2, mt))
+end
+
+# spherical Bessel J moment generated from Maclaurin series of hypergeometric ₁F₂
+function sph_j_moment_maclaurin_₁F₂(x::T, m, mt::MomentTable) where T
+    ν = getnu(mt)
+    return (√(T(π)/2)/(m+ν+1)) * exp((m+ν+1) * log(x) - mt.c₂) * 
+        maclaurin_₁F₂(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν + T(3)/2)), -x^2/4)
+end
+
+# this converts to internal type T (typically Double64) and then converts back to output type Tx)
+@inline function sph_j_moment_maclaurin_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 3}}, 
+    x) where {T,TX,O,V}
+    return SVector{3,TX}(_sjm(TX(x), 0, mt), _sjm(TX(x), 1, mt), _sjm(TX(x), 2, mt))
+end
+
+function (mt::MomentTable{T,TX,O})(x::TX) where {T,TX,O}
+    if mt.kη_min ≤ x ≤ mt.kη_max
+        return mt.itp(x)::SVector{O,TX}
+    elseif x > mt.kη_max
+        return sph_j_moment_asymp_all_orders(mt.config, x, mt.prefactors...)::SVector{O,TX}
     else 
-        # return sph_j_moment_weniger_all_orders(m.config, x, m.cache)::SVector{3,TX}
-        error("Do not extrapolate the moment table downwards. kη_min = $(m.kη_min) > $(x).")
+        return sph_j_moment_maclaurin_all_orders(mt, x)::SVector{3,TX}
     end
 end
 
-Base.show(io::IO, itp::MomentTable{T, TX, O, MomentTableConfig{T, TX, NU, O}}) where {T, TX, O, NU} = 
-    print(io, "MomentTable($T internal, $TX output, ν=$NU) of order $O with kη over $(first(itp.itp.ranges))")
+Base.show(io::IO, itp::MomentTable{T, TX, O}) where {T, TX, O} = 
+    print(io, "MomentTable($T internal, $TX output, ν=$(getnu(itp))) of order $O with kη over $(first(itp.itp.ranges))")
 
 # T is internal precision, TX is output precision
 function sph_bessel_interpolator(::Type{T}, ::Type{TX}, ν::Int, order, kη_min, kη_max, N::Int; 
                                         weniger_cut=50) where {T, TX}
 
     prefactors = Tuple(sph_j_moment_asymp_prefactor(T, ν, m) for m in 0:(order-1))
-    c₁ = (1/(α+ν+1) )* √(T(π)/2)
     c₂ = (ν + T(1)/2) * log(T(2)) + _lgamma(ν + T(3)/2)
     cache = WenigerCache1F2(T)
     config = MomentTableConfig{T, TX, ν, order}(ν)
 
     itp = _fill_sph_bessel_interp(config, kη_min, kη_max, N, cache, weniger_cut, prefactors)
     return MomentTable{T, TX, order, typeof(config), typeof(itp), WenigerCache1F2}(
-        itp, config, prefactors, kη_min, kη_max, cache, c₁, c₂)
+        itp, config, prefactors, kη_min, kη_max, cache, c₂)
 end
 sph_bessel_interpolator(ν::Int, args...; kwargs...) =
     sph_bessel_interpolator(Double64, Float64, ν, args...; kwargs...)
@@ -110,3 +124,30 @@ function _fill_sph_bessel_interp(config::MomentTableConfig{T, TX, NU, O},
     return scale(interpolate(moments, BSpline(Cubic(Line(OnGrid())))), xs_Tx)
 end
 
+
+
+
+## fourth order versions: up to cubic terms
+
+@inline function sph_j_moment_asymp_all_orders(config::MomentTableConfig{T, TX, V, 4}, x,
+                                              p0, p1, p2, p3) where {T,TX,V}
+    return SVector{4,TX}(_sja(config, x, 0, p0), _sja(config, x, 1, p1), 
+        _sja(config, x, 2, p2), _sja(config, x, 3, p3))
+end
+
+@inline function sph_j_moment_weniger_all_orders(config::MomentTableConfig{T, TX, V, 4}, 
+                                                 x, cache) where {T,TX,V}
+    ν = config.ν
+    return SVector{4,TX}(_sjw(T(x), ν, 0, cache), _sjw(T(x), ν, 1, cache), 
+        _sjw(T(x), ν, 2, cache), _sjw(T(x), ν, 3, cache))
+end
+
+@inline function sph_j_moment_weniger_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 4}}, 
+                                                 x) where {T,TX,O,V}
+    return SVector{4,TX}(_sjw(T(x), 0, mt), _sjw(T(x), 1, mt), _sjw(T(x), 2, mt), _sjw(T(x), 3, mt))
+end
+
+@inline function sph_j_moment_maclaurin_all_orders(mt::MomentTable{T, TX, O, MomentTableConfig{T, TX, V, 4}}, 
+    x) where {T,TX,O,V}
+    return SVector{4,TX}(_sjm(T(x), 0, mt), _sjm(T(x), 1, mt), _sjm(T(x), 2, mt), _sjm(T(x), 3, mt))
+end

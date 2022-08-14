@@ -74,6 +74,14 @@ function sph_j_moment_weniger_₁F₂(x::T, ν, m, cache) where T
          weniger1F2(T(1+m+ν)/2, SVector{2,T}((3+m+ν)/2, (ν′)), -x^2/4, cache) * √(T(π)/2)
 end
 
+# spherical Bessel J moment generated from Maclaurin series of hypergeometric ₁F₂
+function sph_j_moment_maclaurin_₁F₂(x::T, ν, m::Int) where T
+    ν′ = ν + T(3)/2
+    return (1/(m+ν+1)) * exp((m+ν+1) * log(x) - (ν′-1) * log(T(2)) - _lgamma(ν′)) * 
+         maclaurin_₁F₂(((1+m+ν)/2), SVector{2,T}((3+m+ν)/2, (ν′)), -x^2/4) * √(T(π)/2)
+end
+
+
 @muladd function sph_j_moment_asymp_nu_2(x::T, m, prefactor) where T
     α_minus_half = m - 1
     sinx = sin(x)
