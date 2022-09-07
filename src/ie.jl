@@ -12,7 +12,9 @@ struct IE{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
     k::Tk
     sΘ2::IT
     sΠ::IT
-    Nᵧ::Int #can't we just use existing x grid for this?
+    Nᵧ₁::Int #pre-entry
+    Nᵧ₂::Int #recomb
+    Nᵧ₃::Int #post-recomb
     ℓ_ν::Int
     ℓ_mν::Int
     nq::Int
@@ -42,8 +44,9 @@ IE(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBac
     ih::AbstractIonizationHistory, k::Real,
     sΘ2::AbstractInterpolation,sΠ::AbstractInterpolation,
 	#^FIXME: Are these right?? I dropped the {T,1} since T is not known here to get it to compile
-    Nᵧ=400, ℓ_ν=8, ℓ_mν=10, nq=15
-    ) = IE(integrator, par, bg, ih, k, sΘ2, sΠ, Nᵧ, ℓ_ν,ℓ_mν, nq)
+    Nᵧ₁=10, Nᵧ₂=100, Nᵧ₃=50,
+    ℓ_ν=8, ℓ_mν=10, nq=15
+    ) = IE(integrator, par, bg, ih, k, sΘ2, sΠ, Nᵧ₁,Nᵧ₂,Nᵧ₃, ℓ_ν,ℓ_mν, nq)
 
 IEν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real,
@@ -79,13 +82,47 @@ function itersolve(ie)
 
 end
 
+function x_grid_ie(ie) 
+    bg,ih,k = ie.bg,ie.ih,ie.k
+    # Three phases: 
+    # 1. Pre-horizon entry:
+    xhor = bg.x_grid[argmin(abs.(k .* bg.η .- 1))] #horizon crossing ish
+    x_ph_i, x_ph_f, n_ph = bg.x_grid[1], xhor, ie.Nᵧ₁ #10.
+    dx_ph = (x_ph_f-x_ph_i)/(n_ph-1)
+    x_ph = -20.:dx_ph:x_ph_f
+    x_ph = -20. .+ dx_ph*collect(0:1:n_ph-1)
+    # 2. Wiggly time (recomb):
+    xdec = bg.x_grid[argmin(abs.( -ih.τ′ .* bg.ℋ .*bg.η .- 1))] #decoupling ish
+    x_rc_f, n_rc = xdec, ie.Nᵧ₂ #100
+    dx_rc = (x_rc_f-x_ph_f)/n_rc
+    # x_rc = x_ph_f+dx_rc:dx_rc:x_rc_f
+    x_rc = x_ph_f .+ dx_rc * collect(1:1:n_rc)
+    # println("first check ", x_ph[end-1], ", ",x_ph[end], ", ",x_rc[1], ", ",x_rc[2],", - ", xhor)
+
+    # 3. Post-recomb:
+    n_pr = ie.Nᵧ₃ #50
+    dx_pr = (bg.x_grid[end] -x_rc_f)/n_pr
+    # x_pr = x_rc_f+dx_pr:dx_pr:bg.x_grid[end]
+    #^This results in an extrapolation error if the x_rc_f has more decimal places than the dx
+    x_pr = x_rc_f .+ dx_pr* collect(1:1:n_pr )
+    # println("third check ", x_rc[end-1], ", ",x_rc[end],", ",x_pr[1],", ",x_pr[2], ", - ", xdec)
+
+    # println("x_pr[end-1]: ",x_pr[end-1], ", x_pr[end] ", x_pr[end])
+    # pack together #FIXME is there a way to do this as a StepRange? for the splines?
+    # println("precat sizes: ",length(x_ph),", ", length(x_rc), ", ",length(x_pr))
+    x_sparse = vcat(x_ph,x_rc,x_pr)
+    return x_sparse
+end
+
 
 function boltsolve(ie::IE{T}, ode_alg=KenCarp4(); reltol=1e-6) where T #MD...
-    xᵢ = first(ie.bg.x_grid)
+    x_grid = x_grid_ie(ie)
+    xᵢ = first(x_grid)#ie.bg.x_grid)
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=ie.bg.x_grid, dense=false,
+                saveat=x_grid,#ie.bg.x_grid, 
+                dense=false,
                 )
     return sol
 end
@@ -214,7 +251,7 @@ function ie_unpack(u, ie::IE{T, BasicNewtonian}) where T
     ℓ_ν =  ie.ℓ_ν
     ℓ_mν = ie.ℓ_mν #should be smaller than others
     nq = ie.nq
-    Nᵧ = ie.Nᵧ
+    Nᵧ = ie.Nᵧ₁+ie.Nᵧ₂+ie.Nᵧ₃ #ie.Nᵧ
     ℓᵧ=2
     #here u is the history of u over all ie timesteps (perlen,ie timesteps)
     #The perts below will be their histories over all ie timesteps as well
