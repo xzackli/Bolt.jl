@@ -42,17 +42,9 @@ end
 function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
                          ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
-    # xᵢ = first(hierarchy.bg.x_grid)
     xᵢ = confhierarchy.η2x( hierarchy.bg.η[1] ) #to be consistent
-    # println("first η (bg call): ",hierarchy.bg.η(xᵢ))
-    # println("first η (spline): ",hierarchy.bg.η[1])
-    # println("last η (bg call): ",hierarchy.bg.η(zero(T)))
-    # println("last η (spline): ",hierarchy.bg.η[end])
     u₀ = initial_conditions(xᵢ, confhierarchy.hierarchy)
-    # prob = ODEProblem{true}(hierarchy_conformal!, u₀, (hierarchy.bg.η(xᵢ) , hierarchy.bg.η(zero(T))),confhierarchy)
     prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
-                            # (hierarchy.bg.η[1] , hierarchy.bg.η[end]),
-                            # (hierarchy.bg.η[1]* (3e5/100)*hierarchy.bg.H₀ , hierarchy.bg.η[end]* (3e5/100)*hierarchy.bg.H₀),
                             (hierarchy.bg.η(hierarchy.bg.x_grid[1])* (3e5/100)*hierarchy.bg.H₀ , hierarchy.bg.η(hierarchy.bg.x_grid[end])* (3e5/100)*hierarchy.bg.H₀),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
