@@ -82,7 +82,6 @@ bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 k = (bg.H₀*299792.458/100)*kclass #get k in our units
 
-
 #input to the ie integrator struct (akin to hierarchy)
 ℓᵧ=2
 ℓ_ν=50
@@ -308,31 +307,25 @@ x_grid_ie_0_sparse = x_grid_ie(ie_0_sparse)
 
 
 #check hierarchy & timesteps
+η2x = linear_interpolation(bg.η,bg.x_grid)
 hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, 50, ℓ_ν, ℓ_mν,n_q)
-results = boltsolve(hierarchy;reltol=1e-8)
-scatter(results.t[1:10:end])
-scatter(results.t,bg.η(results.t)*bg.H₀,yscale=:log10)
-plot!(results.t,abs.(results.t .+3.5))
-scatter(results.t[1:end-1],results.t[2:end]-results.t[1:end-1],yscale=:log10,label="dx")
-scatter!(results.t[1:end-1],(bg.η(results.t)*bg.H₀)[2:end]-(bg.η(results.t)*bg.H₀)[1:end-1],label="dη")
-ylims!(1e-5,1)
-xlabel!("x")
-ylabel!("dt")
+results = boltsolve(hierarchy;reltol=1e-5)
+
+hierarchy_conf = ConformalHierarchy(hierarchy,η2x)
+results_conf = boltsolve_conformal(hierarchy_conf;reltol=1e-5)
 
 
 #temp mono
 plot(ret[:,1],ret[:,1+1],label="hierarchy",color=:red)
-plot!(results.t,results[1,:],label="hierarchy-updated-rt1e-8",color=:blue,ls=:dash)
-plot!(retnf_class[1,:],-retnf_class[2+1,:]/4/𝕡.h,label="hierarchy-CLASS",color=:blue,ls=:dash)
-plot(bg.x_grid,u_all_0[1,:],label="iter 0",ls=:dot)
+plot!(results_conf.t,results_conf[1,:],label="hierarchy-conf",color=:orange,ls=:dash,xscale=:log10)
+plot(bg.η.(results.t)*bg.H₀*3e5/100,results[1,:],label="hierarchy-updated-rt1e-5",color=:blue)
+xlims!(bg.η(-12)*bg.H₀*3e5/100,bg.η(0)*bg.H₀*3e5/100)
 
-u_all_0_sparse[1,:]
-x_grid_ie_0_sparse
+plot!(bg.η.(retnf_class[1,:])*bg.H₀*3e5/100,-retnf_class[2+1,:]/4/𝕡.h,label="hierarchy-CLASS",color=:green,ls=:dash)
+plot(bg.x_grid,u_all_0[1,:],label="iter 0",ls=:dot)
 vline!([bg.x_grid[indrec]],ls=:dash,color=:black)
-bg.η[indrec]*(bg.H₀*3e5/100)
 
 plot(bg.x_grid,u_all_1[1,:],ls=:dash,label="iter 1")
-x_grid_ie_0_sparse
 plot(bg.x_grid,u_all_2[1,:],ls=:dash,label="iter 2")
 plot!(bg.x_grid,u_all_3[1,:],ls=:dash,label="iter 3")
 plot!(bg.x_grid,u_all_4[1,:],ls=:dash,label="iter 4")
@@ -342,18 +335,12 @@ plot!(x_grid_ie_0_sparse, u_all_1_sparse[1,:],label="sparse-iter 1",ls=:dash)
 plot!(x_grid_ie_0_sparse,u_all_2_sparse[1,:],ls=:dash,label="sparse-iter 2")
 plot!(x_grid_ie_0_sparse,u_all_3_sparse[1,:],ls=:dash,label="sparse-iter 3")
 plot!(x_grid_ie_0_sparse,u_all_4_sparse[1,:],ls=:dash,label="sparse-iter 4")
-plot!(x_grid_ie_0_sparse,u_all_5_sparse2[1,:],ls=:dash,label="sparse-iter 5-N3=200")
-plot!(x_grid_ie_0_sparse,u_all_5_sparse[1,:],ls=:dash,label="sparse-iter 5-N3=2000")
-# plot!(x_grid_ie_0_sparse,u_all_5_sparse2[1,:],ls=:dash,label="sparse-iter 5-N3=1000")
-u_all_5_sparse10
-u_all_5_sparse10[1,:]
-x_grid_ie_0_sparse
+plot!(x_grid_ie_0_sparse,u_all_5_sparse[1,:],ls=:dash,label="sparse-iter 5")
 xlims!(-12,0)
 vline!([xhor,xdec],ls=:dash,label="transitions")
 # ylims!(-.5,.5)
 xlabel!("x")
 ylabel!("temp mono")
-# savefig("../temp_mono_ie_N1_20_N2_100_470_N3_200_400_800_678.png")
 savefig("../temp_mono_hier_N3-200-2000fix_rtol-8.png")
 
 #temp quadrupole
@@ -365,7 +352,6 @@ plot!(x_grid_ie_0_sparse,u_all_2_sparse[3,:],ls=:dash,label="sparse-iter 2")
 plot!(x_grid_ie_0_sparse,u_all_3_sparse[3,:],ls=:dash,label="sparse-iter 3")
 plot!(x_grid_ie_0_sparse,u_all_4_sparse[3,:],ls=:dash,label="sparse-iter 4")
 plot!(x_grid_ie_0_sparse,@.(Π_5_sparse - u_all_5_sparse[3+1,:]- u_all_5_sparse[3+3,:]),ls=:dash,label="sparse-iter 5")
-
 plot!(bg.x_grid,@.(Π_5- u_all_5[3+1,:]- u_all_5[3+3,:]),ls=:dash,label="iter 5")
 
 
