@@ -43,7 +43,7 @@ function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't
                          ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
     xᵢ = confhierarchy.η2x( hierarchy.bg.η[1] ) #to be consistent
-    u₀ = initial_conditions(xᵢ, confhierarchy.hierarchy)
+    u₀ = initial_conditions(xᵢ, hierarchy)
     Mpcfac = bg.H₀*299792.458/100.
     prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
                             (hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac₀ , hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac),
@@ -70,9 +70,9 @@ function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
 end
 
 function hierarchy_conformal!(du, u, confhierarchy::ConformalHierarchy{T}, η) where T
+    hierarchy = confhierarchy.hierarchy
     Mpcfac = hierarchy.bg.H₀*299792.458/100.
     x = confhierarchy.η2x(η  / Mpcfac )
-    hierarchy = confhierarchy.hierarchy
     ℋ = hierarchy.bg.ℋ(x)
     hierarchy!(du, u, hierarchy, x)
     du .*= ℋ / Mpcfac  # account for dx/dη
