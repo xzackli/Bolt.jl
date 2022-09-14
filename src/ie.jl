@@ -62,6 +62,7 @@ function itersolve(Nₖ::Int,ie_0::IE{T};reltol=1e-6) where T
     pertlen = 2(2+1)+(ie_0.ℓ_ν+1)+(ie_0.ℓ_mν+1)*ie_0.nq+5
     u_all = zeros(pertlen,length(x_grid))
     for k in 1:Nₖ
+        println("iter k = ", k)
             Θ₂,Π,u_all = iterate(Θ₂,Π, ie_0.par, ie_0.bg, ie_0.ih, ie_0.k,  
                                     ie_0.Nᵧ₁,ie_0.Nᵧ₂,ie_0.Nᵧ₃, 
                                     x_grid, ie_0.ℓ_ν, ie_0.ℓ_mν, ie_0.nq, 
@@ -74,10 +75,10 @@ function x_grid_ie(ie)
     bg,ih,k = ie.bg,ie.ih,ie.k
     # Three phases: 
     # 1. Pre-horizon entry:
-    xhor = bg.x_grid[argmin(abs.(k .* bg.η .- 1))] #horizon crossing ish
+    xhor = bg.x_grid[argmin(abs.(k .* bg.η .- 2π))] #horizon crossing ish
     x_ph_i, x_ph_f, n_ph = bg.x_grid[1], xhor, ie.Nᵧ₁ #10.
     dx_ph = (x_ph_f-x_ph_i)/(n_ph-1)
-    x_ph = -20.:dx_ph:x_ph_f
+    # x_ph = -20.:dx_ph:x_ph_f
     x_ph = -20. .+ dx_ph*collect(0:1:n_ph-1)
     # 2. Wiggly time (recomb):
     xdec = bg.x_grid[argmin(abs.( -ih.τ′ .* bg.ℋ .*bg.η .- 1))] #decoupling ish
@@ -91,6 +92,12 @@ function x_grid_ie(ie)
     x_pr = x_rc_f .+ dx_pr* collect(1:1:n_pr )
     x_sparse = vcat(x_ph,x_rc,x_pr)
     return x_sparse
+end
+
+function η_grid_ie(ie,η2x,N) 
+    dx_η = (ie.bg.η[end] - ie.bg.η[1])/(N-1)
+    ηs = ie.bg.η[1] .+ dx_η* collect(0:1:N-1 )
+    return η2x.(ηs)
 end
 
 
@@ -112,7 +119,7 @@ function boltsolve(ie::IEν{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=ie.bg.x_grid, dense=false,
+                saveat=ie.bg.x_grid, dense=false, #FIXME
                 )
     return sol
 end
@@ -124,17 +131,19 @@ end
 
 function boltsolve_conformal(confie::ConformalIE{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     ode_alg=KenCarp4(); reltol=1e-6) where T
-    ie = confie.ie
-    xᵢ = confie.η2x( ie.bg.η[1] ) #to be consistent
+    ie,η2x = confie.ie,confie.η2x
+    x_grid = η_grid_ie(ie,η2x,1000)
+    xᵢ = first(x_grid) #to be consistent
+    # xᵢ = confie.η2x( ie.bg.η[1] ) 
     u₀ = initial_conditions(xᵢ, ie)
-    Mpcfac = bg.H₀*299792.458/100.
+    Mpcfac = ie.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(ie_conformal!, u₀, 
-        (hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac₀ , hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac),
-        confhierarchy)
+        (ie.bg.η(xᵢ)*Mpcfac, ie.bg.η(x_grid[end])*Mpcfac),
+        confie)
     sol = solve(prob, ode_alg, reltol=reltol,
-    saveat=ie.bg.x_grid,
-    dense=false
-    )
+                saveat=ie.bg.η(x_grid)*Mpcfac,
+                dense=false
+                )
     return sol
 end
 
@@ -148,89 +157,27 @@ function ie_conformal!(du, u, confie::ConformalIE{T}, η) where T
     return nothing
 end
 
-function rsa_perts!(u, ie::IE{T},x) where T
-    #redundant code for what we need to compute RSA perts in place in u
-    k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih,ie.nq
-    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
-    a = x2a(x)
-    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    csb² = ih.csb²(x)
-    ℓ_ν = ie.ℓ_ν
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
 
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]
-                                  + σℳ / bg.ρ_crit /4
-                                  )
-    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-        + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0]
-        + a^(-2) * ρℳ / bg.ρ_crit
-        )
-
-    #fixed RSA
-    Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-    Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
-                     + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
-    Θ[2] = 0
-    #massless neutrinos
-    𝒩[0] = Φ
-    𝒩[1] = -2ℋₓ/k *Φ′
-    𝒩[2] = 0
-
-    #set polarization to zero
-    Θᵖ[0] = 0
-    Θᵖ[1] = 0
-    Θᵖ[2] = 0
-
-    u[1] = Θ[0]
-    u[2] = Θ[1]
-    u[3] = Θ[2]
-
-    u[(ℓᵧ+1)+1] = Θᵖ[0]
-    u[(ℓᵧ+1)+2] = Θᵖ[1]
-    u[(ℓᵧ+1)+3] = Θᵖ[2]
-
-    u[2(ℓᵧ+1)+1] = 𝒩[0]
-    u[2(ℓᵧ+1)+2] = 𝒩[1]
-    u[2(ℓᵧ+1)+3] = 𝒩[2]
-
-    #zero the rest to avoid future confusion
-    for ℓ in 3:(ℓᵧ)
-        u[ℓ] = 0
-        u[(ℓᵧ+1)+ℓ] = 0
+function itersolve_conformal(Nₖ::Int,confie::ConformalIE{T};reltol=1e-6) where T
+    ie_0, η2x = confie.ie, confie.η2x
+    x_grid = η_grid_ie(ie_0,η2x,1000) #All we have to do is change the time points to be equispaced in \eta
+    println("xgrids: ",x_grid[1],", ",x_grid[end])
+    Θ₂,Π =  zeros(length(x_grid)),zeros(length(x_grid)) #initialize to zero (for now)
+    pertlen = 2(2+1)+(ie_0.ℓ_ν+1)+(ie_0.ℓ_mν+1)*ie_0.nq+5
+    u_all = zeros(pertlen,length(x_grid))
+    #FIXME - make In-place?
+    for k in 1:Nₖ 
+            println("iter k = ", k)
+            Θ₂,Π,u_all = iterate_conformal(Θ₂,Π, ie_0.par, ie_0.bg, ie_0.ih, ie_0.k,  
+                                    ie_0.Nᵧ₁,ie_0.Nᵧ₂,ie_0.Nᵧ₃, 
+                                    x_grid, ie_0.ℓ_ν, ie_0.ℓ_mν, ie_0.nq, 
+                                    reltol,
+                                    η2x)
     end
-    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
-    return nothing
+    return u_all
 end
 
 
-#---
-
-function boltsolve_rsa(ie::IE{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
-    #call solve as usual first
-    perturb = boltsolve(ie, reltol=reltol)
-    x_grid = ie.bg.x_grid
-    pertlen = 2(2+1)+(ie.ℓ_ν+1)+(ie.ℓ_mν+1)*ie.nq+5
-    results=zeros(pertlen,length(x_grid))
-    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
-    #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    xrsa_hor = minimum(bg.x_grid[(@. k*bg.η .> 45)])
-    xrsa_od = minimum(bg.x_grid[(@. -ih.τ′*bg.η*bg.ℋ .<5)])
-    this_rsa_switch = max(xrsa_hor,xrsa_od)
-    x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
-    results_rsa = results[:,x_grid.>this_rsa_switch]
-    #(re)-compute the RSA perts so we can write them to the output vector
-    for i in 1:length(x_grid_rsa) #inside here use regular unpack since single step
-        rsa_perts!(view(results_rsa,:,i),ie,x_grid_rsa[i]) #to mutate need to use view...
-    end
-    results[:,x_grid.>this_rsa_switch] = results_rsa
-    sol = results
-    return sol
-end
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, ie::IE{T, BasicNewtonian}) where T
@@ -742,13 +689,13 @@ function g_weight_trapz_ie(i,x_grid,ie::IE{T},Φ′,Ψ,Θ₀,Π,v_b) where T
     return Θ2ᵢ,Πᵢ
 end
 
-#FIXME? consolidate on interpolator -> pass an interpolator rather than the ingredients?
+#FIXME? consolidate on interpolator -> pass an interpolator rather than the pert ingredients?
 
 
 function iterate(Θ₂_km1,Π_km1, 𝕡::CosmoParams{T}, bg, ih, k, 
     Nᵧ₁,Nᵧ₂,Nᵧ₃,xgi,
     ℓ_ν, ℓ_mν, n_q,reltol) where T
-    Θ₂_k,Π_k = zero(Θ₂_km1),zero(Π_km1) #maybe pre-allocate these (and below)
+    Θ₂_k,Π_k = zero(Θ₂_km1),zero(Π_km1) #FIXME pre-allocate these (and below)
     ie_k = IE(BasicNewtonian(), 𝕡, bg, ih, k,
             linear_interpolation(xgi,Θ₂_km1),
             linear_interpolation(xgi,Π_km1),
@@ -764,4 +711,114 @@ function iterate(Θ₂_km1,Π_km1, 𝕡::CosmoParams{T}, bg, ih, k,
             Θ₂_k[i],Π_k[i] = g_weight_trapz_ie(i,xgi,ie_k,Φ′,Ψ,Θ₀,Π,v_b)
     end
     return Θ₂_k,Π_k,u_all_k
+end
+
+function iterate_conformal(Θ₂_km1,Π_km1, 𝕡::CosmoParams{T}, bg, ih, k, 
+    Nᵧ₁,Nᵧ₂,Nᵧ₃,xgi,
+    ℓ_ν, ℓ_mν, n_q,reltol,
+    η2x) where T
+    Θ₂_k,Π_k = zero(Θ₂_km1),zero(Π_km1) #FIXME pre-allocate these (and below)
+    ie_k = IE(BasicNewtonian(), 𝕡, bg, ih, k,
+            linear_interpolation(xgi,Θ₂_km1),
+            linear_interpolation(xgi,Π_km1),
+            Nᵧ₁,Nᵧ₂,Nᵧ₃,
+            ℓ_ν, ℓ_mν, n_q)
+    ie_k_conf = ConformalIE(ie_k,η2x);
+    u_all_k = boltsolve_conformal(ie_k_conf; reltol=reltol)
+    # u_all_k = boltsolve(ie_k; reltol=reltol)
+    N = length(xgi)
+    Φ′,Ψ,Θ₀,Π,v_b = zeros(N),zeros(N),zeros(N),zeros(N),zeros(N)
+    for (j,u) in enumerate( eachcol(u_all_k) )
+            Φ′[j],Ψ[j],Θ₀[j],Π[j],v_b[j] = get_perts(u,ie_k,xgi[j])
+    end
+    for i in 3:length(xgi)
+            Θ₂_k[i],Π_k[i] = g_weight_trapz_ie(i,xgi,ie_k,Φ′,Ψ,Θ₀,Π,v_b)
+    end
+    return Θ₂_k,Π_k,u_all_k
+end
+
+#---
+
+function rsa_perts!(u, ie::IE{T},x) where T
+    #redundant code for what we need to compute RSA perts in place in u
+    k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih,ie.nq
+    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    a = x2a(x)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    csb² = ih.csb²(x)
+    ℓ_ν = ie.ℓ_ν
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+                                  Ω_ν * 𝒩[2]
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩[0]
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+
+    #fixed RSA
+    Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+    Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+                     + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
+    Θ[2] = 0
+    #massless neutrinos
+    𝒩[0] = Φ
+    𝒩[1] = -2ℋₓ/k *Φ′
+    𝒩[2] = 0
+
+    #set polarization to zero
+    Θᵖ[0] = 0
+    Θᵖ[1] = 0
+    Θᵖ[2] = 0
+
+    u[1] = Θ[0]
+    u[2] = Θ[1]
+    u[3] = Θ[2]
+
+    u[(ℓᵧ+1)+1] = Θᵖ[0]
+    u[(ℓᵧ+1)+2] = Θᵖ[1]
+    u[(ℓᵧ+1)+3] = Θᵖ[2]
+
+    u[2(ℓᵧ+1)+1] = 𝒩[0]
+    u[2(ℓᵧ+1)+2] = 𝒩[1]
+    u[2(ℓᵧ+1)+3] = 𝒩[2]
+
+    #zero the rest to avoid future confusion
+    for ℓ in 3:(ℓᵧ)
+        u[ℓ] = 0
+        u[(ℓᵧ+1)+ℓ] = 0
+    end
+    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
+    return nothing
+end
+
+
+
+
+function boltsolve_rsa(ie::IE{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+    #call solve as usual first
+    perturb = boltsolve(ie, reltol=reltol)
+    x_grid = ie.bg.x_grid
+    pertlen = 2(2+1)+(ie.ℓ_ν+1)+(ie.ℓ_mν+1)*ie.nq+5
+    results=zeros(pertlen,length(x_grid))
+    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
+    #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
+    xrsa_hor = minimum(bg.x_grid[(@. k*bg.η .> 45)])
+    xrsa_od = minimum(bg.x_grid[(@. -ih.τ′*bg.η*bg.ℋ .<5)])
+    this_rsa_switch = max(xrsa_hor,xrsa_od)
+    x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
+    results_rsa = results[:,x_grid.>this_rsa_switch]
+    #(re)-compute the RSA perts so we can write them to the output vector
+    for i in 1:length(x_grid_rsa) #inside here use regular unpack since single step
+        rsa_perts!(view(results_rsa,:,i),ie,x_grid_rsa[i]) #to mutate need to use view...
+    end
+    results[:,x_grid.>this_rsa_switch] = results_rsa
+    sol = results
+    return sol
 end
