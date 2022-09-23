@@ -79,9 +79,9 @@ end
 end
 ##
 
-@testset "class_comparison_1e-3" begin
+@testset "nonu_class_comparison_1e-3" begin
     # bg/ion setup
-    𝕡 = CosmoParams()
+    𝕡 = CosmoParams(Σm_ν=0.0)
     n_q=15
     logqmin,logqmax = -6,-1
     bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=n_q)
