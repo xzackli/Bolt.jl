@@ -48,6 +48,8 @@ unnatural(x, y) = UnitfulCosmo.unmpc(x, y)
 # all unit conversions. should distribute these in-situ someday. Mpc units
 const km_s_Mpc_100 = ustrip(natural(100.0u"km/s/Mpc"))  # [Mpc^-1]
 const G_natural = ustrip(natural(float(NewtonianConstantOfGravitation))) # [Mpc^2]
+const mass_natural = ustrip(UnitfulCosmo.mpc(1.0u"eV")) # [Mpc^-1] #FIXME? Might want to put neutrino conversion elsewhere, but need to convert eV
+
 
 abstract type AbstractCosmoParams{T} end
 
@@ -60,7 +62,7 @@ abstract type AbstractCosmoParams{T} end
     n = 1.0  # scalar spectral index
     Y_p = 0.24  # primordial helium fraction
     N_ν = 3.046 #effective number of relativisic species (PDG25 value)
-    Σm_ν = 0.06 #sum of neutrino masses (eV), Planck 15 default ΛCDM value
+    Σm_ν = 0.06*mass_natural #sum of neutrino masses (eV), Planck 15 default ΛCDM value
 end
 
 include("util.jl")
