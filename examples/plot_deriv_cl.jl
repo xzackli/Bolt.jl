@@ -17,6 +17,7 @@ end
 
 
 pt = CosmoParams() #dummy struct
+ells = 10:20:1200
 # do a loop over everyone to see who is slow...this is bad for performance but who cares we are just checking times inside...
 fds = zeros(length(fieldnames(typeof(pt))),length(ells))
 fws = zeros(length(fieldnames(typeof(pt))),length(ells))
