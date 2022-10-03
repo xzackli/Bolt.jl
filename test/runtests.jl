@@ -163,8 +163,8 @@ end
 
     #camb results
     using DelimitedFiles
-    # class_Cℓs = readdlm("./test/data/class_rough_ttteee_unlensed.dat")
-    camb_Cℓs = readdlm("./test/data/camb_rough_ttteee_unlensed.dat")
+    # class_Cℓs = readdlm("data/class_rough_ttteee_unlensed.dat")
+    camb_Cℓs = readdlm("data/camb_rough_ttteee_unlensed.dat")
 
     #ratios
     using Interpolations
