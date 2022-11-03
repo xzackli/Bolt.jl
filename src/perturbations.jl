@@ -340,6 +340,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T,BasicNewtonian}) where 
 
 end
 
+
 #FIXME this is pretty old code that hasn't been tested in a while!
 # TODO: this could be extended to any Newtonian gauge integrator if we specify the
 # Bardeen potential Ψ and its derivative ψ′ for an integrator, or we saved them
@@ -352,20 +353,21 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
     a = x2a(x)
     ρ0ℳ = bg.ρ₀ℳ(x) #get current value of massive neutrino backround density from spline
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 * bg.ρ_crit * par.Ω_r)^(1/4)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    (Θ,  Θᵖ,  𝒩,  ℳ,  Φ,  δ,  v,  δ_b,  v_b ) = unpack(u,  hierarchy)
-    (Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′) = unpack(du, hierarchy)
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
     # recalulate these since we didn't save them (Callin eqns 39-42)
     #^Also have just copied from before, but should save these maybe?
-    _, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
+    _, σℳ = @views ρ_σ(ℳ[0,:], ℳ[2,:], bg, a, par) 
+    # _, σℳ′ = ρ_σ(ℳ′[0:nq-1], ℳ′[2*nq:3*nq-1], bg, a, par)
+    _, σℳ′ = @views ρ_σ(ℳ′[0,:], ℳ′[2,:], bg, a, par) 
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (par.Ω_r * Θ[2]
                                   + Ω_ν * 𝒩[2] #add rel quadrupole
-                                  + σℳ / bg.ρ_crit) #why am I doing this? - because H0 pulls out a factor of rho crit - just unit conversion
+                                  + σℳ / bg.ρ_crit /4) #why am I doing this? - because H0 pulls out a factor of rho crit - just unit conversion
                                                                    #this introduces a factor of bg density I cancel using the integrated bg mnu density now
 
    Ψ′ = -Φ′ - 12H₀² / k^2 / a^2 * (par.Ω_r * (Θ′[2] - 2 * Θ[2])
@@ -383,4 +385,17 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
         (ℋₓ′^2 + ℋₓ * ℋₓ′′) * g̃ₓ * Π + 3 * ℋₓ * ℋₓ′ * (g̃ₓ′ * Π + g̃ₓ * Π′) +
         ℋₓ^2 * (g̃ₓ′′ * Π + 2g̃ₓ′ * Π′ + g̃ₓ * Π′′))
     return term1 + term2 + term3
+end
+
+# The polarization source function (jms 6/6/22 UNTESTED!) SZ eqn 12d (in our units)
+function source_function_P(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
+    k, ℓᵧ, par, bg, ih,nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    ℋₓ, ℋₓ′, ℋₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.ℋ′′(x)
+    g̃ₓ, g̃ₓ′, g̃ₓ′′ = ih.g̃(x), ih.g̃′(x), ih.g̃′′(x)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    y = k*(bg.η(bg.x_grid[end]) - bg.η(x))
+    Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+    return (3/(4y^2)) * g̃ₓ * Π 
 end
