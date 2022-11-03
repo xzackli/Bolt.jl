@@ -162,19 +162,17 @@ end
     Cℓee = clee(ℓs, 𝕡, bg, ih, sf_e)
 
     #camb results
-    using DelimitedFiles
     # class_Cℓs = readdlm("data/class_rough_ttteee_unlensed.dat")
     camb_Cℓs = readdlm("data/camb_rough_ttteee_unlensed.dat")
 
     #ratios
-    using Interpolations
-    itptt = Interpolations.linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
-    itpte = Interpolations.linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
-    itpee = Interpolations.linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
+    itptt = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
+    itpte = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
+    itpee = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
     #make same interpolation to ensure same interp error
-    itptt_b = Interpolations.linear_interpolation(ℓs, @.(ℓfac * Cℓtt))
-    itpte_b = Interpolations.linear_interpolation(ℓs, @.(ℓfac * Cℓte))
-    itpee_b = Interpolations.linear_interpolation(ℓs, @.(ℓfac * Cℓee))
+    itptt_b = linear_interpolation(ℓs, @.(ℓfac * Cℓtt))
+    itpte_b = linear_interpolation(ℓs, @.(ℓfac * Cℓte))
+    itpee_b = linear_interpolation(ℓs, @.(ℓfac * Cℓee))
 
     #test line
     TOL = 1.1e-1
