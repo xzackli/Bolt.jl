@@ -87,7 +87,7 @@ xgrid = bg.x_grid
 for i in x_i:length(xgrid)-1
     x = xgrid[i]
     sb = bes(k*(bg.η₀ - bg.η(x)))
-    source = s_itp(x, k)
+    source = s_itp(x, k) #FIXME? we never go to final x but if we did we would see a NaN in bessel interp?
     s += sb * source * (xgrid[i+1] - xgrid[i])
 end
 return s

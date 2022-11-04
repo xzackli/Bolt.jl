@@ -395,7 +395,12 @@ function source_function_P(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wh
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
-    y = k*(bg.η(bg.x_grid[end]) - bg.η(x))
+    y = k*(bg.η(bg.x_grid[end]) - bg.η(x)) 
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-    return (3/(4y^2)) * g̃ₓ * Π 
+    # I_P = x == bg.x_grid[end] ? 1/20 * g̃ₓ * Π : (3/(4y^2)) * g̃ₓ * Π  #catch the case where we hit x=0 (j(x)/x^2 at x =0 is 1/15)
+    I_P = x == bg.x_grid[end] ? 0. : (3/(4y^2)) * g̃ₓ * Π  #catch the NaN
+
+    #FIXME ^this is not actually right because j2(0)/0^2 is 1/15 and not zero, should be closer to top line
+    # return (3/(4y^2)) * g̃ₓ * Π 
+    return I_P
 end
