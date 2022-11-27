@@ -106,3 +106,27 @@ function ldiv!(Y, pl::FFTLogPlan, A)
     pl.ifftplan! * Y
     Y .*= (pl.r).^(pl.q)
 end
+
+function _S(pk, R)
+    #assuming that pk has been interpolated in log-log space
+    dSdk(k) = exp(-(k * R)^2) * 10^pk(log10(k)) * k^2 / (2 * π^2)
+    res, _ = quadgk(dSdk, 0, 10 / R, rtol=1e-6)
+    return res
+end
+
+function _dSdRdk(k, R)
+    x = k * R
+    return -2R * exp(-x^2) * 10^pk(log10(k)) * k^4 / (2π^2)
+end
+
+function _dSdR(pk, R)
+    dSdRdk(k) = -2R * exp(-(k * R)^2) * 10^pk(log10(k)) * k^4 / (2π^2)
+    res, _ = quadgk(dSdRdk, 0, 10 / R)
+    return res
+ end
+
+ function _d²SdR²(pk, R)
+    d²σ²dR²dk(k)= (-2 + 4 * (k * R)^2) * exp(-(k * R)^2) * 10^pk(log10(k)) * k^4 / (2π^2)
+    res, _ = quadgk(d²σ²dR²dk, 0, 10 / R)
+    return res
+ end
