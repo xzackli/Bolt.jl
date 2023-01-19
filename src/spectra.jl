@@ -172,10 +172,10 @@ end
 
 
 function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
-              n_q=15,ℓᵧ=50,ℓ_ν=50,ℓ_mν=20,x=0) where T
+              n_q=15,ℓᵧ=50,ℓ_ν=50,ℓ_mν=20,x=0,reltol=1e-5) where T
     #copy code abvoe
     hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ,ℓ_ν,ℓ_mν,n_q) #shoddy quality test values
-    perturb = boltsolve(hierarchy; reltol=1e-5)
+    perturb = boltsolve(hierarchy; reltol=reltol)
     results = perturb(x)
     ℳρ,_ = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q],
                             results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q],
@@ -184,8 +184,8 @@ function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
     ℳθ = k*θ(results[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+2n_q],
                      bg,exp(x),𝕡)./ bg.ρ₀ℳ(x)
     #Also using the fact that a=1 at z=0
-    δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h
-    vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]* 𝕡.h
+    δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]
+    vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3,:],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5,:]
     ℳρN,ℳθN = ℳρ,ℳθ
     vmνN = -ℳθN ./ k
     #omegas to get weighted sum for total matter in background
@@ -195,12 +195,11 @@ function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
     #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
     Ω_ν = 𝕡.Σm_ν*νfac/𝕡.h^2
     Ωm = 𝕡.Ω_c+𝕡.Ω_b+Ω_ν
-
     #construct gauge-invariant versions of density perturbations
-    δc = δcN - 3bg.ℋ(x)*vcN ./k
-    δb = δbN - 3bg.ℋ(x)*vbN ./k
+    δc = δcN - 3bg.ℋ(x)*vcN ./k 
+    δb = δbN - 3bg.ℋ(x)*vbN ./k 
     #assume neutrinos fully non-relativistic and can be described by fluid (ok at z=0)
-    δmν = ℳρN - 3bg.ℋ(x)*vmνN ./k
+    δmν = ℳρN - 3bg.ℋ(x)*vmνN ./k 
     δm = (𝕡.Ω_c*δc .+ 𝕡.Ω_b*δb .+ Ω_ν*δmν) ./ Ωm
     As=𝕡.A
     k_hMpc=k/(bg.H₀*3e5/100)
