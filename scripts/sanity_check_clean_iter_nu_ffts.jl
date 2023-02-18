@@ -16,19 +16,20 @@ using DSP
 k_options = ["p03", "p3", "1p0"] #choose from k = [0.03h/Mpc, 0.3h/Mpc, 1.0h/Mpc]
 k_choice = k_options[2]
 kMpc = parse(Float64, replace(k_choice,"p"=>".")) #DUMB does not work for comparison
-ret = readdlm( @sprintf("./test/data/bolt_px_k%s_fine.dat",k_choice) )
+# ret = readdlm( @sprintf("./test/data/bolt_px_k%s_fine.dat",k_choice) )
 retnf_class = open( @sprintf("./test/data/class_px_k%s_nofluid_re.dat",k_choice),"r" ) do datafile
 # an example that goes to early times -> retnf = open("./test/data/lowres_class_px_kp03_nofluid.dat","r") do datafile
     [parse.(Float64, split(line)) for line in eachline(datafile)]
 end
 #the second column is just a repeated k value, so remember it and delete col
-kclass = retnf_class[2][1] #read class k mode from file (in h/Mpc)
-dx = ret[2,1]-ret[1,1]
+kclass = 0.03#retnf_class[2][1] #read class k mode from file (in h/Mpc)
+# dx = ret[2,1]-ret[1,1]
+dx=0.01
 unzip(a) = map(x->getfield.(a, x), fieldnames(eltype(a)))
 # Background etc.
 𝕡 = CosmoParams()
 n_q=15
-bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q)
+bg = Background(𝕡; x_grid=-20.0:round(dx,digits=3):0.0, nq=n_q)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
 ih = IonizationHistory(𝕣, 𝕡, bg)
 Mpcfac = bg.H₀*299792.458/100.
@@ -74,20 +75,22 @@ for (i_x, x) in enumerate(bg.x_grid)
 end
 
 #conformal hierarchy
-η2x = linear_interpolation(bg.η.(bg.x_grid),bg.x_grid)
+η2x = LinearInterpolation(bg.η.(bg.x_grid),bg.x_grid)
 hierarchy_conf = ConformalHierarchy(hierarchy,η2x);
 results_conf = boltsolve_conformal(hierarchy_conf;reltol=reltol);
 
 #truncated conformal hierarchy
 # Input to the ie integrator struct (akin to hierarchy)
 𝒩₀_0,𝒩₂_0 =  results[2(ℓᵧ+1)+1,:],results[2(ℓᵧ+1)+3,:] #hierarchy answer
-spl0h𝒩₀,spl0h𝒩₂ = linear_interpolation(bg.x_grid,𝒩₀_0), linear_interpolation(bg.x_grid,𝒩₂_0)
+spl0h𝒩₀,spl0h𝒩₂ = LinearInterpolation(bg.x_grid,𝒩₀_0), LinearInterpolation(bg.x_grid,𝒩₂_0)
 ν_idx = 2(ℓᵧ+1) + 1
 ie_0 = IEν(BasicNewtonian(), 𝕡, bg, ih, k,
         spl0h𝒩₀,
         spl0h𝒩₂,
         ℓᵧ, ℓ_mν, n_q);
 perturb_0 = boltsolve(ie_0;reltol=reltol); 
+
+ConformalIEν
 
 ie_0_conf = ConformalIEν(ie_0,η2x);
 results_conf_ie_0 = boltsolve_conformal(ie_0_conf;reltol=reltol)
@@ -235,7 +238,7 @@ function fft_ie(ie,perturb,M,m,q,i_q)
     yyx = k.* (χνs .- χνs[1])
     dy=(yyx[end]-yyx[1])/(M-1)
     yy = yyx[1]:dy:yyx[end]
-    invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
+    invx = LinearInterpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
     # Get metric sources
     Φ′,Ψ = zeros(M),zeros(M)
     for j in 1:M
@@ -258,7 +261,7 @@ function fft_ie(ie,perturb,M,m,q,i_q)
     println("Value of 𝒳ₛ₀ at init is $(𝒳ₛ₀[1]), 𝒳ₛ₂ is $(𝒳ₛ₂[1])")
     println("Value of 𝒳₀ₓ at init is $(𝒳₀ₓ[1]), 𝒳₂ₓ is $(𝒳₂ₓ[1])")
 
-    return invx, linear_interpolation(invx,𝒳₀), linear_interpolation(invx,𝒳₂)
+    return invx, LinearInterpolation(invx,𝒳₀), LinearInterpolation(invx,𝒳₂)
 
 end
 function dsp_fft_ie(ie,perturb,M,m,q,i_q)
@@ -269,7 +272,7 @@ function dsp_fft_ie(ie,perturb,M,m,q,i_q)
     yyx = k.*χνs
     dy=(yyx[end]-yyx[1])/(M-1)
     yy = yyx[1]:dy:yyx[end]
-    invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
+    invx = LinearInterpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
     # Get metric sources
     Φ′,Ψ = zeros(M),zeros(M)
     for j in 1:M
@@ -292,7 +295,7 @@ function dsp_fft_ie(ie,perturb,M,m,q,i_q)
     println("Value of 𝒳ₛ₀ at init is $(𝒳ₛ₀[1]), 𝒳ₛ₂ is $(𝒳ₛ₂[1])")
     println("Value of 𝒳₀ₓ at init is $(𝒳₀ₓ[1]), 𝒳₂ₓ is $(𝒳₂ₓ[1])")
 
-    return invx, linear_interpolation(invx,𝒳₀), linear_interpolation(invx,𝒳₂)
+    return invx, LinearInterpolation(invx,𝒳₀), LinearInterpolation(invx,𝒳₂)
 
 end
 function nsq_fft_ie(ie,perturb,M,m,q,i_q)
@@ -303,7 +306,7 @@ function nsq_fft_ie(ie,perturb,M,m,q,i_q)
     yyx = k.*χνs
     dy=(yyx[end]-yyx[1])/(M-1)
     yy = yyx[1]:dy:yyx[end]
-    invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
+    invx = LinearInterpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
     # Get metric sources
     Φ′,Ψ = zeros(M),zeros(M)
     for j in 1:M
@@ -326,7 +329,7 @@ function nsq_fft_ie(ie,perturb,M,m,q,i_q)
     println("Value of 𝒳ₛ₀ at init is $(𝒳ₛ₀[1]), 𝒳ₛ₂ is $(𝒳ₛ₂[1])")
     println("Value of 𝒳₀ₓ at init is $(𝒳₀ₓ[1]), 𝒳₂ₓ is $(𝒳₂ₓ[1])")
 
-    return invx, linear_interpolation(invx,𝒳₀), linear_interpolation(invx,𝒳₂)
+    return invx, LinearInterpolation(invx,𝒳₀), LinearInterpolation(invx,𝒳₂)
 
 end
 
