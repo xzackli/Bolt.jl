@@ -18,7 +18,8 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     # Trad::IT #This is never used
 end
 
-@with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator #@deftype T
+
+@with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator @deftype T
     bg::AB  # a RECFAST has an associated background evolution
     C  = 2.99792458e8  # Fundamental constants in SI units
     k_B = 1.380658e-23
@@ -119,6 +120,9 @@ end
     tol = 1e-6
 end
 
+# helper constructor which dispatches on the background
+RECFAST(bg::AB; kws...) where {T, AB<:AbstractBackground{T}} = RECFAST{T,AB}(bg=bg; kws...)
+
 
 function recfast_init(𝕣::RECFAST, z)
     if z > 8000.
@@ -149,7 +153,9 @@ function recfast_init(𝕣::RECFAST, z)
 end
 
 #RECFAST f' at particular z
-function ion_recfast!(f, y, 𝕣::RECFAST, z)
+function ion_recfast(y, 𝕣::RECFAST{T}, z) where {T}
+
+    f1, f2, f3 = zero(T), zero(T), zero(T)
 
 	x_H = y[1]
 	x_He = y[2]
@@ -260,30 +266,30 @@ function ion_recfast!(f, y, 𝕣::RECFAST, z)
     # turn on H only for x_H<0.99, and use Saha derivative for 0.98<x_H<0.99
     # (clunky, but seems to work)
 	if (x_H > 0.99)  # don't change at all
-		f[1] = 0.
+		f1 = 0.
     # else if ((x_H.gt.0.98d0).and.(Heflag.eq.0)) then	!don't modify
 	elseif (x_H > 0.985)  # !use Saha rate for Hydrogen
-		f[1] = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-𝕣.CL/Tmat))/(Hz*(1+z))
+		f1 = (x*x_H*n*Rdown - Rup*(1-x_H)*exp(-𝕣.CL/Tmat))/(Hz*(1+z))
         # for interest, calculate the correction factor compared to Saha
         # (without the fudge)
 		factor=(1 + K*𝕣.Lambda*n*(1-x_H))/(Hz*(1+z)*(1+K*𝕣.Lambda*n*(1-x)+K*Rup*n*(1-x)))
     else  #!use full rate for H
-		f[1] = (((x*x_H*n*Rdown - Rup*(1.0-x_H)*exp(-𝕣.CL/Tmat))
+		f1 = (((x*x_H*n*Rdown - Rup*(1.0-x_H)*exp(-𝕣.CL/Tmat))
 			*(1.0 + K*𝕣.Lambda*n*(1.0-x_H)))
 		    /(Hz*(1.0+z)*(1.0/𝕣.fu+K*𝕣.Lambda*n*(1.0-x_H)/𝕣.fu
 		    +K*Rup*n*(1.0-x_H))))
 	end
     # turn off the He once it is small
 	if (x_He < 1e-15)
-		f[2] = 0.
+		f2 = 0.
 	else
-		f[2] = (((x*x_He*n*Rdown_He - Rup_He*(1-x_He)*exp(-𝕣.CL_He/Tmat))
+		f2 = (((x*x_He*n*Rdown_He - Rup_He*(1-x_He)*exp(-𝕣.CL_He/Tmat))
             *(1+ K_He*𝕣.Lambda_He*n_He*(1-x_He)*He_Boltz))
             / (Hz*(1+z)
             * (1 + K_He*(𝕣.Lambda_He+Rup_He)*n_He*(1-x_He)*He_Boltz)))
         # Modification to HeI recombination including channel via triplets
 	    if (Heflag >= 3)
-		    f[2] = f[2] + (x*x_He*n*Rdown_trip
+		    f2 = f2 + (x*x_He*n*Rdown_trip
                 - (1-x_He)*3*Rup_trip*exp(-𝕣.h_P*𝕣.C*𝕣.L_He_2St/(𝕣.k_B*Tmat))
                 ) * CfHe_t/(Hz*(1+z))
 	    end
@@ -294,14 +300,36 @@ function ion_recfast!(f, y, 𝕣::RECFAST, z)
     # additional term to smooth transition to Tmat evolution,
     # (suggested by Adam Moss)
 		epsilon = Hz*(1+x+𝕣.fHe)/(𝕣.CT*Trad^3*x)
-		f[3] = 𝕣.Tnow + epsilon*((1+𝕣.fHe)/(1+𝕣.fHe+x))*(
-            (f[1]+𝕣.fHe*f[2])/x) - epsilon* dHdz/Hz + 3*epsilon/(1+z)
+		f3 = 𝕣.Tnow + epsilon*((1+𝕣.fHe)/(1+𝕣.fHe+x))*(
+            (f1+𝕣.fHe*f2)/x) - epsilon* dHdz/Hz + 3*epsilon/(1+z)
 	else
-		f[3] = 𝕣.CT * (Trad^4) * x / (1+x+𝕣.fHe)* (Tmat-Trad) / (Hz*(1+z)) + 2*Tmat/(1+z)
+		f3 = 𝕣.CT * (Trad^4) * x / (1+x+𝕣.fHe)* (Tmat-Trad) / (Hz*(1+z)) + 2*Tmat/(1+z)
 	end
 
+	return SA[f1, f2, f3]
+end
+
+
+function Xe_He_evolution(𝕣, z, sol)
+    y = sol(z, idxs=1)
+    rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1/(𝕣.Tnow*(1+z))) / 𝕣.Nnow
+    x_H0 = 0.5 * (sqrt(rhs^2+4*rhs) - rhs)
+    return x_H0 + 𝕣.fHe * y
+end
+
+# get ionisation fraction out of 
+function Xe_H_He_evolution(𝕣, z, sol)
+    return sol(z, idxs=1) + 𝕣.fHe * sol(z, idxs=2)
+end
+
+function ion_recfast!(f, y, 𝕣::RECFAST, z)
+    f1, f2, f3 = ion_recfast(y, 𝕣, z)
+    f[1] = f1
+    f[2] = f2
+    f[3] = f3
 	return
 end
+
 
 #For reionization - use only the late-time Tmat ode
 function late_Tmat(Tm, p, z)
@@ -314,7 +342,149 @@ function late_Tmat(Tm, p, z)
 	return dTm
 end
 
-function recfast_xe(𝕣::RECFAST{T};
+
+"""Tmat for z > 3500"""
+Tmat_early(𝕣,z) = 𝕣.Tnow*(1+z)
+
+
+"""Xe until joint H/He recombination"""
+function Xe_early(𝕣, z)
+    x0 = 1.0
+    if (z > 8000.)
+        x0 = 1 + 2*𝕣.fHe
+    elseif (z > 5000.)
+        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He2/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
+        rhs = rhs*1.  # ratio of g's is 1 for He++ <-> He+
+        x0 = 0.5 * (sqrt( (rhs-1-𝕣.fHe)^2 + 4*(1+2𝕣.fHe)*rhs) - (rhs-1-𝕣.fHe) )
+    elseif (z > 3500.)
+        x0 = 1 + 𝕣.fHe
+    else
+        # attempt Helium Saha
+        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
+        rhs = rhs*4  # ratio of g's is 4 for He+ <-> He0
+        x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
+        x0 = x_He0
+    end
+    return x0
+end
+
+
+# determine redshift at which we have to stop He Saha
+function end_of_saha_condition(z, 𝕣)
+    rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
+    rhs = rhs*4  # ratio of g's is 4 for He+ <-> He0
+    x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
+    x0 = x_He0
+    x_He0 = (x0 - 1) / 𝕣.fHe
+    return x_He0 - 0.99
+end
+
+
+function ion_recfast_H_Saha(u, 𝕣, z)
+    rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1/(𝕣.Tnow*(1+z))) / 𝕣.Nnow
+    x_H0 = 0.5 * (sqrt(rhs^2+4*rhs) - rhs)
+    u = SA[x_H0, u[1], u[2]]
+    du = ion_recfast(u, 𝕣, z)
+    return SA[du[2], du[3]]
+end
+
+function init_He_evolution(𝕣, z0)
+    x_H0 = 1.
+    rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z0)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z0)) ) / 𝕣.Nnow
+    rhs = rhs*4.  # ratio of g's is 4 for He+ <-> He0
+    x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))  # He Saha
+    x0 = x_He0
+    x_He0 = (x0 - 1) / 𝕣.fHe
+    return SA[x_He0, Bolt.Tmat_early(𝕣, z0)]
+end
+
+
+function x_H0_H_Saha(𝕣, z)
+    rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1/(𝕣.Tnow*(1+z))) / 𝕣.Nnow
+    x_H0 = 0.5 * (sqrt(rhs^2+4*rhs) - rhs)
+    return x_H0
+end
+
+end_He_evo_condition(z, 𝕣) = (x_H0_H_Saha(𝕣, z) - 0.985)
+
+
+
+struct RECFASTHistory{T, R, HES, HS}
+    𝕣::R
+    zinitial::T
+    zfinal::T
+    z_He_evo_start::T
+    z_H_He_evo_start::T
+    sol_He::HES
+    sol_H_He::HS
+end
+
+function Xe(rhist::RECFASTHistory, z) 
+    𝕣 = rhist.𝕣
+    if (z > 8000.)
+        return 1 + 2*𝕣.fHe
+    elseif (z > 5000.)
+        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He2/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
+        rhs = rhs*1.  # ratio of g's is 1 for He++ <-> He+
+        return 0.5 * (sqrt( (rhs-1-𝕣.fHe)^2 + 4*(1+2𝕣.fHe)*rhs) - (rhs-1-𝕣.fHe) )
+    elseif (z > 3500.)
+        return 1 + 𝕣.fHe
+    elseif (z > rhist.z_He_evo_start)
+        rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
+        rhs = rhs*4  # ratio of g's is 4 for He+ <-> He0
+        x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
+        return x_He0
+    elseif (z > rhist.z_H_He_evo_start)
+        return Bolt.Xe_He_evolution(𝕣, z, rhist.sol_He)
+    else
+        return Bolt.Xe_H_He_evolution(𝕣, z, rhist.sol_H_He)
+    end
+end
+
+function Tmat(rhist::RECFASTHistory, z) 
+    𝕣 = rhist.𝕣
+    if (z > rhist.z_He_evo_start)
+        return Bolt.Tmat_early(𝕣, z)
+    elseif (z > rhist.z_H_He_evo_start)
+        return rhist.sol_He(z, idxs=2)
+    else
+        return rhist.sol_H_He(z, idxs=3)
+    end
+end
+
+function recfastsolve(𝕣, alg=Tsit5(), zinitial=10000., zfinal=0.)
+
+    z_epoch_He_Saha_begin = min(zinitial, 3500.)
+
+    # figure out when to start Helium and Hydrogen+Helium evolutions
+    z_He_evo_start = solve(
+        IntervalNonlinearProblem(Bolt.end_of_saha_condition, 
+        (z_epoch_He_Saha_begin, zfinal), 𝕣), 
+        Falsi(), reltol = 1e-4).u
+
+    z_H_He_evo_start = solve(
+        IntervalNonlinearProblem(Bolt.end_He_evo_condition, 
+        (z_He_evo_start, zfinal), 𝕣), 
+        Falsi(), reltol = 1e-4).u
+
+    # evolve Helium and Tmat
+    y2 = Bolt.init_He_evolution(𝕣, z_He_evo_start)
+    prob2 = ODEProblem{false}(Bolt.ion_recfast_H_Saha, y2, 
+        (z_He_evo_start, z_H_He_evo_start), 𝕣)
+    sol_He = solve(prob2, alg, reltol=𝕣.tol)
+
+    # evolve Hydrogen, Helium, and Tmat
+    z3 = z_H_He_evo_start
+    y3 = SA[Bolt.x_H0_H_Saha(𝕣, z3), sol_He(z3, idxs=1), sol_He(z3, idxs=2)]
+    prob3 = ODEProblem{false}(Bolt.ion_recfast, y3, (z3, zfinal), 𝕣)
+    sol_H_He = solve(prob3, alg, reltol=𝕣.tol)
+
+    return RECFASTHistory(𝕣, zinitial, zfinal, 
+        z_He_evo_start, z_H_He_evo_start, sol_He, sol_H_He)
+end
+
+
+function old_recfast_xe(𝕣::RECFAST{T};
         Hswitch::Int=1, Heswitch::Int=6, Nz::Int=1000, zinitial=10000., zfinal=0.,
         alg=Tsit5()) where T
 
@@ -370,7 +540,7 @@ function recfast_xe(𝕣::RECFAST{T};
             x_H0 = 1.
             rhs = exp(1.5 * log(𝕣.CR*𝕣.Tnow/(1+z)) - 𝕣.CB1_He1/(𝕣.Tnow*(1+z)) ) / 𝕣.Nnow
             rhs = rhs*4.  # ratio of g's is 4 for He+ <-> He0
-            x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
+            x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))  # He Saha
             x0 = x_He0
             x_He0 = (x0 - 1) / 𝕣.fHe
             y[1] = x_H0
