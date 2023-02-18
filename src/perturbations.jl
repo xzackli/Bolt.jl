@@ -42,11 +42,11 @@ end
 function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
                          ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
-    xᵢ = confhierarchy.η2x( hierarchy.bg.η[1] ) #to be consistent
+    xᵢ = confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
     u₀ = initial_conditions(xᵢ, hierarchy)
     Mpcfac = hierarchy.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
-                            (hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac , hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac),
+                            (hierarchy.bg.η[1]*Mpcfac , hierarchy.bg.η[end]*Mpcfac),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
                 # saveat=hierarchy.bg.η, 
@@ -123,6 +123,17 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         ) 
+
+
+    # if ((x<=-19.99 || x>=-0.01) &&  ~(typeof(Φ′) <: ForwardDiff.Dual))
+    #     println("x = ", x)
+    #     println("Φ′ = ", Φ′)
+    #     println("𝒩[0] = ", 𝒩[0])
+    #     println("Θ[0] = ", Θ[0])
+    #     println("𝒩[2] = ", 𝒩[2])
+    #     println("Ψ = ", Ψ)
+    #     println("Ψ components: Θ₂ = $(Θ[2]), 𝒩₂ = $(𝒩[2]), σℳ = $(σℳ)")
+    # end
 
     # RSA needs to come on first for baryons
     if rsa_on
@@ -257,6 +268,7 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     v = -3k*Θ[1]
     v_b = v
 
+    
     # neutrino hierarchy
     # we need xᵢ to be before neutrinos decouple, as always
     𝒩[0] = Θ[0]

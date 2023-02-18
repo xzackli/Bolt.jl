@@ -25,7 +25,6 @@ end
 function f0(q,par::AbstractCosmoParams)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     # Tν =  (par.N_ν/3)^(1/4) * 0.7166 * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
@@ -84,10 +83,7 @@ end
 function χν(x, q, m, par::AbstractCosmoParams,quad_pts,quad_wts) 
     # adding m here is a bit annoying but we need the ability to use massless neutrinos
     logamin,logamax=-13.75,log10(x2a(x)) #0,x2a(x)
-    #convert ui to a,for now pick
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-
-    ϵ(a,q) = √(q^2 + (a*par.Σm_ν)^2 )
+    ϵ(a,q) = √(q^2 + (a*m)^2 )
     Iχν(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts) * ϵ(xq2q(y,logamin,logamax),q)
                    )/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
     return q*sum(Iχν.(quad_pts).*quad_wts)
@@ -124,9 +120,6 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
     #Passing the quad pts/wts gets a little busy but eliminates quadgk
     #We may want to fix the quad points to be more/less for bg compared to perts
     #e.g. CLASS uses tolerances of 1e-5 for bg and 1e-3 for perts'
-
-    #println([ρP_0(x2a(x), par,quad_pts,quad_wts) for x in x_grid])
-    # println("background T: ", T)
 
     #FIXME do the tuple juggling to avoid calling quad twice for ρ and P
     ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
