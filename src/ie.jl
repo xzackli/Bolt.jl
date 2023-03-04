@@ -46,17 +46,18 @@ struct IEν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
 end
 
 struct IEallν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
-    BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real,
-    IT<:AbstractInterpolation{T,1}}
+    BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real#, 
+    # AIT #FIXME does not enforce passing interpolator <:AbstractArray{AbstractInterpolation{T,1}}
+    }
     integrator::PI
     par::CP
     bg::BG
     ih::IH
     k::Tk
-    s𝒳₀::AbstractArray{IT}
-    s𝒳₂::AbstractArray{IT}
+    sx::Array{Tk,1}
+    s𝒳₀::AbstractArray{T,1}
+    s𝒳₂::AbstractArray{T,1}
     ℓ_γ::Int
-    ℓ_mν::Int
     nq::Int
 end
 
@@ -76,9 +77,15 @@ IEν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractB
 
 IEallν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real,
-    s𝒳₀::AbstractArray{AbstractInterpolation},s𝒳₂::AbstractArray{AbstractInterpolation},
+    sx::AbstractArray{Real,1},
+    s𝒳₀::AbstractArray,s𝒳₂::AbstractArray,
     ℓ_γ=8, nq=15
-    ) = IEν(integrator, par, bg, ih, k, s𝒳₀, s𝒳₂, ℓ_γ, nq)
+    ) = IEallν(integrator, par, bg, ih, k, 
+                # s𝒳₀, s𝒳₂, 
+                sx,
+                [linear_interpolation(sx,s𝒳₀) for iq in 1:nq+1],
+                [linear_interpolation(sx,s𝒳₂) for iq in 1:nq+1],
+                ℓ_γ, nq)
 
 
 struct ConformalIE{T<:Real,  H <: IE{T}, IT <: AbstractInterpolation{T}}
@@ -91,6 +98,7 @@ struct ConformalIEν{T<:Real,  H <: IEν{T}, IT <: AbstractInterpolation{T}}
         ie::H
         η2x::IT
     end
+    
 struct ConformalIEallν{T<:Real,  H <: IEallν{T}, IT <: AbstractInterpolation{T}}
         ie::H
         η2x::IT
@@ -833,7 +841,6 @@ function initial_conditions(xᵢ, ie::IEallν{T, BasicNewtonian}) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     ℓᵧ = ie.ℓ_γ
-    ℓ_mν =  ie.ℓ_mν
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
     ℋₓ, _, ηₓ, τₓ′, _ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ are mutable views (see unpack)
