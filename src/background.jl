@@ -93,17 +93,17 @@ end
 
 # a background is parametrized on the scalar type T, the interpolator type IT,
 # and a type for the grid GT
-abstract type AbstractBackground{T, IT<:AbstractInterpolation{T,1}, GT} end
+abstract type AbstractBackground{T<:Real, IT<:AbstractInterpolation{T,1}, GT, S<:Real} end
 
-struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
+struct Background{T, IT, GT,S} <: AbstractBackground{T, IT, GT, S}
     H₀::T
     η₀::T
     ρ_crit::T
     Ω_Λ::T
 
     x_grid::GT
-    quad_pts::Array{T,1}
-    quad_wts::Array{T,1}
+    quad_pts::AbstractArray{S ,1} #FIXME there is no need for these to have Dual type?
+    quad_wts::AbstractArray{S ,1}
 
     ℋ::IT
     ℋ′::IT
@@ -135,8 +135,10 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         T(Ω_Λ(par)),
 
         x_grid,
-        convert(Array{T,1},quad_pts), #explicit call to convert instead of constructor for arrays
-        convert(Array{T,1},quad_wts),
+        # convert(Array{T,1},quad_pts), #explicit call to convert instead of constructor for arrays
+        # convert(Array{T,1},quad_wts),
+        quad_pts,
+        quad_wts,
 
         ℋ_,
         spline_∂ₓ(ℋ_, x_grid),

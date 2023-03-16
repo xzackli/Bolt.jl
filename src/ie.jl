@@ -45,18 +45,36 @@ struct IEν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
     nq::Int
 end
 
+#TODO the issue here is that you can't call T, IT{T}, AIT{IT}
+# i.e. we can go one level but not 2, at least not without diff syntax
+#trying a new example below...
+# based  onn 
+# https://stackoverflow.com/questions/25490364/method-will-not-match-with-nested-type-restrictions
+# struct AI1{T <:Real, V <: AbstractInterpolation{T,1}}
+#     AT::AbstractArray{V,1}
+# end
+# abstract type AbstractIE{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
+#                          BG<:AbstractBackground, IH<:AbstractIonizationHistory, 
+#                          Tk<:Real, #AT<:AbstractArray{T,1},
+#                         IT<:AbstractInterpolation{T,1}, 
+#                         } end
+    # struct IEallν{T,PI,CP,BG,IH,Tk,IT,AIT
+    #     } <: AbstractIE{T,PI,CP,BG,IH,Tk,IT,AIT
+    #                      }
 struct IEallν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
-    BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real#, 
-    # AIT #FIXME does not enforce passing interpolator <:AbstractArray{AbstractInterpolation{T,1}}
+        BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real,# AT<:AbstractArray{T,1},
+        IT<:AbstractInterpolation{T,1}
     }
     integrator::PI
     par::CP
     bg::BG
     ih::IH
     k::Tk
-    sx::Array{Tk,1}
-    s𝒳₀::AbstractArray{T,1}
-    s𝒳₂::AbstractArray{T,1}
+    # sx::Array{T,1}
+    # a𝒳₀:: AbstractArray{AT,1}
+    # a𝒳₂::AbstractArray{AT,1}
+    s𝒳₀::AbstractArray{IT,1}
+    s𝒳₂::AbstractArray{IT,1}
     ℓ_γ::Int
     nq::Int
 end
@@ -75,16 +93,19 @@ IEν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractB
     ℓ_γ=8, ℓ_mν=10, nq=15
     ) = IEν(integrator, par, bg, ih, k, s𝒩₀, s𝒩₂, ℓ_γ,ℓ_mν, nq)
 
+    # This is just a convenience constructor, we shouldn't actually need it
 IEallν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real,
-    sx::AbstractArray{Real,1},
+    # sx::AbstractArray{T,1},
+    # a𝒳₀::AbstractArray,a𝒳₂::AbstractArray,
     s𝒳₀::AbstractArray,s𝒳₂::AbstractArray,
     ℓ_γ=8, nq=15
     ) = IEallν(integrator, par, bg, ih, k, 
-                # s𝒳₀, s𝒳₂, 
-                sx,
-                [linear_interpolation(sx,s𝒳₀) for iq in 1:nq+1],
-                [linear_interpolation(sx,s𝒳₂) for iq in 1:nq+1],
+                s𝒳₀, s𝒳₂, 
+                # sx,
+                # a𝒳₀,a𝒳₂,
+                # [linear_interpolation(sx,a𝒳₀[iq]) for iq in 1:nq+1],
+                # [linear_interpolation(sx,a𝒳₂[iq]) for iq in 1:nq+1],
                 ℓ_γ, nq)
 
 
@@ -183,7 +204,8 @@ function boltsolve(ie::IEallν{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=ie.bg.x_grid, dense=false, #FIXME
+                # saveat=ie.bg.x_grid, 
+                dense=false, #FIXME
                 )
     return sol
 end
@@ -511,12 +533,23 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
     # ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par)
+
+    # for idx_q in 0:(nq-1)
+        # println("massless M0[$(idx_q)] = $(ℳ[0*nq+idx_q] )")
+        # println("massless M1[$(idx_q)] = $(ℳ[1*nq+idx_q] )")
+        # println("massless M2[$(idx_q)] = $(ℳ[2*nq+idx_q] )")
+    # end
+
+    # println("massless ρℳ: ",ρℳ)
+    # println("massless σℳ: ",σℳ)
+
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                   Ω_ν * 𝒩[2]#add rel quadrupole
                                   + σℳ / bg.ρ_crit /4
                                   )
 
+    # println("massless Ψ: ",Ψ)
 
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
@@ -536,6 +569,7 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     #     println("Ψ = ", Ψ)
     #     println("Ψ components: Θ₂ = $(Θ[2]), 𝒩₂ = $(𝒩[2]), σℳ = $(σℳ)")
     # end
+    # println("massless Phi_prime: ",Φ′)
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
@@ -621,18 +655,28 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     𝒩[0] = ie.s𝒳₀[1](x) 
     𝒩[2] = ie.s𝒳₂[1](x)
     for idx_q in 0:(nq-1)
-        ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+1](x)
-        ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+1](x)
+        ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+2](x)
+        ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+2](x)
     end
-
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
     ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par)
+
+    # for idx_q in 0:(nq-1)
+        # println("all M0[$(idx_q)] = $(ℳ[0*nq+idx_q] )")
+        # println("all M1[$(idx_q)] = $(ℳ[1*nq+idx_q] )")
+        # println("all M2[$(idx_q)] = $(ℳ[2*nq+idx_q] )")
+    # end
+
+    # println("all ρℳ: ",ρℳ)
+    # println("all σℳ: ",σℳ)
+
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                   Ω_ν * 𝒩[2]#add rel quadrupole
                                   + σℳ / bg.ρ_crit /4
                                   )
 
+    # println("all Ψ: ",Ψ)
 
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
@@ -640,6 +684,9 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         )
+
+    # println("all Phi_prime: ",Φ′)
+
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
