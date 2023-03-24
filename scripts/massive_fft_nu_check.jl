@@ -10,6 +10,7 @@ using Interpolations
 using Bolt: spline #FIXME why do I have to import this here but NOT in bg?
 using LaTeXStrings
 using OrdinaryDiffEq #TODO remove this when putting these functions into ie
+using NumericalIntegration
 
 
 # /// IC Free streaming ///
@@ -200,12 +201,9 @@ function fft_ie(ie::IEallν,perturb,M,u₀,x_grid)
     𝕡,bg,k,nq = ie.par,ie.bg,ie.k,ie.nq
     Tν =  (𝕡.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *Bolt.ρ_crit(𝕡) *𝕡.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    # Set up the "neutrino horizon" and FFT abscissas
-    # χνs = [Bolt.χν(x, q, m , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in x_grid]
     #empty splines
-    all_splines₀ = Array{AbstractInterpolation}(undef,nq+1)
-    all_splines₂ = Array{AbstractInterpolation}(undef,nq+1)
-
+    all_splines₀ = copy(ie.s𝒳₀)
+    all_splines₂ = copy(ie.s𝒳₂)
     #explicitly do massless case
     χνs = cumul_integrate(exp.(x_grid),  [χ′z(exp(x),1.0,0.0,bg.quad_pts,bg.quad_wts) for x in x_grid]) #bg.η
     yyx = k.* (χνs .- χνs[1])
@@ -245,7 +243,7 @@ function fft_ie(ie::IEallν,perturb,M,u₀,x_grid)
         𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀[0+i_q],ℳ₀[0+nq+i_q],ℳ₀[0+2nq+i_q])) #massive
         
         # Compute the new perts via FFT
-        𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), q,Σm_ν,𝕡,M)#,
+        𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), q,𝕡.Σm_ν,𝕡,M)#,
         # Put it all together
         𝒳₀ = 𝒳ₛ₀ .+ real.(𝒳₀ₓ) 
         𝒳₂ = 𝒳ₛ₂ .+ real.(𝒳₂ₓ) 
@@ -263,23 +261,13 @@ function fft_ie_c(ie::IEallν,perturb,M,u₀,x_grid) #FIXME add type decorators
     𝕡,bg,k,nq = ie.par,ie.bg,ie.k,ie.nq
     Tν =  (𝕡.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *Bolt.ρ_crit(𝕡) *𝕡.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    # Set up the "neutrino horizon" and FFT abscissas
-    # χνs = [Bolt.χν(x, q, m , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in x_grid]
-    #empty splines
-    # all_splines₀ = [nothing for i in 1:nq+1] # doesnlt work
-    all_splines₀ = Array{AbstractInterpolation}(undef,nq+1)
-    all_splines₂ = Array{AbstractInterpolation}(undef,nq+1)
-
+    all_splines₀ = copy(ie.s𝒳₀)
+    all_splines₂ = copy(ie.s𝒳₂)
     #explicitly do massless case
     χνs = cumul_integrate(exp.(x_grid),  [χ′z(exp(x),1.0,0.0,bg.quad_pts,bg.quad_wts) for x in x_grid])
     yyx = k.* (χνs .- χνs[1])
     dy=(yyx[end]-yyx[1])/(M-1)
-    println("χνs : ", χνs)
-    println("dy: ", dy)
     yy = yyx[1]:dy:yyx[end]
-    println("yy shape: ", size(yy))
-    println("yyx shape: ", size(yyx))
-    println("χνs shape: ", size(χνs))
     invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
     # Get metric sources #FIXME this should probably happen outside of this function
     Φ′,Ψ = zeros(M),zeros(M)
@@ -419,10 +407,12 @@ end
 function iterate_fft_allν(𝒳₀_km1,𝒳₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, n_q,
     M, reltol,x_ini, x_fin,u0) where T
     ie_k_late = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
-                    𝒳₀_km1,𝒳₂_km1,
+                     𝒳₀_km1,𝒳₂_km1,
                     ℓᵧ, n_q)
+    #^The first time we do this is ok, so constructor is fine
     perturb_k_late = boltsolve_flex(ie_k_late, x_ini, x_fin, u0; reltol=reltol)
-    # ~~Loop here? 1?~~
+    # I would suppose we lose it below, as 𝒳₀_k,𝒳₂_k are not arguments so their 
+    # types (and therefore memory sizes) are not known ahead of time...
     xx,𝒳₀_k,𝒳₂_k = fft_ie(ie_k_late,perturb_k_late,M,
                         u0,perturb_k_late.t) 
     return xx,𝒳₀_k,𝒳₂_k,perturb_k_late
@@ -471,10 +461,11 @@ end
 
 function itersolve_fft(Nₖ::Int,ie_0::IEallν{T},M::Int,x_ini,x_fin,u0;reltol=1e-6) where T
     𝒳₀_0,𝒳₂_0 = ie_0.s𝒳₀,ie_0.s𝒳₂
-    𝒳₀_k,𝒳₂_k = 𝒳₀_0,𝒳₂_0
+    𝒳₀_k,𝒳₂_k = 𝒳₀_0,𝒳₂_0 #type is determined by type parameters of ie_0
     perturb_k = nothing
     xx_k = nothing
     for k in 1:Nₖ
+        # we lose type info somehow in this next call
         xx_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate_fft_allν(𝒳₀_k,𝒳₂_k,ie_0.par,ie_0.bg,ie_0.ih,
                                    ie_0.k,ie_0.ℓ_γ,ie_0.nq,
                                    M,reltol,x_ini,x_fin,u0)
@@ -555,47 +546,11 @@ unzip(a) = map(x->getfield.(a, x), fieldnames(eltype(a)))
 
 𝕡 = CosmoParams(); 
 n_q=15
-bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q);
+@profview bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q);
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b); #FIXME γΩ
 ih = IonizationHistory(𝕣, 𝕡, bg);
 Mpcfac = bg.H₀*299792.458/100.
 k = Mpcfac*kclass #get k in our units
-
-
-#unrelated code determining if we need "T" in all the places it is for interpolation
-using ForwardDiff
-ForwardDiff.Dual(0.67)
-𝕡 = CosmoParams{ForwardDiff.Dual}(h=ForwardDiff.Dual(0.67));
-bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=n_q);
-bg
-
-function fbg(Ω_b::DT) where DT
-    𝕡 = CosmoParams{DT}(Ω_b=Ω_b)
-    bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=15)
-    println(typeof(bg))
-    return bg.η(-5)
- end
-
- using FastGaussQuadrature
- qp,qw = gausslegendre( 15 )
-
- typeof(qp) 
- typeof(qp) <: Vector{T where T >: Float64}
-Real >: Float64
-Vector{Real} >: Vector{Float64}
-
-typeof(qp) <: Array{Real,1}
-typeof(qp) <: Array{Float64,1}
-
- fbg(0.046)
- Δ = 1e-3
- (fbg(0.046+ Δ) - fbg(0.046 - Δ)) / 2Δ
- ForwardDiff.derivative(fbg, 0.046)
-fbg(ForwardDiff.Dual(0.046,1))
-
-typeof(Vector{Float64}) <: typeof(Vector{Real})
-
-
 
 # Hierarchy for comparison purposes - now replace with conformal hierarchy...
 ℓᵧ=50
@@ -611,332 +566,142 @@ for (i_x, x) in enumerate(bg.x_grid)
     u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
     results[:,i_x] = u #z should use unpack somehow
 end
-
 #conformal hierarchy
-η2x = linear_interpolation(bg.η.(bg.x_grid),bg.x_grid)
+using Bolt
+η2x = linear_interpolation(bg.η,bg.x_grid);
+
+2.2619502561780378e33
+bg.η.(bg.x_grid[end])
+
 hierarchy_conf = ConformalHierarchy(hierarchy,η2x);
 results_conf = boltsolve_conformal(hierarchy_conf;reltol=reltol);
 
+#sometimes this happens at the end, sometimes at the beginnning....
+
+
 #truncated conformal hierarchy
-# Input to the ie integrator struct (akin to hierarchy)
 𝒩₀_0,𝒩₂_0 =  results[2(ℓᵧ+1)+1,:],results[2(ℓᵧ+1)+3,:] #hierarchy answer
 spl0h𝒩₀,spl0h𝒩₂ = linear_interpolation(bg.x_grid,𝒩₀_0), linear_interpolation(bg.x_grid,𝒩₂_0)
 ν_idx = 2(ℓᵧ+1) + 1
-# ie_0 = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
-#         spl0h𝒩₀,
-#         spl0h𝒩₂,
-#         ℓᵧ, ℓ_mν, n_q);
-# perturb_0 = boltsolve(ie_0;reltol=reltol); #no rsa
-
-# ie_0_conf = ConformalIEν(ie_0,η2x);
-# results_conf_ie_0 = boltsolve_conformal(ie_0_conf;reltol=reltol);
-
 c𝒩₀_0,c𝒩₂_0 =  results_conf[2(ℓᵧ+1)+1,:],results_conf[2(ℓᵧ+1)+3,:] #hierarchy answer
 c_spl0h𝒩₀,c_spl0h𝒩₂ = linear_interpolation(η2x(results_conf.t/Mpcfac),c𝒩₀_0), linear_interpolation(η2x(results_conf.t/Mpcfac),c𝒩₂_0)
-
 cℳ₀q1_0,cℳ₂q1_0 =  results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+1,:],results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,:] #hierarchy answer
 c_spl0hℳ₀q1,c_spl0hℳ₂q1 = linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₀q1_0), linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₂q1_0)
 cℳ₀qend_0,cℳ₂qend_0 =  results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+15,:],results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+15,:] #hierarchy answer
 c_spl0hℳ₀qend,c_spl0hℳ₂qend = linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₀qend_0), linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₂qend_0)
-
-plot(bg.x_grid,c_spl0hℳ₀q1.(bg.x_grid))
-plot!(bg.x_grid,c_spl0hℳ₀qend.(bg.x_grid))
-plot(bg.x_grid,c_spl0hℳ₂q1.(bg.x_grid))
-plot!(bg.x_grid,c_spl0hℳ₂qend.(bg.x_grid))
-
-
 u0_ie_c = get_switch_u0(1.0,hierarchy_conf)
-
-M=8192
-# fft_ie_c(ie_0,perturb_0,M,𝕡.Σm_ν,q1,1,u0_ie_c,bg.x_grid);
-# ℳ₀[0+i_q],ℳ₀[0+nq+i_q],ℳ₀[0+2nq+i_q]
-ℓ_ν,ℓ_mν
 massive_interps₀ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]) for idx_q in 1:n_q];
-massive_interps₂ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2(ℓ_mν+1)+idx_q,:]) for idx_q in 1:n_q];
+massive_interps₂ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
 all_splines₀ = [c_spl0h𝒩₀,massive_interps₀...]
 all_splines₂ = [c_spl0h𝒩₂,massive_interps₂...]
+all_splines₂[2](-20.0)
+x_massive_interps₀ = [linear_interpolation(bg.x_grid,results[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]) for idx_q in 1:n_q];
+x_massive_interps₂ = [linear_interpolation(bg.x_grid,results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
+x_all_splines₀ = [spl0h𝒩₀,x_massive_interps₀...]
+x_all_splines₂ = [spl0h𝒩₂,x_massive_interps₂...]
 ie_all_0 = IEallν(BasicNewtonian(), 𝕡, bg, ih, k, #test the new struct
         all_splines₀,
         all_splines₂,
         ℓᵧ, n_q);
         # and test the evolution...
 perturb_all_0 = boltsolve(ie_all_0;reltol=reltol);
-
-BasicNewtonian <: Bolt.PerturbationIntegrator
-
-typeof(ie_all_0)<: IEallν
-typeof(ie_all_0)
+x_ie_all_0 = IEallν(BasicNewtonian(), 𝕡, bg, ih, k, #test the new struct
+        x_all_splines₀,
+        x_all_splines₂,
+        ℓᵧ, n_q);
+x_perturb_all_0 = boltsolve(x_ie_all_0;reltol=reltol);
 
 ie_all_0_c = ConformalIEallν(ie_all_0,η2x);
-perturb_all_0_c = boltsolve_conformal(ie_all_0_c;reltol=2e-5);
-#^THIS IS UNSTABLE? FIXME!!! happens only for rtol<2e-5
-perturb_all_0.u[:,1]
-
-#FIMXE SOMETHING IS ALREADY WRONG NEAR ICS???
-# Maybe an indexing error? Or actually physical?
-plot(bg.x_grid,hcat(perturb_all_0.u...)[1,:])
-plot!(η2x.(perturb_all_0_c.t/Mpcfac),hcat(perturb_all_0_c.u...)[1,:])
-plot!(bg.x_grid,results[1,:])
-plot(bg.x_grid,results[ν_idx,:])
-plot!(bg.x_grid,all_splines₀[1].(bg.x_grid))
-plot(bg.x_grid,results[ν_idx+ℓ_ν+1,:])
-plot!(bg.x_grid,all_splines₀[2].(bg.x_grid))
-plot(bg.x_grid,results[end-4-n_q*ℓ_mν-1,:])
-plot!(bg.x_grid,all_splines₀[end].(bg.x_grid))
-
-
-plot!(bg.x_grid,all_splines₀[2].(bg.x_grid))
+perturb_all_0_c = boltsolve_conformal(ie_all_0_c;reltol=1e-5);
+x_ie_all_0_c = ConformalIEallν(x_ie_all_0,η2x);
+x_perturb_all_0_c = boltsolve_conformal(x_ie_all_0_c;reltol=1e-6);
 
 function χ′z(a,q,m,tq_pts,tq_wts)
     return q / (a * Bolt.ℋ_a(a,𝕡,tq_pts,tq_wts) * √(q^2 + (a*m)^2 ) )
 end
-# WHAT WAS I DOING WITH THIS?
+M=2048*4
+xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(5,x_ie_all_0,M, 
+                                            bg.x_grid[1],bg.x_grid[end],
+                                            u0t
+                                            )
 
 
-xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(5,ie_all_0_c,M,
-                                            1.0/Mpcfac,bg.η[end],u0_ie_c;reltol=1e-5)
-
-plot(bg.x_grid,𝒳₀_k[1,:])
-
-#------------------------------------------------
-#GENERALIZE THIS TO FOR LOOP OVER Q PTS
-#save  neutrinos:
-# writedlm("./test/data/Bolt_mslss_nuperts_nonu_lmax$(ℓ_ν).dat",
-#           hcat(bg.x_grid,results[2(ℓᵧ+1)+1,:],results[2(ℓᵧ+1)+3,:]))
-Tν =  (𝕡.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *Bolt.ρ_crit(𝕡) *𝕡.Ω_r)^(1/4)
-logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-q1,q3,qmid,q10,q11,q12,qend = Bolt.xq2q(bg.quad_pts[1],logqmin,logqmax),Bolt.xq2q(bg.quad_pts[3],logqmin,logqmax),Bolt.xq2q(bg.quad_pts[8],logqmin,logqmax),Bolt.xq2q(bg.quad_pts[10],logqmin,logqmax),Bolt.xq2q(bg.quad_pts[11],logqmin,logqmax),Bolt.xq2q(bg.quad_pts[12],logqmin,logqmax),Bolt.xq2q(bg.quad_pts[end],logqmin,logqmax)
-χt0 =  [Bolt.χν(x, q1 , 0.0 , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χt1 =  [Bolt.χν(x, q1 , 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χt3 =  [Bolt.χν(x, q3 , 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χtmid =  [Bolt.χν(x, qmid , 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χt10 =  [Bolt.χν(x, q10 , 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χt11 =  [Bolt.χν(x, q11, 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χt12 =  [Bolt.χν(x, q12 , 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-χtend =  [Bolt.χν(x, qend , 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-plot(bg.η*Mpcfac,bg.η*Mpcfac,ls=:dash,color=:black,label="η",legend=:topleft)
-plot!(bg.η*Mpcfac,χt0*Mpcfac,label="χt0",xscale=:log10,yscale=:log10,ls=:dot)
-plot!(bg.η*Mpcfac,χt1*Mpcfac,label="χt1")
-plot!(bg.η*Mpcfac,χt3*Mpcfac,label="χt3")
-plot!(bg.η*Mpcfac,χtmid*Mpcfac,label="χtmid")
-plot!(bg.η*Mpcfac,χt10*Mpcfac,label="χt10")
-plot!(bg.η*Mpcfac,χt12*Mpcfac,label="χt12")
-plot!(bg.η*Mpcfac,χtend*Mpcfac,label="χtend")
-
-yyxt1 = k.* (χt1 .- χt1[1])
-dyt1=(yyxt1[end]-yyxt1[1])/(M-1)
-yyt = yyxt1[1]:dyt1:yyxt1[end]
-invxt1 = linear_interpolation(yyxt1,bg.x_grid).(yyt)
-linear_interpolation(yyxt1,bg.x_grid)
-plot!(yyxt1,sort(yyxt1))
-yyxtend = k.* (χtend .- χtend[1])
-dytend=(yyxtend[end]-yyxtend[1])/(M-1)
-yytend = yyxtend[1]:dytend:yyxtend[end]
-invxtend = linear_interpolation(yyxtend,bg.x_grid).(yytend)
-plot!(yyxtend,sort(yyxtend))
-sum(yyxt1[2:end]-yyxt1[1:end-1] .< 0.0)
-sum((yyxt1[2:end]-yyxt1[1:end-1])[end-250:end-110] .< 0.0)
-
-plot(bg.η*Mpcfac,yyxt1,xscale=:log10,legend=:topleft)
-plot!(bg.η.(bg.x_grid[end-250:end-110]).*Mpcfac,yyxt1[end-250:end-110])
-xlabel!("η")
-ylabel!("kΔχ")
-plot(bg.η*Mpcfac,χt1,xscale=:log10,legend=:topleft)
-plot!(bg.η.(bg.x_grid[end-250:end-110]).*Mpcfac,χt1[end-250:end-110])
+#---------------------------------#
+#---------------------------------#
+# Begin Experiments
+#---------------------------------#
+#---------------------------------#
 
 
-yyxtmid = k.* (χtmid .- χtmid[1])
-dytmid=(yyxt1[end]-yyxtmid[1])/(M-1)
-yytmid = yyxtmid[1]:dytmid:yyxtmid[end]
-plot(yyxtmid,sort(yyxtmid))
-sum(yyxtmid[2:end]-yyxtmid[1:end-1] .< 0.0)
+# Set up ansatzs and struct
+all_const_ansatz₀ = [linear_interpolation(η2x.(results_conf.t/Mpcfac),u0_ie_c[ν_idx+(idx_q-1)*n_q]*ones(length(results_conf.t)))
+                 for idx_q in 1:n_q+1];
+all_zero_ansatz₂ = [linear_interpolation(η2x.(results_conf.t/Mpcfac),zeros(length(results_conf.t)))
+                for idx_q in 1:n_q+1];
+
+ie_0_late_c = IEνall(BasicNewtonian(), 𝕡, bg, ih, k,
+                    all_const_ansatz₀,
+                    all_zero_ansatz₂,
+                    ℓᵧ, ℓ_mν, n_q);
+ie_0_conf_late_c = ConformalIEνall(ie_0_late_c,η2x);
 
 
-yyxt3 = k.* (χt3.- χt3[1])
-dyt3=(yyxt3[end]-yyxt3[1])/(M-1)
-yyt3= yyxt3[1]:dyt3:yyxt3[end]
-plot(yyxt3,sort(yyxt3))
-sum(yyxt3[2:end]-yyxt3[1:end-1] .< 0.0)
-linear_interpolation(yyxt3,bg.x_grid)
+# Experiments
+
+# And now ctime
+M=2048*4
+# Nᵢ=1
+reltol=7e-4
+#changing k, switch, hierarchy truncation, and ansatz will need to have a re-doing of u0_ie, ie_0 struct
+
+# First experiment
+η_switchη_switch = [1.0] #[0.5,1.0,10.0,100.0] 
+η_switch = 1.0
+MM = [8192]#[2^i for i in 12:14]
+NᵢNᵢ = [1]#[2i-1 for i in 1:5] #max iters
+
+#run this for plotting consistency
+xx_kt,𝒩₀_kt,𝒩₂_kt,perturb_kt= itersolve_fft(1,ie_0_conf_late_c,MM[end],
+    η_switchη_switch[1]/Mpcfac,bg.η[end],get_switch_u0(η_switchη_switch[1],hierarchy_conf);reltol=reltol);
 
 
-yyxt10 = k.* (χt10.- χt10[1])
-dyt10=(yyxt10[end]-yyxt10[1])/(M-1)
-yyt10= yyxt10[1]:dyt10:yyxt10[end]
-sum(yyxt10[2:end]-yyxt10[1:end-1] .< 0.0)
-linear_interpolation(yyxt10,bg.x_grid)
 
-# 11 is the first q for which the neutrino horizon is actually monotonic
-yyxt11 = k.* (χt11.- χt11[1])
-dyt11=(yyxt11[end]-yyxt11[1])/(M-1)
-yyt11= yyxt11[1]:dyt11:yyxt11[end]
-sum(yyxt11[2:end]-yyxt11[1:end-1] .< 0.0)
-linear_interpolation(yyxt11,bg.x_grid)
+for η_switch in η_switchη_switch
+    # Set the initial conditions at a particular switch value
+    u0_ie_c = get_switch_u0(η_switch,hierarchy_conf)
+    # Initial guess
+    p1 = plot(p1,xx_kt,ie_0_late_c.s𝒩₀.(xx_kt),label="I = 0, mono init ansatz",legendfont=font(4),ls=:dash)
+    p2 = plot(xx_kt,ie_0_late_c.s𝒩₂.(xx_kt),label=false,c=p1.series_list[1][:linecolor],legendfont=font(4),ls=:dash)
+    # Hierarchy
+    plot!(p1,xx_kt,c_spl0h𝒩₀.(xx_kt),label="H",color=:black,lw=2)
+    plot!(p2,xx_kt,c_spl0h𝒩₂.(xx_kt),label=false,color=:black,lw=2)
 
-yyxt12 = k.* (χt12.- χt12[1])
-dyt12=(yyxt12[end]-yyxt12[1])/(M-1)
-yyt12= yyxt12[1]:dyt12:yyxt12[end]
-sum(yyxt12[2:end]-yyxt12[1:end-1] .< 0.0)
-linear_interpolation(yyxt12,bg.x_grid)
+    for M in MM
+        for Nᵢ in NᵢNᵢ
+            @time xx_k,𝒩₀_k,𝒩₂_k,perturb_k = itersolve_fft(Nᵢ,ie_0_conf_late_c,M,
+                                            η_switch/Mpcfac,bg.η[end],u0_ie_c;reltol=reltol);
+            println("(M = $M, Nᵢ = $Nᵢ), 
+                    error against full hierarchy is 
+                    ℓ=0: $(sum( (c_spl0h𝒩₀.(xx_k) .- 𝒩₀_k.(xx_k)).^2 )/M),
+                    ℓ=2: $(sum( (c_spl0h𝒩₂.(xx_k) .- 𝒩₂_k.(xx_k)).^2 )/M)\n")
+            label="I = $(Nᵢ), Planck50_ansatz"#M = $(M), lmax = $(ℓ_ν)" 
+            plot!(p1,xx_k,𝒩₀_k.(xx_k),label=label,c=:red)
+            plot!(p2,xx_k,𝒩₂_k.(xx_k),label=false,c=p1.series_list[end][:linecolor])
+                    
+        end
+    end
+    # ylims!(p1,-0.1,0.1)
+    # ylims!(p2,-0.05,0.04)
+    xlabel!(p2,L"x",xguidefontsize=18)
+    ylabel!(p1,L"\mathcal{N}_{0}",xguidefontsize=18)
+    ylabel!(p2,L"\mathcal{N}_{2}",xguidefontsize=18)
+    l = @layout [a  ; b]
+    title!(p1,"k = $(@sprintf("%.2f", ie_0.k/Mpcfac
+    )), vary ansatz, switch at $(@sprintf("%.1f", η_switch)) Mpc, 3 poles")
+    p3 = plot(p1, p2, layout = l)
+    savefig("../misc_plots/fft_debug/fft_experiments/mslss_k$(@sprintf("%.2f", ie_0.k/Mpcfac
+            ))_switch$(@sprintf("%.1f", η_switch))_elmax3_varyansatz_n1.pdf"
+    )
 
+# end
 
-#Messing with neutrino horizon
-function χν_old(x, q, m, par::AbstractCosmoParams,quad_pts,quad_wts) 
-    # adding m here is a bit annoying but we need the ability to use massless neutrinos
-    logamin,logamax=-13.75,log10(Bolt.x2a(x)) #0,x2a(x)
-    ϵ(a,q) = √(q^2 + (a*m)^2 )
-    Iχν(y) = 1.0 / (Bolt.xq2q(y,logamin,logamax) * Bolt.ℋ_a(Bolt.xq2q(y,logamin,logamax), par,quad_pts,quad_wts) * ϵ(Bolt.xq2q(y,logamin,logamax),q)
-                   )/ Bolt.dxdq(Bolt.xq2q(y,logamin,logamax),logamin,logamax)
-    return q*sum(Iχν.(quad_pts).*quad_wts)
-end
-
-χν_old(bg.x_grid[end], q1, 𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts)
-
-𝕡.Σm_ν/q1,𝕡.Σm_ν/qend
-
-#Let's schematically look at the integrand for the final x since this is around where there are issues
-plot(bg.η.*Mpcfac,q1./(q1^2 .+ (Bolt.x2a.(bg.x_grid)*𝕡.Σm_ν).^2 ).^(1/2),xscale=:log10)
-plot!(bg.η.*Mpcfac,qend./(qend^2 .+ (Bolt.x2a.(bg.x_grid)*𝕡.Σm_ν).^2 ).^(1/2),xscale=:log10)
-
-#now do it the way we do it in log10a
-final_idx = length(bg.x_grid) #- 175 #260 #pick some intermediate index
-logamin,logamax=-13.75,bg.x_grid[final_idx]/log(10.)#0.0
-plot(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .* q1./(q1^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-    #  label=L"$\chi(q_{i})$ low (260)",#yscale=:log10,
-     label=L"$\chi(q_{i})$ high (175)",ls=:dash,#yscale=:log10,
-     legend=:topleft,left_margin=4mm)
-plot!(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*q3./(q3^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{3})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*qmid./(qmid^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{8})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*q10./(q10^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{10})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*q11./(q11^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{11})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*qend./(qend^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{f})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),label=L"$\eta$" )
-quadpts_log10a = log10.(Bolt.xq2q.(bg.quad_pts,logamin,logamax)) #1.0 ./Bolt.dxdq.(Bolt.xq2q.(bg.quad_pts,logamin,logamax),logamin,logamax)
-vline!(quadpts_log10a,
-        # label="quad pts low (260)",
-        label="quad pts high (175)",ls=:dash
-        )
-vline!([bg.x_grid[end-250]./log(10.),bg.x_grid[end-110]./log(10.)],color=:red,label="q1 problem zone")
-xlabel!(L"$\log_{10}(a)$")
-ylabel!(L"$\eta_{f}$ ctime integrand")
-xlims!(-2.0,0.0)
-plot!(legend=:topright)
-plot!(yscale=:log10)
-ylims!(3e30,5e31)
-savefig("../misc_plots/fft_debug/fft_experiments/mssv_chi_q1_integrand_zoom_log_zoom.pdf")
-bg.quad_wts
-
-plot(bg.x_grid,bg.ℋ,yscale=:log10)
-
-
-q1/q3
-
-# Think about a change of variable, because then we only do this integral once
-plot!(bg.x_grid[1:final_idx]./log(10.) .+ log10.(𝕡.Σm_ν/q1) ,(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .* q1./(q1^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{i})$ high (175)",ls=:dash,yscale=:log10,
-     legend=:topleft,left_margin=4mm)
-plot!(bg.x_grid[1:final_idx]./log(10.) .+ log10.(𝕡.Σm_ν/q3), (1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*q3./(q3^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{3})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.) .+ log10.(𝕡.Σm_ν/qmid),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*qmid./(qmid^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{8})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.) .+ log10.(𝕡.Σm_ν/q10),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*q10./(q10^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{10})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.) .+ log10.(𝕡.Σm_ν/q11),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*q11./(q11^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{11})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.) .+ log10.(𝕡.Σm_ν/qend),(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) .*qend./(qend^2 .+ (Bolt.x2a.(bg.x_grid[1:final_idx])*𝕡.Σm_ν).^2 ).^(1/2) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),
-     label=L"$\chi(q_{f})$" )
-plot!(bg.x_grid[1:final_idx]./log(10.) ,(1.0 ./ (Bolt.x2a.(bg.x_grid[1:final_idx]).*bg.ℋ.(bg.x_grid[1:final_idx])) ) ./ Bolt.dxdq.(exp.(bg.x_grid[1:final_idx]),logamin,logamax),label=L"$\eta$" )
-
-# Ok so we can do GaussHermite in log z for a gaussian with mean zero with interval somehow rescaled.
-using FastGaussQuadrature
-tq_pts, tq_wts =  gausslobatto( n_q )
-tq_wts
-
-logzmin_1, logzmax_1 = logamin+ log10.(𝕡.Σm_ν/q1), logamax + log10.(𝕡.Σm_ν/q1)
-ϵ(a,q) = √(q^2 + (a*𝕡.Σm_ν)^2 )
-Itq(y) = 1.0 / (Bolt.xq2q(y,logzmin_1,logzmax_1) * Bolt.ℋ_a(
-                Bolt.xq2q(y,logzmin_1,logzmax_1), 𝕡,tq_pts, tq_wts
-                    ) * ϵ(Bolt.xq2q(y,logzmin_1,logzmax_1),q1)
-               )/ Bolt.dxdq(Bolt.xq2q(y,logzmin_1,logzmax_1),logzmin_1,logzmax_1)
-
-q1*sum(Itq.(tq_pts).*tq_wts)
-q1*sum(Itq.(bg.quad_pts).*bg.quad_wts)
-χt1[final_idx]
-
-log10.(Bolt.xq2q.(tq_pts,logzmin_1,logzmax_1)) #takes unit interval to logz
-scatter(1:1:length(tq_pts),log10.(Bolt.xq2q.(tq_pts,logzmin_1,logzmax_1)) )
-ylims!(-35,35)
-hline!([Bolt.xq2q.(tq_pts,logzmin_1,logzmax_1)[8]])
-
-function χν_new(x, q, m, par::AbstractCosmoParams,quad_pts,quad_wts) 
-    # adding m here is a bit annoying but we need the ability to use massless neutrinos
-    logamin,logamax=-17.75,log10(Bolt.x2a(x)) #0,x2a(x)
-    logzmin_1, logzmax_1 = logamin+ log10(m/q), logamax + log10(m/q)
-    ϵ(a,q) = √(q^2 + (a*m)^2 )
-    Itq(y) = 1.0 / (Bolt.xq2q(y,logzmin_1,logzmax_1) * Bolt.ℋ_a(
-                    Bolt.xq2q(y,logamin,logamax), par,quad_pts, quad_wts
-                        ) * ϵ(Bolt.xq2q(y,logamin,logamax),q)
-                )/ Bolt.dxdq(Bolt.xq2q(y,logzmin_1,logzmax_1),logzmin_1,logzmax_1)
-    return q*sum(Itq.(quad_pts).*quad_wts)
-end
-
-function χ′z(a,q,m)
-    return q / (a * Bolt.ℋ_a(a,𝕡,tq_pts,tq_wts) * √(q^2 + (a*m)^2 ) )
-end
-
-log10.(𝕡.Σm_ν/q1)
-
-χthermite = [χν_new(x, q1 , 𝕡.Σm_ν , 𝕡 ,tq_pts,tq_wts) for x in bg.x_grid]
-
-plot(bg.η*Mpcfac,χt1*Mpcfac,label="χt1",xscale=:log10,yscale=:log10,legend=:bottomright)
-plot!(bg.η*Mpcfac,χthermite*Mpcfac,label="χt1",xscale=:log10,yscale=:log10)
-ylims!(10,2e2)
-xlims!(1e2,2e4)
-
-zz = 10.0.^(-4.0:0.01:0.0)
-log(zz[1]*q1/(𝕡.Σm_ν))
-plot(zz,1.0./zz .* 1.0./sqrt.(1.0.+zz)./Bolt.ℋ_a.(zz./(𝕡.Σm_ν/q1),𝕡,tq_pts,tq_wts) .*( (𝕡.Σm_ν/q1) ./zz)  ,
-xscale=:log10,yscale=:log10)# 
-
-zz./(𝕡.Σm_ν/q1)
-# Let us do the integral in z once and for all as a cumsum type thing
-# Then we can just interpolate that at the requisite values of q etc.
-#no you can't do this because the integral is dz 1/z 1/sqrt(1+z) 1/H(a), but the cnxn
-#btwn a and z is depedent on q/m
-
-
-Bolt.ℋ_a.(zz./(𝕡.Σm_ν/q1),𝕡,tq_pts,tq_wts)
-
-
-#Why are we evenn bothering with quadrature??
-#Why do we not just do something like we did for optical depth??
-# τ_primes = [τ′(x_, Xₑ_function, par, ℋ_function) for x_ in x]
-# τ_integrated = reverse(cumul_integrate(rx, reverse(τ_primes)))
-# τ̂ = interpolate((x,),τ_integrated,Gridded(Linear()))
-using NumericalIntegration
-χ_primes = [χ′z(a,q1,𝕡.Σm_ν) for a in aa]
-aa = 10.0.^(-13.0:0.01:0.0)
-χ_integrated = cumul_integrate(aa, χ_primes)
-@btime χ_integrated_x = cumul_integrate(exp.(bg.x_grid),  [χ′z(exp(x),q1,𝕡.Σm_ν) for x in bg.x_grid])
-#  4.227 ms (26029 allocations: 940.72 KiB)
-@btime χνs = [Bolt.χν(x, q1,𝕡.Σm_ν , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in bg.x_grid]
-# 63.653 ms (46029 allocations: 8.05 MiB) #how is it possible this takes longer??
-# well duh, 2000*12 bs 2000*1
-
-# I am not sure there is a way to do what I want to do without specifying q,a
-# We eventually have to loop over all the qs anyways (I THINKN???)
-# so this is probably a misguided attempt at savings
-plot(log.(aa)[2:end],χ_integrated[2:end]*Mpcfac,yscale=:log10,legend=:bottomright)
-plot!(bg.x_grid[2:end],χ_integrated_x[2:end]*Mpcfac,yscale=:log10,legend=:bottomright)
-
-plot!(bg.x_grid,χt1*Mpcfac,label="χt0",yscale=:log10,ls=:dash)
-xlims!(-5.0,0.0)
-ylims!(10,3e2)
-sum( ((χ_integrated[2:end]*Mpcfac)[2:end]-(χ_integrated[2:end]*Mpcfac)[1:end-1]) .<0.0 )
-sum( ((χ_integrated_x[2:end]*Mpcfac)[2:end]-(χ_integrated_x[2:end]*Mpcfac)[1:end-1]) .<0.0 )
-#looks good
