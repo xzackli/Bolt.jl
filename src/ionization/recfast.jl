@@ -419,6 +419,7 @@ struct RECFASTHistory{T, R, HES, HS}
     sol_H_He::HS
 end
 
+
 function Xe(rhist::RECFASTHistory, z) 
     𝕣 = rhist.𝕣
     if (z > 8000.)
@@ -457,15 +458,15 @@ function recfastsolve(𝕣, alg=Tsit5(), zinitial=10000., zfinal=0.)
     z_epoch_He_Saha_begin = min(zinitial, 3500.)
 
     # figure out when to start Helium and Hydrogen+Helium evolutions
-    z_He_evo_start = solve(
+    z_He_evo_start = assume_nondual(solve(
         IntervalNonlinearProblem(Bolt.end_of_saha_condition, 
         (z_epoch_He_Saha_begin, zfinal), 𝕣), 
-        Falsi(), reltol = 1e-4).u
+        Falsi(), reltol = 1e-4).u)
 
-    z_H_He_evo_start = solve(
+    z_H_He_evo_start = assume_nondual(solve(
         IntervalNonlinearProblem(Bolt.end_He_evo_condition, 
         (z_He_evo_start, zfinal), 𝕣), 
-        Falsi(), reltol = 1e-4).u
+        Falsi(), reltol = 1e-4).u)
 
     # evolve Helium and Tmat
     y2 = Bolt.init_He_evolution(𝕣, z_He_evo_start)
@@ -481,6 +482,68 @@ function recfastsolve(𝕣, alg=Tsit5(), zinitial=10000., zfinal=0.)
 
     return RECFASTHistory(𝕣, zinitial, zfinal, 
         z_He_evo_start, z_H_He_evo_start, sol_He, sol_H_He)
+end
+
+
+function reionization_Xe(rh::RECFASTHistory, z)
+    𝕣 = rh.𝕣
+    X_fin = 1 + 𝕣.Yp / ( 𝕣.not4*(1-𝕣.Yp) ) #ionization frac today
+    zre,α,ΔH,zHe,ΔHe,fHe = 7.6711,1.5,0.5,3.5,0.5,X_fin-1 #reion params, TO REPLACE
+    x_orig = Bolt.Xe(rh, z)
+    x_reio_H =  (X_fin - x_orig) / 2 * (
+        1 + tanh(( (1+zre)^α - (1+z)^α ) / ( α*(1+zre)^(α-1) ) / ΔH)) + x_orig
+    x_reio_He = fHe / 2 * ( 1 + tanh( (zHe - z) / ΔHe) )
+    x_reio = x_reio_H + x_reio_He
+    return x_reio
+end
+
+
+function reionization_Tmat_ode(Tm, rh::RECFASTHistory, z)
+    𝕣 = rh.𝕣
+    x_reio = reionization_Xe(rh, z)
+
+	a = 1 / (1+z)
+	x_a = a2x(a)
+	Hz = 𝕣.bg.ℋ(x_a) / a / H0_natural_unit_conversion
+	Trad = 𝕣.Tnow * (1+z)
+	dTm = 𝕣.CT * Trad^4 * x_reio/(1 + x_reio + 𝕣.fHe) *
+        (Tm - Trad) / (Hz * (1 + z)) + 2 * Tm / (1 + z)
+	return dTm
+end
+
+
+struct TanhReionizationHistory{T, IH, TS}
+    zre_ini::T
+    ionization_history::IH
+    sol_reionization_Tmat::TS
+end
+
+
+function Xe(trhist::TanhReionizationHistory, z) 
+    if (z > trhist.zre_ini)
+        return Xe(trhist.ionization_history, z)
+    else
+        return reionization_Xe(trhist.ionization_history, z)
+    end
+end
+
+function Tmat(trhist::TanhReionizationHistory, z) 
+    if (z > trhist.zre_ini)
+        return Tmat(trhist.ionization_history, z)
+    else
+        return trhist.sol_reionization_Tmat(z)
+    end
+end
+
+function tanh_reio_solve(ion_hist, zre_ini=50.0)
+
+    𝕣 = ion_hist.𝕣
+    zre_ini = 50.0
+    reio_prob = ODEProblem(Bolt.reionization_Tmat_ode, 
+        Bolt.Tmat(ion_hist, zre_ini), (zre_ini, ion_hist.zfinal), ion_hist)
+    sol_reio_Tmat = solve(reio_prob, Tsit5(), reltol=𝕣.tol)
+    trh = Bolt.TanhReionizationHistory(zre_ini, ion_hist, sol_reio_Tmat);
+
 end
 
 
@@ -623,18 +686,25 @@ function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::Ab
                            T#{T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
     x_grid = bg.x_grid
     # GRAFT RECFAST ONTO BOLT. TODO: MEGA-REFACTOR ==============
-    Nz = 100000 #add extra two zero for reion otherwise too low res, get wiggles (was spacing of Δz=1)
+    # Nz = 100000 #add extra two zero for reion otherwise too low res, get wiggles (was spacing of Δz=1)
 	#FIXME treat these wiggles better!
-	Xe_RECFAST, Tmat_RECFAST = recfast_xe(𝕣; Nz=Nz, zinitial=10000., zfinal=0.)
-	z_RECFAST = RECFASTredshifts(Nz, 10000., 0.)
-    RECFAST_Xₑ_z = spline(reverse(Xe_RECFAST), reverse(z_RECFAST))
-    RECFAST_Tmat_z = spline(reverse(Tmat_RECFAST), reverse(z_RECFAST))
-    xinitial_RECFAST = z2x(first(z_RECFAST))
+	# Xe_RECFAST, Tmat_RECFAST = recfast_xe(𝕣; Nz=Nz, zinitial=10000., zfinal=0.)
+	# z_RECFAST = RECFASTredshifts(Nz, 10000., 0.)
+    # RECFAST_Xₑ_z = spline(reverse(Xe_RECFAST), reverse(z_RECFAST))
+    # RECFAST_Tmat_z = spline(reverse(Tmat_RECFAST), reverse(z_RECFAST))
+
+    rhist = recfastsolve(𝕣)
+    trhist = tanh_reio_solve(rhist)
+    
+
+    xinitial_RECFAST = z2x(rhist.zinitial)
+    Xe_initial = Xe(rhist, rhist.zinitial)
+
     Xₑ_function = x -> (x < xinitial_RECFAST) ?
-        first(Xe_RECFAST) : RECFAST_Xₑ_z(x2z(x))
+        Xe_initial : Xe(trhist, x2z(x))
     Trad_function = x -> 𝕣.Tnow * (1 + x2z(x))
     Tmat_function = x -> (x < xinitial_RECFAST) ?
-        Trad_function(x) : RECFAST_Tmat_z(x2z(x))
+        Trad_function(x) : Tmat(trhist, x2z(x))
 
     # =====================================================
 	#j - do we really need bg to be passed to IonizationHistory separately from 𝕣.bg?

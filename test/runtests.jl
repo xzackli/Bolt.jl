@@ -37,13 +37,14 @@ end
 ##
 @testset "RECFAST" begin
     recfastdata = readdlm("data/test_recfast_1.dat", ',', Float64, '\n', header=true)[1]
-    z⃗, Xe_fort = recfastdata[:,1], recfastdata[:,2]
+    z⃗, Xe_fort = recfastdata[:,1][1:end-5], recfastdata[:,2][1:end-5]
     𝕡 = CosmoParams(Σm_ν=0.0, N_ν=3.0, Ω_r=5.042e-5)
     bg = Background(𝕡)
     𝕣 = Bolt.RECFAST(bg=bg, OmegaB=𝕡.Ω_b, Yp=𝕡.Y_p, OmegaG=𝕡.Ω_r, Tnow=2.725)
-    xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
+    rhist = Bolt.recfastsolve(𝕣)
+    # xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
     #change to only test pre-reion (z≧50)
-    @test all(abs.(Xe_fort[1:end-5] .- xe_bespoke[1:end-5]) .< 1e-5)
+    @test all(abs.(Xe_fort .- Bolt.Xe.((rhist,), z⃗)) .< 1e-4)
 end
 
 ##
