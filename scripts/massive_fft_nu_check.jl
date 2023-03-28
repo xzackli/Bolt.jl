@@ -225,12 +225,9 @@ function fft_ie(ie::IEallν,perturb,M,u₀,x_grid)
         Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
     end
 
-    
     𝒩₀ = ie.s𝒳₀[1](x_grid[1])
     _,_,𝒩₁,_,_,_,_,_,_ =  unpack(u₀,ie)   
     𝒩₂ = ie.s𝒳₂[1](x_grid[1])
-    # ℳ₀,ℳ₂ = zeros(nq),zeros(nq) #FIXME: Type annotation?
-
     𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀,𝒩₁,𝒩₂)) #massless
     # Compute the new perts via FFT
     𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), 1.0,0.0,𝕡,M)#,
@@ -292,8 +289,11 @@ function fft_ie_c(ie::IEallν,perturb,M,u₀,x_grid) #FIXME add type decorators
     for j in 1:M
         Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb( bg.η(invx[j]) .*Mpcfac ),ie,invx[j])
     end
-    _,_,𝒩₀,_,_,_,_,_,_ =  unpack(u₀,ie)   
-    𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀[0],𝒩₀[1],𝒩₀[2])) #massless
+    
+    𝒩₀ = ie.s𝒳₀[1](x_grid[1])
+    _,_,𝒩₁,_,_,_,_,_,_ =  unpack(u₀,ie)   
+    𝒩₂ = ie.s𝒳₂[1](x_grid[1])
+    𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀,𝒩₁,𝒩₂)) #massless
     # Compute the new perts via FFT
     𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), 1.0,0.0,𝕡,M)#,
     # Put it all together
@@ -316,8 +316,10 @@ function fft_ie_c(ie::IEallν,perturb,M,u₀,x_grid) #FIXME add type decorators
         for j in 1:M
             Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
         end
-        _,_,_, ℳ₀,_,_,_,_,_ =  unpack(u₀,ie)   
-        𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀[0+i_q],ℳ₀[0+nq+i_q],ℳ₀[0+2nq+i_q])) #massive
+        ℳ₀ = ie.s𝒳₀[2+i_q](x_grid[1])
+        _,_,_, ℳ₁,_,_,_,_,_ =  unpack(u₀,ie)   
+        ℳ₂ = ie.s𝒳₂[2+i_q](x_grid[1])
+        𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀,ℳ₁[1+i_q],ℳ₂)) #massive
         
         # Compute the new perts via FFT
         𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), q,𝕡.Σm_ν,𝕡,M)#,
@@ -412,11 +414,14 @@ end
 function iterate_fft_c(𝒩₀_km1,𝒩₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, ℓ_mν, n_q,
     M, reltol,η_ini, η_fin,u0,m,q,i_q) where T
     # 𝒩₀_k,𝒩₂_k = zero(𝒩₀_km1),zero(𝒩₂_km1) #need this line ow is never updated
+    # println("in fft_c ")
     ie_k_late = IEν(BasicNewtonian(), 𝕡, bg, ih, k,
                     𝒩₀_km1, 𝒩₂_km1,
                     ℓᵧ, ℓ_mν, n_q)
     ie_k_conf_late_c = ConformalIEν(ie_k_late,η2x);
     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
+    # println("eta ini: ", η2x(η_ini/Mpcfac))
+    # println("AHH: ", η2x(perturb_k_late_c.t/Mpcfac)[1])
     xx,𝒩₀_k,𝒩₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,m,q,i_q,
                         u0,η2x(perturb_k_late_c.t/Mpcfac)) 
     return xx,𝒩₀_k,𝒩₂_k,perturb_k_late_c
@@ -438,13 +443,17 @@ end
 
 function iterate_fft_allν_c(𝒳₀_km1,𝒳₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, n_q,
     M, reltol,η_ini, η_fin,u0) where T
+    # println("in allnuc ")
+    # println("eta ini: ", η2x(η_ini))
     ie_k_late = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
                     𝒳₀_km1,𝒳₂_km1,
                     ℓᵧ, n_q)
     ie_k_conf_late_c = ConformalIEallν(ie_k_late,η2x);
     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
+    # println("AHH: ", η2x(perturb_k_late_c.t/Mpcfac)[1])
     xx,𝒳₀_k,𝒳₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,
                         u0,η2x(perturb_k_late_c.t/Mpcfac)) 
+    # println("AHH2: xx[1:3] ",xx[1:3])
     return xx,𝒳₀_k,𝒳₂_k,perturb_k_late_c
 end
 
@@ -468,13 +477,13 @@ function itersolve_fft(Nₖ::Int,ie_0_c::ConformalIEν{T},M::Int,η_ini, η_fin,
     𝒩₀_0,𝒩₂_0 = ie_0_c.ie.s𝒩₀,ie_0_c.ie.s𝒩₂
     𝒩₀_k,𝒩₂_k = 𝒩₀_0,𝒩₂_0
     perturb_k = nothing
-    ηη_k = nothing
+    xx_k = nothing
     for k in 1:Nₖ
-        ηη_k,𝒩₀_k,𝒩₂_k,perturb_k = iterate_fft_c(𝒩₀_k,𝒩₂_k,ie_0_c.ie.par,ie_0_c.ie.bg,ie_0_c.ie.ih,
+        xx_k,𝒩₀_k,𝒩₂_k,perturb_k = iterate_fft_c(𝒩₀_k,𝒩₂_k,ie_0_c.ie.par,ie_0_c.ie.bg,ie_0_c.ie.ih,
                                                ie_0_c.ie.k,ie_0_c.ie.ℓ_γ,ie_0_c.ie.ℓ_mν,ie_0_c.ie.nq,M,reltol,
                                                η_ini, η_fin,u0,m,q,i_q)
     end
-    return ηη_k,𝒩₀_k,𝒩₂_k,perturb_k
+    return xx_k,𝒩₀_k,𝒩₂_k,perturb_k
 end
 
 function itersolve_fft(Nₖ::Int,ie_0::IEallν{T},M::Int,x_ini,x_fin,u0;reltol=1e-6) where T
@@ -495,13 +504,16 @@ function itersolve_fft(Nₖ::Int,ie_0_c::ConformalIEallν{T},M::Int,η_ini, η_f
     𝒳₀_0,𝒳₂_0 = ie_0_c.ie.s𝒳₀,ie_0_c.ie.s𝒳₂
     𝒳₀_k,𝒳₂_k = 𝒳₀_0,𝒳₂_0
     perturb_k = nothing
-    ηη_k = nothing
+    xx_k = nothing
     for k in 1:Nₖ
-        ηη_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate_fft_allν_c(𝒳₀_k,𝒳₂_k,ie_0_c.ie.par,ie_0_c.ie.bg,ie_0_c.ie.ih,
+        # println("conformal kiter: ",k)
+        xx_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate_fft_allν_c(𝒳₀_k,𝒳₂_k,ie_0_c.ie.par,ie_0_c.ie.bg,ie_0_c.ie.ih,
                                                ie_0_c.ie.k,ie_0_c.ie.ℓ_γ,ie_0_c.ie.nq,M,reltol,
                                                η_ini, η_fin,u0)
+        # println("ctime xx_k[1:3] ", xx_k[1:3])
     end
-    return ηη_k,𝒳₀_k,𝒳₂_k,perturb_k
+    # println("final ctime xx_k[1:3] ", xx_k[1:3])
+    return xx_k,𝒳₀_k,𝒳₂_k,perturb_k
 end
 
 
@@ -518,30 +530,40 @@ function get_switch_u0(η,hierarchy_conf) #Input is η of the switch
     sol_early_c = h_boltsolve_conformal_flex(hierarchy_conf, bg.η[1], bg.η[switch_idx],  initial_conditions(bg.x_grid[1], hierarchy));
     
     # Get the new initial conditions
-    u0_ie_c = zeros(2(ℓᵧ+1) + (2+1) + (2+1)*n_q + 5);
+    u0_ie_c = zeros(2(ℓᵧ+1) + (0+1) + (0+1)*n_q + 5);
     # The first split will be the same
-    for i in  1:2(ℓᵧ+1)+(2+1) #up to massless ν quadrupole (w/photon hierarchy #FIXME)
+    for i in  1:2(ℓᵧ+1) #up to massless ν quadrupole (w/photon hierarchy #FIXME)
         u0_ie_c[i] = sol_early_c.u[end][i]
     end
+    #set the massless neutrino dipole
+    u0_ie_c[2(ℓᵧ+1)+1] = sol_early_c.u[end][2(ℓᵧ+1)+2]
 
-    # for i in  2(ℓᵧ+1)+(ℓ_ν+1)+1:pertlen #skip the higher massless hierarchy multipoles
-    for i in  2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+1 #skip the higher massless hierarchy multipoles
-        down_shift = i-(ℓ_ν-2) #shift down by the number of multipoles we skip
-        u0_ie_c[down_shift] = sol_early_c.u[end][i]
-    end
+    #This does nothing??
+    # for i in  2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+1 #skip the higher massless hierarchy multipoles
+    #     down_shift = i-(ℓ_ν-2) #shift the hierarchy index down by the number of multipoles we skip in the ie
+    #     u0_ie_c[down_shift] = sol_early_c.u[end][i]
+    # end
+
+    #massive neutrinos, now we just do the dipole again
 
     #TODO Since this is contiguous, can combine it with the above loop
     # Do the same for massive neutrinos, which are arranged as [q1,q2,...,qnq]_ℓ=0, [q1,q2,...,qnq]_ℓ=1, ..., []_ℓ=ℓ_mν
-    for i_ℓ in 1:3 #we fill all the multipoles as we usually would up to the quadrupole
-        for i in 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*(i_ℓ-1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+i_ℓ*n_q 
-            down_shift = i-(ℓ_ν-2)
-            u0_ie_c[down_shift] = sol_early_c.u[end][i]
-        end
+    # for i_ℓ in 1:3 #we fill all the multipoles as we usually would up to the quadrupole
+    #     for i in 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*(i_ℓ-1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+i_ℓ*n_q 
+    #         down_shift = i-(ℓ_ν-2)
+    #         u0_ie_c[down_shift] = sol_early_c.u[end][i]
+    #     end
+    # end
+
+    # start at the dipole first q idx, go up to the last dipole q idx (in the hierarchy)   
+    for i in 1:n_q 
+        # down_shift = i-(ℓ_ν+1 - 1)-(ℓ_mν+1 - 1)
+        u0_ie_c[2(ℓᵧ+1)+1+i] = sol_early_c.u[end][2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1+i]
     end
 
-    for i in  pertlen-5:pertlen #skip the higher massless hierarchy multipoles
-        down_shift = i-(ℓ_ν-2)-n_q*(ℓ_mν-2) #shift down by the number of multipoles we skip
-        u0_ie_c[down_shift] = sol_early_c.u[end][i]
+    for i in  1:5 #skip the higher massless hierarchy multipoles
+        # down_shift = i-(ℓ_ν+1-1)-n_q*(ℓ_mν+1-1) #shift down by the number of multipoles we skip
+        u0_ie_c[2(ℓᵧ+1)+1+n_q+i] = sol_early_c.u[end][pertlen-5+i]
     end
 
     return u0_ie_c
@@ -600,11 +622,7 @@ spl0h𝒩₀,spl0h𝒩₂ = linear_interpolation(collect(bg.x_grid),𝒩₀_0), 
 ν_idx = 2(ℓᵧ+1) + 1
 c𝒩₀_0,c𝒩₂_0 =  results_conf[2(ℓᵧ+1)+1,:],results_conf[2(ℓᵧ+1)+3,:] #hierarchy answer
 c_spl0h𝒩₀,c_spl0h𝒩₂ = linear_interpolation(η2x(results_conf.t/Mpcfac),c𝒩₀_0), linear_interpolation(η2x(results_conf.t/Mpcfac),c𝒩₂_0)
-cℳ₀q1_0,cℳ₂q1_0 =  results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+1,:],results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,:] #hierarchy answer
-c_spl0hℳ₀q1,c_spl0hℳ₂q1 = linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₀q1_0), linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₂q1_0)
-cℳ₀qend_0,cℳ₂qend_0 =  results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+15,:],results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+15,:] #hierarchy answer
-c_spl0hℳ₀qend,c_spl0hℳ₂qend = linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₀qend_0), linear_interpolation(η2x(results_conf.t/Mpcfac),cℳ₂qend_0)
-u0_ie_c = get_switch_u0(1.0,hierarchy_conf)
+
 massive_interps₀ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]) for idx_q in 1:n_q];
 massive_interps₂ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
 all_splines₀ = [c_spl0h𝒩₀,massive_interps₀...]
@@ -642,13 +660,30 @@ end
 M=2048*4
 
 
-
+#test
 u0_iter = Bolt.initial_conditions(-20.0, x_ie_all_0);
-xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(5,x_ie_all_0,M, 
+xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(2,x_ie_all_0,M, 
                                             bg.x_grid[1],bg.x_grid[end],
                                             u0_iter
                                             );
+ 
 
+plot!(xx_k,perturb_k(xx_k)[1,:])
+
+u0_iter_c = Bolt.initial_conditions(η2x(η_switch/Mpcfac), ie_all_0_c.ie);
+
+
+#something is wrong with this...it should not be going to x=-20
+ηη_k_c,𝒳₀_k_c,𝒳₂_k_c,perturb_k_c = itersolve_fft(2,ie_all_0_c,M, 
+                                            η_switch/Mpcfac,bg.η[end],
+                                            u0_iter_c
+                                            );
+
+ηη_k_c[1]
+η2x(perturb_k_late_c.t/Mpcfac)
+η2x(η_switch/Mpcfac)
+
+plot!(ie_all_0_c.η2x.(ηη_k_c*Mpcfac),perturb_k_c(xx_k_c)[1,:])
 
 #---------------------------------#
 #---------------------------------#
@@ -657,20 +692,68 @@ xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(5,x_ie_all_0,M,
 #---------------------------------#
 
 
-# Set up ansatzs and struct
-all_const_ansatz₀ = [linear_interpolation(η2x.(results_conf.t/Mpcfac),u0_ie_c[ν_idx+(idx_q-1)*n_q]*ones(length(results_conf.t)))
-                 for idx_q in 1:n_q+1];
-all_zero_ansatz₂ = [linear_interpolation(η2x.(results_conf.t/Mpcfac),zeros(length(results_conf.t)))
-                for idx_q in 1:n_q+1];
+u0_ie_c = get_switch_u0(1.0,hierarchy_conf);
 
-ie_0_late_c = IEνall(BasicNewtonian(), 𝕡, bg, ih, k,
+
+length(u0_ie_c)-5-15
+ν_idx
+# Set up ansatzs and struct
+# don't forget that u0 no longer has monopole and quadrupole for truncated heirarchy, so use hierarchy results...
+all_const_ansatz₀ =[linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx,1]*ones(length(results_conf.t))), 
+                    [linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx+(ℓ_ν+1)+(idx_q-1),1]*ones(length(results_conf.t)))
+                 for idx_q in 1:n_q]...];
+# all_zero_ansatz₂ = [linear_interpolation(η2x.(results_conf.t/Mpcfac),zeros(length(results_conf.t)))
+#                 for idx_q in 1:n_q+1];
+all_const_ansatz₂ =[linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx+2,1]*ones(length(results_conf.t))), 
+                    [linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx+(ℓ_ν+1)+2n_q+(idx_q-1),1]*ones(length(results_conf.t)))
+                 for idx_q in 1:n_q]...];
+ie_0_late_c = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
                     all_const_ansatz₀,
-                    all_zero_ansatz₂,
-                    ℓᵧ, ℓ_mν, n_q);
-ie_0_conf_late_c = ConformalIEνall(ie_0_late_c,η2x);
+                    # all_zero_ansatz₂,
+                    all_const_ansatz₂,
+                    ℓᵧ, n_q);
+ie_0_conf_late_c = ConformalIEallν(ie_0_late_c,η2x);
 
 
 # Experiments
+
+
+plot(xx_kt,all_const_ansatz₀[1].(xx_kt))
+plot!(xx_kt,spl0h𝒩₀.(xx_kt))
+plot(xx_kt,all_const_ansatz₂[1].(xx_kt))
+plot!(xx_kt,spl0h𝒩₂.(xx_kt))
+plot(xx_kt,abs.(all_const_ansatz₀[2].(xx_kt)),yscale=:log10)
+plot!(xx_kt,abs.(all_splines₀[2].(xx_kt)))
+ylims!(1e-3,5e-2)
+plot(xx_kt,abs.(all_const_ansatz₂[2].(xx_kt)),yscale=:log10)
+plot!(xx_kt,abs.(all_splines₂[2].(xx_kt)))
+plot!(xx_kt,abs.(x_all_splines₂[2].(xx_kt)))
+plot!(xx_kt,abs.(results_conf(bg.η(xx_kt)*Mpcfac)[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,:]))
+plot!(bg.x_grid,abs.(results_conf(bg.η(bg.x_grid)*Mpcfac)[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,:]))
+
+results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,2]
+
+
+plot(xx_kt,abs.(all_const_ansatz₂[end].(xx_kt)),yscale=:log10)
+plot!(xx_kt,abs.(all_splines₂[end-1].(xx_kt)))
+
+
+plot(xx_kt,abs.(all_const_ansatz₂[end].(xx_kt)),yscale=:log10)
+plot!(xx_kt,abs.(all_splines₂[end].(xx_kt)))
+
+all_const_ansatz₀[1].(xx_kt)
+results[end,1]
+u0_ie_c[end]
+
+
+results[103+1,1]
+u0_ie_c[103]
+
+results[103+50+21,1]
+u0_ie_c[104]
+
+#Ah man u0_ie_c is messed up...
+
 
 # And now ctime
 M=2048*4
@@ -680,52 +763,52 @@ reltol=7e-4
 
 # First experiment
 η_switchη_switch = [1.0] #[0.5,1.0,10.0,100.0] 
-η_switch = 1.0
-MM = [8192]#[2^i for i in 12:14]
-NᵢNᵢ = [1]#[2i-1 for i in 1:5] #max iters
+η_switch = 10.0
+MM = [8192*4]#[2^i for i in 12:14]
+NᵢNᵢ = [2i-1 for i in 1:5] #max iters
 
 #run this for plotting consistency
-xx_kt,𝒩₀_kt,𝒩₂_kt,perturb_kt= itersolve_fft(1,ie_0_conf_late_c,MM[end],
+xx_kt,𝒳₀_kt,𝒳₂_kt,perturb_kt= itersolve_fft(1,ie_0_conf_late_c,MM[end],
     η_switchη_switch[1]/Mpcfac,bg.η[end],get_switch_u0(η_switchη_switch[1],hierarchy_conf);reltol=reltol);
 
-
-
+println(xx_kt[1:3])
+plot_idx=16;
 for η_switch in η_switchη_switch
     # Set the initial conditions at a particular switch value
     u0_ie_c = get_switch_u0(η_switch,hierarchy_conf)
-    # Initial guess
-    p1 = plot(p1,xx_kt,ie_0_late_c.s𝒩₀.(xx_kt),label="I = 0, mono init ansatz",legendfont=font(4),ls=:dash)
-    p2 = plot(xx_kt,ie_0_late_c.s𝒩₂.(xx_kt),label=false,c=p1.series_list[1][:linecolor],legendfont=font(4),ls=:dash)
+    # Initial guess (for now jsut leave the monopole)
+    p1 = plot(xx_kt,1e-16 .+ abs.(ie_0_late_c.s𝒳₀[plot_idx].(xx_kt)),label="I = 0, mono init ansatz",legendfont=font(4),ls=:dash,yscale=:log10)
+    p2 = plot(xx_kt,1e-16 .+abs.(ie_0_late_c.s𝒳₂[plot_idx].(xx_kt)),label=false,c=p1.series_list[1][:linecolor],legendfont=font(4),ls=:dash,yscale=:log10)
     # Hierarchy
-    plot!(p1,xx_kt,c_spl0h𝒩₀.(xx_kt),label="H",color=:black,lw=2)
-    plot!(p2,xx_kt,c_spl0h𝒩₂.(xx_kt),label=false,color=:black,lw=2)
-
+    plot!(p1,xx_kt,abs.(all_splines₀[plot_idx].(xx_kt)),label="H",color=:black,lw=2)
+    plot!(p2,xx_kt,abs.(all_splines₂[plot_idx].(xx_kt)),label=false,color=:black,lw=2)
     for M in MM
         for Nᵢ in NᵢNᵢ
-            @time xx_k,𝒩₀_k,𝒩₂_k,perturb_k = itersolve_fft(Nᵢ,ie_0_conf_late_c,M,
+            xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(Nᵢ,ie_0_conf_late_c,M,
                                             η_switch/Mpcfac,bg.η[end],u0_ie_c;reltol=reltol);
+
             println("(M = $M, Nᵢ = $Nᵢ), 
                     error against full hierarchy is 
-                    ℓ=0: $(sum( (c_spl0h𝒩₀.(xx_k) .- 𝒩₀_k.(xx_k)).^2 )/M),
-                    ℓ=2: $(sum( (c_spl0h𝒩₂.(xx_k) .- 𝒩₂_k.(xx_k)).^2 )/M)\n")
-            label="I = $(Nᵢ), Planck50_ansatz"#M = $(M), lmax = $(ℓ_ν)" 
-            plot!(p1,xx_k,𝒩₀_k.(xx_k),label=label,c=:red)
-            plot!(p2,xx_k,𝒩₂_k.(xx_k),label=false,c=p1.series_list[end][:linecolor])
+                    ℓ=0: $(sum( (all_splines₀[plot_idx].(xx_k) .- 𝒳₀_k[plot_idx].(xx_k)).^2 )/M),
+                    ℓ=2: $(sum( (all_splines₂[plot_idx].(xx_k) .- 𝒳₂_k[plot_idx].(xx_k)).^2 )/M)\n")
+            label="I = $(Nᵢ),"#M = $(M), lmax = $(ℓ_ν)" 
+            plot!(p1,xx_k,abs.(𝒳₀_k[plot_idx].(xx_k)),label=label)
+            plot!(p2,xx_k,abs.(𝒳₂_k[plot_idx].(xx_k)),label=false,c=p1.series_list[end][:linecolor])
                     
         end
     end
-    # ylims!(p1,-0.1,0.1)
-    # ylims!(p2,-0.05,0.04)
+    # ylims!(p1,-0.1,1.1)
+    # ylims!(p2,-0.5,0.7)
     xlabel!(p2,L"x",xguidefontsize=18)
-    ylabel!(p1,L"\mathcal{N}_{0}",xguidefontsize=18)
-    ylabel!(p2,L"\mathcal{N}_{2}",xguidefontsize=18)
+    ylabel!(p1,L"\mathcal{X}_{0}",xguidefontsize=18)
+    ylabel!(p2,L"\mathcal{X}_{2}",xguidefontsize=18)
     l = @layout [a  ; b]
-    title!(p1,"k = $(@sprintf("%.2f", ie_0.k/Mpcfac
-    )), vary ansatz, switch at $(@sprintf("%.1f", η_switch)) Mpc, 3 poles")
+    title!(p1,"k = $(@sprintf("%.2f", ie_0_conf_late_c.ie.k/Mpcfac
+    )), switch at $(@sprintf("%.1f", η_switch)) Mpc")
     p3 = plot(p1, p2, layout = l)
-    savefig("../misc_plots/fft_debug/fft_experiments/mssv_k$(@sprintf("%.2f", ie_0.k/Mpcfac
-            ))_switch$(@sprintf("%.1f", η_switch))_elmax3_varyansatz_n1.pdf"
+    savefig("../misc_plots/fft_debug/fft_experiments/mssv_k$(@sprintf("%.2f", ie_0_conf_late_c.ie.k/Mpcfac
+            ))_qend_switch$(@sprintf("%.1f", η_switch)).pdf"
     )
-
-# end
-
+end
+p3
+η2x(η_switch/Mpcfac)
