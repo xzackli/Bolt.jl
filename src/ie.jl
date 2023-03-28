@@ -93,7 +93,6 @@ IEν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractB
     ℓ_γ=8, ℓ_mν=10, nq=15
     ) = IEν(integrator, par, bg, ih, k, s𝒩₀, s𝒩₂, ℓ_γ,ℓ_mν, nq)
 
-    # This is just a convenience constructor, we shouldn't actually need it
 IEallν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real,
     # sx::AbstractArray{T,1},
@@ -250,11 +249,12 @@ end
 function boltsolve_conformal(confie::ConformalIEallν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
-    xᵢ = η2x( ie.bg.η[1] ) 
+    xᵢ = ie.bg.x_grid[1]#η2x( ie.bg.η[1] ) 
     Mpcfac = ie.bg.H₀*299792.458/100.
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie_conformal!, u₀, 
-        (ie.bg.η[1]*Mpcfac, ie.bg.η[end]*Mpcfac),
+        (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
+        min(ie.bg.η[end]*Mpcfac,ie.bg.η(ie.bg.x_grid[end])*Mpcfac)),
         confie)
     sol = solve(prob, ode_alg, reltol=reltol,
                 dense=false
@@ -342,12 +342,14 @@ end
 function unpack(u, ie::IEallν{T, BasicNewtonian}) where T
     ℓᵧ =  ie.ℓ_γ
     nq = ie.nq
-    ℓ_ν=2 
-    ℓ_mν = 2 
+    ℓ_ν=0 #2 
+    ℓ_mν = 0 #2 
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
     Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
-    𝒩 = OffsetVector(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1)) , 0:ℓ_ν)  # indexed 0 through ℓ_ν
-    ℳ = OffsetVector(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq )) , 0:(ℓ_mν+1)*nq -1)  # indexed 0 through ℓ_mν
+    # 𝒩 = OffsetVector(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1)) , 0:ℓ_ν)  # indexed 0 through ℓ_ν
+    𝒩 = view(u, (2(ℓᵧ+1) + 1)) # only need dipole
+    # ℳ = OffsetVector(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq )) , 0:(ℓ_mν+1)*nq -1)  # indexed 0 through ℓ_mν
+    ℳ = view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq ))   # only need dipole (at all q)
     Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5)) #getting a little messy...
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
@@ -404,13 +406,13 @@ function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
     ℓ_mν =  ie.ℓ_mν
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, ie)  # will be sweetened by .. syntax in 1.6
-    Θ[2] = ie.sΘ2(x)# call the spline, update Θ₂ at top since we do not evolve it
-
+    # Θ[2] = ie.sΘ2(x)# call the spline, update Θ₂ at top since we do not evolve it
+    Θ₂ = ie.sΘ2(x)# call the spline, update Θ₂ at top since we do not evolve it
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
     ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ₂+#Θ[2]+
                                   Ω_ν * 𝒩[2]#add rel quadrupole
                                   + σℳ / bg.ρ_crit /4
                                   )
@@ -485,8 +487,9 @@ function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
 
 		#ℓ=0,1 DEs
         Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
-        Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
-
+        # Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ[2] + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
+        Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ₂ + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
+        
         # polarized photons
         #Polzn IE:
         # Π = IE_solve(∫Π,xᵢ,x,Nᵧ) #not doing the internal solve rn, try later
@@ -526,8 +529,10 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     
     Mpcfac = ie.bg.H₀*299792.458/100.
     # if ηₓ*Mpcfac >= 1.0 #overwrite the neutrino perts if sufficiently late
-    𝒩[0] = ie.s𝒩₀(x) #FIXME this sucks, need a ctime ie!
-    𝒩[2] = ie.s𝒩₂(x)
+    # 𝒩[0] = ie.s𝒩₀(x) #FIXME this sucks, need a ctime ie!
+    # 𝒩[2] = ie.s𝒩₂(x)
+    𝒩₀ = ie.s𝒩₀(x)
+    𝒩₂ = ie.s𝒩₂(x)
     # end
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
@@ -545,7 +550,7 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
 
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]#add rel quadrupole
+                                  Ω_ν * 𝒩₂ #𝒩[2]#add rel quadrupole
                                   + σℳ / bg.ρ_crit /4
                                   )
 
@@ -554,7 +559,7 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
+        + 4Ω_ν * a^(-2) * 𝒩₀ #𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         )
     # println("type Phi: ", typeof(Φ′))
@@ -593,8 +598,9 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     # relativistic neutrinos (massless)
     
 
-    𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-    𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+    # 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
+    # 𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+    𝒩′[1] = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
     #use truncation expression since we don't evolve octopole
     # if ηₓ*Mpcfac < 1.0  #if early, need to actually evolve quadrupole
     #     𝒩′[2] =  k / ℋₓ  * 𝒩[1] - 3/(ℋₓ *ηₓ) *𝒩[2]
@@ -633,7 +639,7 @@ end
 
 function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
-    k, ℓ_ν, ℓ_mν, par, bg, ih, nq = ie.k, 2, 2, ie.par, ie.bg, ie.ih, ie.nq
+    k, ℓ_ν, ℓ_mν, par, bg, ih, nq = ie.k, 0, 0, ie.par, ie.bg, ie.ih, ie.nq #zeros here used to be 2s
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -652,14 +658,24 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     #update pert vectors with splines
     #FIXME this is not strictly necessary, we could instead use the splines in eqns directly, but might be harder to read
     #FIXME  need a ctime ie!
-    𝒩[0] = ie.s𝒳₀[1](x) 
-    𝒩[2] = ie.s𝒳₂[1](x)
-    for idx_q in 0:(nq-1)
-        ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+2](x)
-        ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+2](x)
+    # 𝒩[0] = ie.s𝒳₀[1](x) 
+    # 𝒩[2] = ie.s𝒳₂[1](x)
+    𝒩₀ = ie.s𝒳₀[1](x) 
+    𝒩₂ = ie.s𝒳₂[1](x)
+
+
+    # WARNING no longer an offset array!
+    ℳ₀ = zeros(T,nq)
+    ℳ₂ = zeros(T,nq)
+
+    for idx_q in 1:nq#0:(nq-1)
+        # ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+2](x)
+        # ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+2](x)
+        ℳ₀[idx_q] = ie.s𝒳₀[idx_q+1](x)
+        ℳ₂[idx_q] = ie.s𝒳₂[idx_q+1](x)
     end
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par)
+    ρℳ, σℳ  =  @views ρ_σ(ℳ₀, ℳ₂, bg, a, par)
 
     # for idx_q in 0:(nq-1)
         # println("all M0[$(idx_q)] = $(ℳ[0*nq+idx_q] )")
@@ -672,7 +688,7 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
 
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]#add rel quadrupole
+                                  Ω_ν * 𝒩₂    #𝒩[2]#add rel quadrupole
                                   + σℳ / bg.ρ_crit /4
                                   )
 
@@ -681,7 +697,7 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
+        + 4Ω_ν * a^(-2) * 𝒩₀ #𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         )
 
@@ -699,8 +715,9 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
         ϵ = √(q^2 + (a*m_ν)^2)
         df0 = dlnf0dlnq(q,par)
         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
-        ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
+        # ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
+        # ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
+        ℳ′[i_q+1] = k / (3ℋₓ) * ( q/ϵ * (ℳ₀[i_q+1] - 2ℳ₂[i_q+1])  - ϵ/q * Ψ  * df0)
         # for ℓ in 2:(ℓ_mν-1)
         #     ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
         # end
@@ -710,8 +727,9 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     # relativistic neutrinos (massless)
     
 
-    𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-    𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+    # 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
+    # 𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
+    𝒩′[1] = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
 
 
     # photons (hierarchy way)
@@ -814,7 +832,7 @@ end
 
 #FIXME this is a waste since the  only thing that changes is ℓ_ν vs ℓᵧ...
 function initial_conditions(xᵢ, ie::IEν{T, BasicNewtonian}) where T
-    k, ℓ_ν, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih, ie.nq
+    k, ℓ_ν, par, bg, ih, nq = ie.k, 0, ie.par, ie.bg, ie.ih, ie.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -837,19 +855,30 @@ function initial_conditions(xᵢ, ie::IEν{T, BasicNewtonian}) where T
 
     #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4
+    # Θ₀ = -40C/(15 + 4f_ν) / 4
     Θ[1] = 10C/(15 + 4f_ν) * (k^2 * ηₓ) / (3*k)
     Θ[2] = -8k / (15ℋₓ * τₓ′) * Θ[1]
-   
+    # Θ₂  = -8k / (15ℋₓ * τₓ′) * Θ[1]
 
     Θᵖ[0] = (5/4) * Θ[2]
     Θᵖ[1] = -k / (4ℋₓ * τₓ′) * Θ[2]
     Θᵖ[2] = (1/4) * Θ[2]
+    # Θᵖ[0] = (5/4) * Θ₂
+    # Θᵖ[1] = -k / (4ℋₓ * τₓ′) * Θ₂
+    # Θᵖ[2] = (1/4) * Θ₂
     for ℓ in 3:ℓᵧ
         Θ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θ[ℓ-1]
         Θᵖ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θᵖ[ℓ-1]
     end
+    # Θ[3] = -3/7 * k/(ℋₓ * τₓ′) * Θ₂
+    # Θᵖ[3] = -3/7 * k/(ℋₓ * τₓ′) * Θᵖ[2]
+    # for ℓ in 4:ℓᵧ
+    #     Θ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θ[ℓ-1]
+    #     Θᵖ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θᵖ[ℓ-1]
+    # end
 
     δ = 3/4 *(4Θ[0]) #the 4 converts δγ_MB -> Dodelson convention
+    # δ = 3/4 *(4Θ₀) 
     δ_b = δ
     #we have that Θc = Θb = Θγ = Θν, but need to convert Θ = - k v (i absorbed in v)
     v = -3k*Θ[1]
@@ -857,9 +886,12 @@ function initial_conditions(xᵢ, ie::IEν{T, BasicNewtonian}) where T
 
     # neutrino hierarchy
     # we need xᵢ to be before neutrinos decouple, as always
-    𝒩[0] = Θ[0]
+    # 𝒩[0] = Θ[0]
+    𝒩₀ = Θ[0]
+    # 𝒩₀ = Θ₀
     𝒩[1] = Θ[1]
-    𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
+    # 𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
+    𝒩₂ = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
     #FIXME^put the C here for consistency
     # for ℓ in 3:ℓ_ν
     #     𝒩[ℓ] = k/((2ℓ+1)ℋₓ) * 𝒩[ℓ-1] #standard truncation
@@ -883,7 +915,7 @@ function initial_conditions(xᵢ, ie::IEν{T, BasicNewtonian}) where T
 end
 #FIXME we don't actually need this, because we never initialize with the truncated hierarchy anwyways (these days)
 function initial_conditions(xᵢ, ie::IEallν{T, BasicNewtonian}) where T
-    k, ℓ_ν,ℓ_mν, par, bg, ih, nq = ie.k, 2, 2,ie.par, ie.bg, ie.ih, ie.nq
+    k, ℓ_ν,ℓ_mν, par, bg, ih, nq = ie.k, 0, 0,ie.par, ie.bg, ie.ih, ie.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -923,18 +955,24 @@ function initial_conditions(xᵢ, ie::IEallν{T, BasicNewtonian}) where T
 
     # neutrino hierarchy
     # we need xᵢ to be before neutrinos decouple, as always
-    𝒩[0] = Θ[0]
-    𝒩[1] = Θ[1]
-    𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
+
+    #FIXME drop these
+    # 𝒩[0] = Θ[0]
+    𝒩₀ = Θ[0]
+    # 𝒩[1] = Θ[1]
+    𝒩 = Θ[1]
+    # 𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
+    𝒩₂ = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
 
     #massive neutrino hierarchy
     #It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
         df0 = dlnf0dlnq(q,par)
-        ℳ[0* nq+i_q] = -𝒩[0]  *df0
-        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0
-        ℳ[2* nq+i_q] = -𝒩[2]  *df0  #drop quadratic+ terms in (ma/q) as in MB
+        # ℳ[0* nq+i_q] = -𝒩[0]  *df0
+        # ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0
+        ℳ[1+i_q] = -ϵ/q * 𝒩 *df0
+        # ℳ[2* nq+i_q] = -𝒩[2]  *df0  #drop quadratic+ terms in (ma/q) as in MB
     end
 
     u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
