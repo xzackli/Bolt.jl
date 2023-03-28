@@ -194,7 +194,8 @@ function boltsolve(ie::IEν{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=ie.bg.x_grid, dense=false, #FIXME
+                # saveat=ie.bg.x_grid, 
+                dense=false, #FIXME
                 )
     return sol
 end
@@ -238,7 +239,8 @@ function boltsolve_conformal(confie::ConformalIEν{T},#FIXME we don't need this?
     # xᵢ = η2x( 1.0/Mpcfac ) 
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie_conformal!, u₀, 
-        (ie.bg.η[1]*Mpcfac, ie.bg.η[end]*Mpcfac),
+    (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
+    min(ie.bg.η[end]*Mpcfac,ie.bg.η(ie.bg.x_grid[end])*Mpcfac)),
         confie)
     sol = solve(prob, ode_alg, reltol=reltol,
                 # saveat=ie.bg.η(x_grid)*Mpcfac,
@@ -331,10 +333,11 @@ function unpack(u, ie::IEν{T, BasicNewtonian}) where T
     ℓᵧ =  ie.ℓ_γ
     ℓ_mν = ie.ℓ_mν #should be smaller than others
     nq = ie.nq
-    ℓ_ν=2 
+    ℓ_ν=0
     Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
     Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
-    𝒩 = OffsetVector(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1)) , 0:ℓ_ν)  # indexed 0 through ℓ_ν
+    # 𝒩 = OffsetVector(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1)) , 0:ℓ_ν)  # indexed 0 through ℓ_ν
+    𝒩 = view(u, (2(ℓᵧ+1) + 1)) # only need dipole
     ℳ = OffsetVector(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq )) , 0:(ℓ_mν+1)*nq -1)  # indexed 0 through ℓ_mν
     Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5)) #getting a little messy...
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
@@ -509,7 +512,7 @@ end
 
 function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
-    k, ℓ_ν, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih, ie.nq
+    k, ℓ_ν, par, bg, ih, nq = ie.k, 0, ie.par, ie.bg, ie.ih, ie.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
@@ -600,7 +603,7 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
 
     # 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
     # 𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
-    𝒩′[1] = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
+    𝒩′ = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
     #use truncation expression since we don't evolve octopole
     # if ηₓ*Mpcfac < 1.0  #if early, need to actually evolve quadrupole
     #     𝒩′[2] =  k / ℋₓ  * 𝒩[1] - 3/(ℋₓ *ηₓ) *𝒩[2]
@@ -728,7 +731,7 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
 
     # 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
     # 𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
-    𝒩′[1] = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
+    𝒩′ = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
 
 
     # photons (hierarchy way)
@@ -888,7 +891,8 @@ function initial_conditions(xᵢ, ie::IEν{T, BasicNewtonian}) where T
     # 𝒩[0] = Θ[0]
     𝒩₀ = Θ[0]
     # 𝒩₀ = Θ₀
-    𝒩[1] = Θ[1]
+    # 𝒩[1] = Θ[1]
+    𝒩 = Θ[1]
     # 𝒩[2] = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
     𝒩₂ = - (k^2 *ηₓ^2)/15 * 1 / (1 + 2/5 *f_ν) * Φ  / 2 #MB
     #FIXME^put the C here for consistency
@@ -901,9 +905,9 @@ function initial_conditions(xᵢ, ie::IEν{T, BasicNewtonian}) where T
     for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
         df0 = dlnf0dlnq(q,par)
-        ℳ[0* nq+i_q] = -𝒩[0]  *df0
-        ℳ[1* nq+i_q] = -ϵ/q * 𝒩[1] *df0
-        ℳ[2* nq+i_q] = -𝒩[2]  *df0  #drop quadratic+ terms in (ma/q) as in MB
+        ℳ[0* nq+i_q] = -𝒩₀  *df0
+        ℳ[1* nq+i_q] = -ϵ/q * 𝒩 *df0
+        ℳ[2* nq+i_q] = -𝒩₂  *df0  #drop quadratic+ terms in (ma/q) as in MB
         for ℓ in 3:ℓ_mν #same scheme for higher-ell as for relativistic
             ℳ[ℓ* nq+i_q] = q / ϵ * k/((2ℓ+1)ℋₓ) * ℳ[(ℓ-1)*nq+i_q] #approximation of Callin06 (72), but add q/ϵ - leaving as 0 makes no big difference
         end

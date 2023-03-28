@@ -347,7 +347,8 @@ end
 function boltsolve_flex(ie::IEν{T}, x_ini,x_fin, u₀, ode_alg=KenCarp4(); reltol=1e-6) where T 
     prob = ODEProblem{true}(Bolt.ie!, u₀, (x_ini , x_fin), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=ie.bg.x_grid, dense=false, #FIXME
+                # saveat=ie.bg.x_grid, 
+                dense=false, #FIXME
                 )
     return sol
 end
@@ -355,7 +356,8 @@ end
 function boltsolve_flex(ie::IEallν{T}, x_ini,x_fin, u₀, ode_alg=KenCarp4(); reltol=1e-6) where T 
     prob = ODEProblem{true}(Bolt.ie!, u₀, (x_ini , x_fin), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=ie.bg.x_grid, dense=false, #FIXME
+                # saveat=ie.bg.x_grid, 
+                dense=false, #FIXME
                 )
     return sol
 end
@@ -414,14 +416,11 @@ end
 function iterate_fft_c(𝒩₀_km1,𝒩₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, ℓ_mν, n_q,
     M, reltol,η_ini, η_fin,u0,m,q,i_q) where T
     # 𝒩₀_k,𝒩₂_k = zero(𝒩₀_km1),zero(𝒩₂_km1) #need this line ow is never updated
-    # println("in fft_c ")
     ie_k_late = IEν(BasicNewtonian(), 𝕡, bg, ih, k,
                     𝒩₀_km1, 𝒩₂_km1,
                     ℓᵧ, ℓ_mν, n_q)
     ie_k_conf_late_c = ConformalIEν(ie_k_late,η2x);
     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
-    # println("eta ini: ", η2x(η_ini/Mpcfac))
-    # println("AHH: ", η2x(perturb_k_late_c.t/Mpcfac)[1])
     xx,𝒩₀_k,𝒩₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,m,q,i_q,
                         u0,η2x(perturb_k_late_c.t/Mpcfac)) 
     return xx,𝒩₀_k,𝒩₂_k,perturb_k_late_c
@@ -432,10 +431,7 @@ function iterate_fft_allν(𝒳₀_km1,𝒳₂_km1, 𝕡::CosmoParams{T}, bg, ih
     ie_k_late = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
                      𝒳₀_km1,𝒳₂_km1,
                     ℓᵧ, n_q)
-    #^The first time we do this is ok, so constructor is fine
     perturb_k_late = boltsolve_flex(ie_k_late, x_ini, x_fin, u0; reltol=reltol)
-    # I would suppose we lose it below, as 𝒳₀_k,𝒳₂_k are not arguments so their 
-    # types (and therefore memory sizes) are not known ahead of time...
     xx,𝒳₀_k,𝒳₂_k = fft_ie(ie_k_late,perturb_k_late,M,
                         u0,perturb_k_late.t) 
     return xx,𝒳₀_k,𝒳₂_k,perturb_k_late
@@ -443,17 +439,13 @@ end
 
 function iterate_fft_allν_c(𝒳₀_km1,𝒳₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, n_q,
     M, reltol,η_ini, η_fin,u0) where T
-    # println("in allnuc ")
-    # println("eta ini: ", η2x(η_ini))
     ie_k_late = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
                     𝒳₀_km1,𝒳₂_km1,
                     ℓᵧ, n_q)
     ie_k_conf_late_c = ConformalIEallν(ie_k_late,η2x);
     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
-    # println("AHH: ", η2x(perturb_k_late_c.t/Mpcfac)[1])
     xx,𝒳₀_k,𝒳₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,
                         u0,η2x(perturb_k_late_c.t/Mpcfac)) 
-    # println("AHH2: xx[1:3] ",xx[1:3])
     return xx,𝒳₀_k,𝒳₂_k,perturb_k_late_c
 end
 
@@ -488,11 +480,10 @@ end
 
 function itersolve_fft(Nₖ::Int,ie_0::IEallν{T},M::Int,x_ini,x_fin,u0;reltol=1e-6) where T
     𝒳₀_0,𝒳₂_0 = ie_0.s𝒳₀,ie_0.s𝒳₂
-    𝒳₀_k,𝒳₂_k = 𝒳₀_0,𝒳₂_0 #type is determined by type parameters of ie_0
+    𝒳₀_k,𝒳₂_k = 𝒳₀_0,𝒳₂_0 
     perturb_k = nothing
     xx_k = nothing
     for k in 1:Nₖ
-        # we lose type info somehow in this next call
         xx_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate_fft_allν(𝒳₀_k,𝒳₂_k,ie_0.par,ie_0.bg,ie_0.ih,
                                    ie_0.k,ie_0.ℓ_γ,ie_0.nq,
                                    M,reltol,x_ini,x_fin,u0)
@@ -506,13 +497,10 @@ function itersolve_fft(Nₖ::Int,ie_0_c::ConformalIEallν{T},M::Int,η_ini, η_f
     perturb_k = nothing
     xx_k = nothing
     for k in 1:Nₖ
-        # println("conformal kiter: ",k)
         xx_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate_fft_allν_c(𝒳₀_k,𝒳₂_k,ie_0_c.ie.par,ie_0_c.ie.bg,ie_0_c.ie.ih,
                                                ie_0_c.ie.k,ie_0_c.ie.ℓ_γ,ie_0_c.ie.nq,M,reltol,
                                                η_ini, η_fin,u0)
-        # println("ctime xx_k[1:3] ", xx_k[1:3])
     end
-    # println("final ctime xx_k[1:3] ", xx_k[1:3])
     return xx_k,𝒳₀_k,𝒳₂_k,perturb_k
 end
 
@@ -584,7 +572,13 @@ kclass = retnf_class[2][1] #read class k mode from file (in h/Mpc)
 dx = ret[2,1]-ret[1,1]
 unzip(a) = map(x->getfield.(a, x), fieldnames(eltype(a)))
 
-𝕡 = CosmoParams(); 
+𝕡 = CosmoParams();
+# 𝕡 = CosmoParams(
+#     h = 0.6774,  # hubble factor
+#     Ω_b = 0.0486, 
+#     Ω_m = 0.2589,
+#     Σm_ν = 0.15
+# ) # Planck15 modifications to h, Ω_b,Ω_c, make mnu=0 
 n_q=15
 bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q);
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b); #FIXME γΩ
@@ -607,14 +601,45 @@ for (i_x, x) in enumerate(bg.x_grid)
     results[:,i_x] = u #z should use unpack somehow
 end
 #conformal hierarchy
-using Bolt
 η2x = linear_interpolation(bg.η,bg.x_grid);
 
 hierarchy_conf = ConformalHierarchy(hierarchy,η2x);
 results_conf = boltsolve_conformal(hierarchy_conf;reltol=reltol);
 
-#sometimes this happens at the end, sometimes at the beginnning....
+plot(bg.x_grid,results[2(ℓᵧ+1)+(ℓ_ν+1)+1,:])
+results[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]
 
+# writedlm("./test/data/Bolt_mslss_mssv_nuperts_mnu0p15_msslsslmax$(ℓ_ν)_mssvlmax$(ℓ_mν).dat",
+#           hcat(bg.x_grid,results[2(ℓᵧ+1)+1,:],results[2(ℓᵧ+1)+3,:],
+#           [results[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:] for idx_q in 1:n_q]...,
+#           [results[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+idx_q,:] for idx_q in 1:n_q]...))
+
+# fullplanck_ansatz = readdlm("./test/data/Bolt_mslss_mssv_nuperts_nonu_msslsslmax$(ℓ_ν)_mssvlmax$(ℓ_mν).dat")
+fullplanck_ansatz = readdlm("./test/data/Bolt_mslss_mssv_nuperts_mnu0p15_msslsslmax$(ℓ_ν)_mssvlmax$(ℓ_mν).dat")
+
+plot(fullplanck_ansatz[:,1],fullplanck_ansatz[:,2])
+plot!(fullplanck_ansatz[:,1],x_all_splines₀[1].(fullplanck_ansatz[:,1]))
+
+plot(fullplanck_ansatz[:,1],fullplanck_ansatz[:,1+2+1])
+plot!(fullplanck_ansatz[:,1],x_all_splines₀[2].(fullplanck_ansatz[:,1]))
+
+plot(fullplanck_ansatz[:,1],fullplanck_ansatz[:,1+2+15])
+plot!(fullplanck_ansatz[:,1],x_all_splines₀[16].(fullplanck_ansatz[:,1]))
+
+plot(fullplanck_ansatz[:,1],fullplanck_ansatz[:,3])
+plot!(fullplanck_ansatz[:,1],x_all_splines₂[1].(fullplanck_ansatz[:,1]))
+
+plot(fullplanck_ansatz[:,1],fullplanck_ansatz[:,1+2+15+1])
+plot!(fullplanck_ansatz[:,1],x_all_splines₂[2].(fullplanck_ansatz[:,1]))
+
+plot(fullplanck_ansatz[:,1],fullplanck_ansatz[:,1+2+15+15])
+plot!(fullplanck_ansatz[:,1],x_all_splines₂[16].(fullplanck_ansatz[:,1]))
+
+
+
+#sometimes this happens at the end, sometimes at the beginnning....
+plot(η2x.(results_conf.t/Mpcfac),results_conf(results_conf.t)[2(ℓᵧ+1)+1,:])
+plot!(bg.x_grid,results[2(ℓᵧ+1)+1,:])
 
 #truncated conformal hierarchy
 𝒩₀_0,𝒩₂_0 =  results[2(ℓᵧ+1)+1,:],results[2(ℓᵧ+1)+3,:] #hierarchy answer
@@ -627,13 +652,14 @@ massive_interps₀ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_c
 massive_interps₂ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
 all_splines₀ = [c_spl0h𝒩₀,massive_interps₀...]
 all_splines₂ = [c_spl0h𝒩₂,massive_interps₂...]
-all_splines₂[2](-20.0)
+
 x_massive_interps₀ = [linear_interpolation(collect(bg.x_grid),results[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]) for idx_q in 1:n_q];
 x_massive_interps₂ = [linear_interpolation(collect(bg.x_grid),results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
 x_all_splines₀ = [spl0h𝒩₀,x_massive_interps₀...]
 x_all_splines₂ = [spl0h𝒩₂,x_massive_interps₂...]
 
-using Bolt
+plot(bg.x_grid,c_spl0h𝒩₀.(bg.x_grid))
+plot!(bg.x_grid,spl0h𝒩₀.(bg.x_grid))
 
 ie_all_0 = IEallν(BasicNewtonian(), 𝕡, bg, ih, k, #test the new struct
         all_splines₀,
@@ -648,11 +674,12 @@ x_ie_all_0 = IEallν(BasicNewtonian(), 𝕡, bg, ih, k, #test the new struct
 x_perturb_all_0 = boltsolve(x_ie_all_0;reltol=reltol);
 
 ie_all_0_c = ConformalIEallν(ie_all_0,η2x);
-perturb_all_0_c = boltsolve_conformal(ie_all_0_c;reltol=1e-5);
+perturb_all_0_c = boltsolve_conformal(ie_all_0_c;reltol=reltol);
 
 
 x_ie_all_0_c = ConformalIEallν(x_ie_all_0,η2x);
-x_perturb_all_0_c = boltsolve_conformal(x_ie_all_0_c;reltol=1e-6);
+x_perturb_all_0_c = boltsolve_conformal(x_ie_all_0_c;reltol=reltol);
+#^This line still gives dtmin error on first solve...
 
 function χ′z(a,q,m,tq_pts,tq_wts)
     return q / (a * Bolt.ℋ_a(a,𝕡,tq_pts,tq_wts) * √(q^2 + (a*m)^2 ) )
@@ -662,28 +689,31 @@ M=2048*4
 
 #test
 u0_iter = Bolt.initial_conditions(-20.0, x_ie_all_0);
-xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(2,x_ie_all_0,M, 
+xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(1,x_ie_all_0,M, 
                                             bg.x_grid[1],bg.x_grid[end],
                                             u0_iter
                                             );
  
 
-plot!(xx_k,perturb_k(xx_k)[1,:])
+plot(xx_k,𝒳₀_k[1].(xx_k))
+plot!(xx_k,x_ie_all_0.s𝒳₀[1].(xx_k))
 
-u0_iter_c = Bolt.initial_conditions(η2x(η_switch/Mpcfac), ie_all_0_c.ie);
+u0_iter_c = Bolt.initial_conditions(η2x(1.0/Mpcfac), ie_all_0_c.ie);
 
 
 #something is wrong with this...it should not be going to x=-20
-ηη_k_c,𝒳₀_k_c,𝒳₂_k_c,perturb_k_c = itersolve_fft(2,ie_all_0_c,M, 
-                                            η_switch/Mpcfac,bg.η[end],
+xx_k_c,𝒳₀_k_c,𝒳₂_k_c,perturb_k_c = itersolve_fft(2,ie_all_0_c,M, 
+                                            1.0/Mpcfac,bg.η[end],
                                             u0_iter_c
                                             );
+plot(xx_k_c,𝒳₀_k_c[1].(xx_k_c))
+plot!(xx_k_c,ie_all_0_c.ie.s𝒳₀[1].(xx_k_c))
+               
 
-ηη_k_c[1]
-η2x(perturb_k_late_c.t/Mpcfac)
-η2x(η_switch/Mpcfac)
-
-plot!(ie_all_0_c.η2x.(ηη_k_c*Mpcfac),perturb_k_c(xx_k_c)[1,:])
+#^So neither of these things work, which is maybe not suprising since the
+#ICs that have to be set at x=-20 are being set at x=-12.3 so we should maybe
+#expect problems...
+#Not sure why this gets so much worse at second iter...
 
 #---------------------------------#
 #---------------------------------#
@@ -693,10 +723,8 @@ plot!(ie_all_0_c.η2x.(ηη_k_c*Mpcfac),perturb_k_c(xx_k_c)[1,:])
 
 
 u0_ie_c = get_switch_u0(1.0,hierarchy_conf);
-
-
-length(u0_ie_c)-5-15
-ν_idx
+# length(u0_ie_c)-5-15
+# ν_idx
 # Set up ansatzs and struct
 # don't forget that u0 no longer has monopole and quadrupole for truncated heirarchy, so use hierarchy results...
 all_const_ansatz₀ =[linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx,1]*ones(length(results_conf.t))), 
@@ -707,19 +735,108 @@ all_const_ansatz₀ =[linear_interpolation(η2x.(results_conf.t/Mpcfac),results_
 all_const_ansatz₂ =[linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx+2,1]*ones(length(results_conf.t))), 
                     [linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx+(ℓ_ν+1)+2n_q+(idx_q-1),1]*ones(length(results_conf.t)))
                  for idx_q in 1:n_q]...];
+
+x_all_const_ansatz₀ =[linear_interpolation(collect(bg.x_grid),results[ν_idx,1]*ones(length(collect(bg.x_grid)))), 
+                 [linear_interpolation(collect(bg.x_grid),results[ν_idx+(ℓ_ν+1)+(idx_q-1),1]*ones(length(collect(bg.x_grid))))
+              for idx_q in 1:n_q]...];
+
+x_all_const_ansatz₂ =[linear_interpolation(collect(bg.x_grid),              results[ν_idx+2,1]*ones(length(collect(bg.x_grid)))), 
+                 [linear_interpolation(collect(bg.x_grid),results[ν_idx+(ℓ_ν+1)+2n_q+(idx_q-1),1]*ones(length(collect(bg.x_grid))))
+              for idx_q in 1:n_q]...];
+
+only_massless_ansatz₀ =[
+                    linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx,1]*ones(length(results_conf.t))), 
+                    massive_interps₀...];
+only_massless_ansatz₂ =[
+                    linear_interpolation(η2x.(results_conf.t/Mpcfac),results_conf[ν_idx+2,1]*ones(length(results_conf.t))), 
+                    massive_interps₂...];
+
+x_only_massless_ansatz₀ =[
+                        linear_interpolation(collect(bg.x_grid),results_conf[ν_idx,1]*ones(length(collect(bg.x_grid)))), 
+                        x_massive_interps₀...];
+x_only_massless_ansatz₂ =[
+                        linear_interpolation(collect(bg.x_grid),results[ν_idx+2,1]*ones(length(collect(bg.x_grid)))), 
+                        x_massive_interps₂...];
+    
 ie_0_late_c = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
-                    all_const_ansatz₀,
+                    # only_massless_ansatz₀,
+                    # only_massless_ansatz₂,
+                    # all_const_ansatz₀,
                     # all_zero_ansatz₂,
-                    all_const_ansatz₂,
+                    # all_const_ansatz₂,
+                    all_splines₀,
+                    all_splines₂,
                     ℓᵧ, n_q);
 ie_0_conf_late_c = ConformalIEallν(ie_0_late_c,η2x);
+
+
+
+#planck ansatzs 
+planck_nonu_ansatz_data = readdlm("./test/data/Bolt_mslss_mssv_nuperts_nonu_msslsslmax$(ℓ_ν)_mssvlmax$(ℓ_mν).dat");
+planck_heavynu_ansatz_data = readdlm("./test/data/Bolt_mslss_mssv_nuperts_mnu0p15_msslsslmax$(ℓ_ν)_mssvlmax$(ℓ_mν).dat"); #0.15eV
+
+planck_nonu_ansatz₀ = [linear_interpolation(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz_data[:,2]),
+                        [linear_interpolation(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz_data[:,1+2+idx_q]) for idx_q in 1:n_q]...];
+
+planck_nonu_ansatz₂ = [linear_interpolation(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz_data[:,3]),
+                        [linear_interpolation(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz_data[:,1+2+n_q+idx_q]) for idx_q in 1:n_q]...];
+
+planck_heavynu_ansatz₀ = [linear_interpolation(planck_nonu_ansatz_data[:,1],planck_heavynu_ansatz_data[:,2]),
+                        [linear_interpolation(planck_heavynu_ansatz_data[:,1],planck_heavynu_ansatz_data[:,1+2+idx_q]) for idx_q in 1:n_q]...];
+
+planck_heavynu_ansatz₂ =  [linear_interpolation(planck_heavynu_ansatz_data[:,1],planck_heavynu_ansatz_data[:,3]),
+                        [linear_interpolation(planck_heavynu_ansatz_data[:,1],planck_heavynu_ansatz_data[:,1+2+n_q+idx_q]) for idx_q in 1:n_q]...];         
+
+
+plot(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz₀[1].(planck_nonu_ansatz_data[:,1]))
+plot!(planck_heavynu_ansatz_data[:,1],planck_heavynu_ansatz₀[1].(planck_heavynu_ansatz_data[:,1]))
+
+plot(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz₀[3].(planck_nonu_ansatz_data[:,1]))
+plot!(planck_heavynu_ansatz_data[:,1],planck_heavynu_ansatz₀[3].(planck_heavynu_ansatz_data[:,1]))
+
+
+plot(planck_nonu_ansatz_data[:,1],planck_nonu_ansatz₀[16].(planck_nonu_ansatz_data[:,1]))
+plot!(planck_heavynu_ansatz_data[:,1],planck_heavynu_ansatz₀[16].(planck_heavynu_ansatz_data[:,1]))
+
+
+x_ie_0_late_c = IEallν(BasicNewtonian(), 𝕡, bg, ih, k,
+                    # planck_nonu_ansatz₀,
+                    # planck_nonu_ansatz₂,
+                    planck_heavynu_ansatz₀,
+                    planck_heavynu_ansatz₂,
+                    # x_all_const_ansatz₀,
+                    # x_all_const_ansatz₂,
+                    # x_only_massless_ansatz₀,
+                    # x_only_massless_ansatz₂,
+                    # x_all_splines₀,
+                    # x_all_splines₂,
+                    ℓᵧ, n_q);
+x_ie_0_conf_late_c = ConformalIEallν(x_ie_0_late_c,η2x);
 
 
 # Experiments
 
 
-plot(xx_kt,all_const_ansatz₀[1].(xx_kt))
-plot!(xx_kt,spl0h𝒩₀.(xx_kt))
+# plot(xx_kt,all_const_ansatz₀[1].(xx_kt))
+plot(xx_k,spl0h𝒩₀.(xx_k))
+plot!(xx_k,c_spl0h𝒩₀.(xx_k))
+plot!(xx_k,only_massless_ansatz₀[1].(xx_k))
+plot!(xx_k,all_splines₀[1].(xx_k))
+
+plot(xx_k,spl0h𝒩₂.(xx_k))
+plot!(xx_k,c_spl0h𝒩₂.(xx_k))
+plot!(xx_k,only_massless_ansatz₂[1].(xx_k))
+plot!(xx_k,all_splines₂[1].(xx_k))
+
+plot(xx_k,massive_interps₀[end].(xx_k))
+plot!(xx_k,x_massive_interps₀[end].(xx_k))
+plot!(xx_k,only_massless_ansatz₀[end].(xx_k))
+
+plot(xx_k,spl0h𝒩₂.(xx_k))
+plot!(xx_k,c_spl0h𝒩₂.(xx_k))
+plot!(xx_k,only_massless_ansatz₂[1].(xx_k))
+
+
 plot(xx_kt,all_const_ansatz₂[1].(xx_kt))
 plot!(xx_kt,spl0h𝒩₂.(xx_kt))
 plot(xx_kt,abs.(all_const_ansatz₀[2].(xx_kt)),yscale=:log10)
@@ -731,7 +848,7 @@ plot!(xx_kt,abs.(x_all_splines₂[2].(xx_kt)))
 plot!(xx_kt,abs.(results_conf(bg.η(xx_kt)*Mpcfac)[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,:]))
 plot!(bg.x_grid,abs.(results_conf(bg.η(bg.x_grid)*Mpcfac)[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,:]))
 
-results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,2]
+# results_conf[2(ℓᵧ+1)+(ℓ_ν+1)+2n_q+1,2]
 
 
 plot(xx_kt,abs.(all_const_ansatz₂[end].(xx_kt)),yscale=:log10)
@@ -758,34 +875,47 @@ u0_ie_c[104]
 # And now ctime
 M=2048*4
 # Nᵢ=1
-reltol=7e-4
+reltol=1e-12
 #changing k, switch, hierarchy truncation, and ansatz will need to have a re-doing of u0_ie, ie_0 struct
 
 # First experiment
-η_switchη_switch = [1.0] #[0.5,1.0,10.0,100.0] 
-η_switch = 10.0
-MM = [8192*4]#[2^i for i in 12:14]
-NᵢNᵢ = [2i-1 for i in 1:5] #max iters
+η_switchη_switch = [5.0] #[0.5,1.0,10.0,100.0] 
+η_switch = 5.0
+MM = [8192]#[2^i for i in 12:14]
+NᵢNᵢ = [1,5]#[2i-1 for i in 1:5] #max iters
 
 #run this for plotting consistency
 xx_kt,𝒳₀_kt,𝒳₂_kt,perturb_kt= itersolve_fft(1,ie_0_conf_late_c,MM[end],
     η_switchη_switch[1]/Mpcfac,bg.η[end],get_switch_u0(η_switchη_switch[1],hierarchy_conf);reltol=reltol);
 
-println(xx_kt[1:3])
 plot_idx=16;
-for η_switch in η_switchη_switch
+# for η_switch in η_switchη_switch
     # Set the initial conditions at a particular switch value
+
     u0_ie_c = get_switch_u0(η_switch,hierarchy_conf)
-    # Initial guess (for now jsut leave the monopole)
-    p1 = plot(xx_kt,1e-16 .+ abs.(ie_0_late_c.s𝒳₀[plot_idx].(xx_kt)),label="I = 0, mono init ansatz",legendfont=font(4),ls=:dash,yscale=:log10)
-    p2 = plot(xx_kt,1e-16 .+abs.(ie_0_late_c.s𝒳₂[plot_idx].(xx_kt)),label=false,c=p1.series_list[1][:linecolor],legendfont=font(4),ls=:dash,yscale=:log10)
     # Hierarchy
-    plot!(p1,xx_kt,abs.(all_splines₀[plot_idx].(xx_kt)),label="H",color=:black,lw=2)
-    plot!(p2,xx_kt,abs.(all_splines₂[plot_idx].(xx_kt)),label=false,color=:black,lw=2)
+    # p1 = plot(xx_kt,all_splines₀[plot_idx].(xx_kt),label="H",color=:black,lw=2)
+    # p2 = plot(xx_kt,all_splines₂[plot_idx].(xx_kt),label=false,color=:black,lw=2)
+    p1 = plot(xx_kt,abs.(all_splines₀[plot_idx].(xx_kt)),label="H",color=:black,lw=2,yscale=:log10)
+    p2 = plot(xx_kt,abs.(all_splines₂[plot_idx].(xx_kt)),label=false,color=:black,lw=2,yscale=:log10)
+
+    # Initial guess (for now jsut leave the monopole)
+    plot!(p1,xx_kt,1e-16 .+ abs.(x_ie_0_late_c.s𝒳₀[plot_idx].(xx_kt)),label="I = 0, mono init ansatz",legendfont=font(4),ls=:dash,yscale=:log10)
+    plot!(p2,xx_kt,1e-16 .+abs.(x_ie_0_late_c.s𝒳₂[plot_idx].(xx_kt)),label=false,c=p1.series_list[2][:linecolor],legendfont=font(4),ls=:dash,yscale=:log10)
+    # plot!(p1,xx_kt,x_ie_0_late_c.s𝒳₀[plot_idx].(xx_kt),label="I = 0, mono init ansatz",legendfont=font(4),ls=:dash)
+    # plot!(p2,xx_kt,x_ie_0_late_c.s𝒳₂[plot_idx].(xx_kt),label=false,c=p1.series_list[2][:linecolor],legendfont=font(4),ls=:dash)
+ 
+
+    
     for M in MM
         for Nᵢ in NᵢNᵢ
-            xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(Nᵢ,ie_0_conf_late_c,M,
-                                            η_switch/Mpcfac,bg.η[end],u0_ie_c;reltol=reltol);
+            xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(Nᵢ,
+                                            # x_ie_0_conf_late_c,
+                                            x_ie_0_late_c,
+                                            M,
+                                            # η_switch/Mpcfac,bg.η[end],
+                                            η2x(η_switch/Mpcfac),bg.x_grid[end],
+                                            u0_ie_c;reltol=reltol);
 
             println("(M = $M, Nᵢ = $Nᵢ), 
                     error against full hierarchy is 
@@ -794,6 +924,8 @@ for η_switch in η_switchη_switch
             label="I = $(Nᵢ),"#M = $(M), lmax = $(ℓ_ν)" 
             plot!(p1,xx_k,abs.(𝒳₀_k[plot_idx].(xx_k)),label=label)
             plot!(p2,xx_k,abs.(𝒳₂_k[plot_idx].(xx_k)),label=false,c=p1.series_list[end][:linecolor])
+            # plot!(p1,xx_k,𝒳₀_k[plot_idx].(xx_k),label=label)
+            # plot!(p2,xx_k,𝒳₂_k[plot_idx].(xx_k),label=false,c=p1.series_list[end][:linecolor])
                     
         end
     end
@@ -807,8 +939,8 @@ for η_switch in η_switchη_switch
     )), switch at $(@sprintf("%.1f", η_switch)) Mpc")
     p3 = plot(p1, p2, layout = l)
     savefig("../misc_plots/fft_debug/fft_experiments/mssv_k$(@sprintf("%.2f", ie_0_conf_late_c.ie.k/Mpcfac
-            ))_qend_switch$(@sprintf("%.1f", η_switch)).pdf"
+            ))_q16log_planckmnu0p15_xiter_switch$(@sprintf("%.1f", η_switch)).pdf"
     )
-end
+# end
 p3
 η2x(η_switch/Mpcfac)

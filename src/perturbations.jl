@@ -42,11 +42,12 @@ end
 function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
                          ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
-    xᵢ = confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
+    xᵢ = hierarchy.bg.x_grid[1]#confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
     u₀ = initial_conditions(xᵢ, hierarchy)
     Mpcfac = hierarchy.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
-                            (hierarchy.bg.η[1]*Mpcfac , hierarchy.bg.η[end]*Mpcfac),
+                            (max(hierarchy.bg.η[1]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac), 
+                            min(hierarchy.bg.η[end]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac)),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
                 # saveat=hierarchy.bg.η, 
@@ -381,7 +382,7 @@ function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
     xq,wq = bg.quad_pts,bg.quad_wts
     # ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
     # σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
-    ρ,σ=0,0
+    ρ,σ=0.0,0.0
     for i in 1:length(xq)
         ρ+=Iρ(xq[i])*ℳ0[i]*wq[i] #confusingly, since ℳ0 is a view it starts at 1, not actually offset array...
         σ+=Iσ(xq[i])*ℳ2[i]*wq[i]
