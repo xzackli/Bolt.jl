@@ -92,21 +92,28 @@ function get_Φ′_Ψ(u,ie::IEallν{T},x) where T
     a = x2a(x)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    𝒩[0] = ie.s𝒳₀[1](x)
-    𝒩[2] = ie.s𝒳₂[1](x)
-    for idx_q in 0:(nq-1)
-        ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+1](x)
-        ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+1](x)
+    # 𝒩[0] = ie.s𝒳₀[1](x)
+    # 𝒩[2] = ie.s𝒳₂[1](x)
+    𝒩₀ = ie.s𝒳₀[1](x)
+    𝒩₂ = ie.s𝒳₂[1](x)
+    ℳ₀ = zeros(T,nq)
+    ℳ₂ = zeros(T,nq)
+    for idx_q in 1:nq#0:(nq-1)
+        # ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+2](x)
+        # ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+2](x)
+        ℳ₀[idx_q] = ie.s𝒳₀[idx_q+1](x)
+        ℳ₂[idx_q] = ie.s𝒳₂[idx_q+1](x)
     end
-    ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    # ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    ρℳ, σℳ  =  @views ρ_σ(ℳ₀, ℳ₂, bg, a, par)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]
+                                  Ω_ν * 𝒩₂
                                   + σℳ / bg.ρ_crit /4
                                   )
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0]
+        + 4Ω_ν * a^(-2) * 𝒩₀
         + a^(-2) * ρℳ / bg.ρ_crit
         )
     return Φ′,Ψ
@@ -182,7 +189,9 @@ function fft_ie_c(ie::IEν,perturb,M,m,q,i_q,u₀,x_grid) #FIXME add type decora
     for j in 1:M
         Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb( bg.η(invx[j]) .*Mpcfac ),ie,invx[j])
     end
-    _,_,𝒩₀, ℳ₀,_,_,_,_,_ =  unpack(u₀,ie)   
+
+    _,_,𝒩₀, ℳ₀,_,_,_,_,_ =  unpack(u₀,ie) 
+
     if m==0 
         𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀[0],𝒩₀[1],𝒩₀[2])) #massless
     else
@@ -215,8 +224,14 @@ function fft_ie(ie::IEallν,perturb,M,u₀,x_grid)
     for j in 1:M
         Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
     end
-    _,_,𝒩₀,_,_,_,_,_,_ =  unpack(u₀,ie)   
-    𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀[0],𝒩₀[1],𝒩₀[2])) #massless
+
+    
+    𝒩₀ = ie.s𝒳₀[1](x_grid[1])
+    _,_,𝒩₁,_,_,_,_,_,_ =  unpack(u₀,ie)   
+    𝒩₂ = ie.s𝒳₂[1](x_grid[1])
+    # ℳ₀,ℳ₂ = zeros(nq),zeros(nq) #FIXME: Type annotation?
+
+    𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀,𝒩₁,𝒩₂)) #massless
     # Compute the new perts via FFT
     𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), 1.0,0.0,𝕡,M)#,
     # Put it all together
@@ -239,8 +254,11 @@ function fft_ie(ie::IEallν,perturb,M,u₀,x_grid)
         for j in 1:M
             Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
         end
-        _,_,_, ℳ₀,_,_,_,_,_ =  unpack(u₀,ie)   
-        𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀[0+i_q],ℳ₀[0+nq+i_q],ℳ₀[0+2nq+i_q])) #massive
+        ℳ₀ = ie.s𝒳₀[2+i_q](x_grid[1])
+        _,_,_, ℳ₁,_,_,_,_,_ =  unpack(u₀,ie)   
+        ℳ₂ = ie.s𝒳₂[2+i_q](x_grid[1])
+
+        𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀,ℳ₁[1+i_q],ℳ₂)) #massive
         
         # Compute the new perts via FFT
         𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), q,𝕡.Σm_ν,𝕡,M)#,
@@ -546,7 +564,7 @@ unzip(a) = map(x->getfield.(a, x), fieldnames(eltype(a)))
 
 𝕡 = CosmoParams(); 
 n_q=15
-@profview bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q);
+bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q);
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b); #FIXME γΩ
 ih = IonizationHistory(𝕣, 𝕡, bg);
 Mpcfac = bg.H₀*299792.458/100.
@@ -570,9 +588,6 @@ end
 using Bolt
 η2x = linear_interpolation(bg.η,bg.x_grid);
 
-2.2619502561780378e33
-bg.η.(bg.x_grid[end])
-
 hierarchy_conf = ConformalHierarchy(hierarchy,η2x);
 results_conf = boltsolve_conformal(hierarchy_conf;reltol=reltol);
 
@@ -581,7 +596,7 @@ results_conf = boltsolve_conformal(hierarchy_conf;reltol=reltol);
 
 #truncated conformal hierarchy
 𝒩₀_0,𝒩₂_0 =  results[2(ℓᵧ+1)+1,:],results[2(ℓᵧ+1)+3,:] #hierarchy answer
-spl0h𝒩₀,spl0h𝒩₂ = linear_interpolation(bg.x_grid,𝒩₀_0), linear_interpolation(bg.x_grid,𝒩₂_0)
+spl0h𝒩₀,spl0h𝒩₂ = linear_interpolation(collect(bg.x_grid),𝒩₀_0), linear_interpolation(collect(bg.x_grid),𝒩₂_0)
 ν_idx = 2(ℓᵧ+1) + 1
 c𝒩₀_0,c𝒩₂_0 =  results_conf[2(ℓᵧ+1)+1,:],results_conf[2(ℓᵧ+1)+3,:] #hierarchy answer
 c_spl0h𝒩₀,c_spl0h𝒩₂ = linear_interpolation(η2x(results_conf.t/Mpcfac),c𝒩₀_0), linear_interpolation(η2x(results_conf.t/Mpcfac),c𝒩₂_0)
@@ -595,10 +610,13 @@ massive_interps₂ = [linear_interpolation(η2x(results_conf.t/Mpcfac),results_c
 all_splines₀ = [c_spl0h𝒩₀,massive_interps₀...]
 all_splines₂ = [c_spl0h𝒩₂,massive_interps₂...]
 all_splines₂[2](-20.0)
-x_massive_interps₀ = [linear_interpolation(bg.x_grid,results[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]) for idx_q in 1:n_q];
-x_massive_interps₂ = [linear_interpolation(bg.x_grid,results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
+x_massive_interps₀ = [linear_interpolation(collect(bg.x_grid),results[2(ℓᵧ+1)+(ℓ_ν+1)+idx_q,:]) for idx_q in 1:n_q];
+x_massive_interps₂ = [linear_interpolation(collect(bg.x_grid),results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+idx_q,:]) for idx_q in 1:n_q];
 x_all_splines₀ = [spl0h𝒩₀,x_massive_interps₀...]
 x_all_splines₂ = [spl0h𝒩₂,x_massive_interps₂...]
+
+using Bolt
+
 ie_all_0 = IEallν(BasicNewtonian(), 𝕡, bg, ih, k, #test the new struct
         all_splines₀,
         all_splines₂,
@@ -613,6 +631,8 @@ x_perturb_all_0 = boltsolve(x_ie_all_0;reltol=reltol);
 
 ie_all_0_c = ConformalIEallν(ie_all_0,η2x);
 perturb_all_0_c = boltsolve_conformal(ie_all_0_c;reltol=1e-5);
+
+
 x_ie_all_0_c = ConformalIEallν(x_ie_all_0,η2x);
 x_perturb_all_0_c = boltsolve_conformal(x_ie_all_0_c;reltol=1e-6);
 
@@ -620,10 +640,14 @@ function χ′z(a,q,m,tq_pts,tq_wts)
     return q / (a * Bolt.ℋ_a(a,𝕡,tq_pts,tq_wts) * √(q^2 + (a*m)^2 ) )
 end
 M=2048*4
+
+
+
+u0_iter = Bolt.initial_conditions(-20.0, x_ie_all_0);
 xx_k,𝒳₀_k,𝒳₂_k,perturb_k = itersolve_fft(5,x_ie_all_0,M, 
                                             bg.x_grid[1],bg.x_grid[end],
-                                            u0t
-                                            )
+                                            u0_iter
+                                            );
 
 
 #---------------------------------#
@@ -699,7 +723,7 @@ for η_switch in η_switchη_switch
     title!(p1,"k = $(@sprintf("%.2f", ie_0.k/Mpcfac
     )), vary ansatz, switch at $(@sprintf("%.1f", η_switch)) Mpc, 3 poles")
     p3 = plot(p1, p2, layout = l)
-    savefig("../misc_plots/fft_debug/fft_experiments/mslss_k$(@sprintf("%.2f", ie_0.k/Mpcfac
+    savefig("../misc_plots/fft_debug/fft_experiments/mssv_k$(@sprintf("%.2f", ie_0.k/Mpcfac
             ))_switch$(@sprintf("%.1f", η_switch))_elmax3_varyansatz_n1.pdf"
     )
 

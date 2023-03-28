@@ -667,7 +667,6 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     # WARNING no longer an offset array!
     ℳ₀ = zeros(T,nq)
     ℳ₂ = zeros(T,nq)
-
     for idx_q in 1:nq#0:(nq-1)
         # ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+2](x)
         # ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+2](x)
