@@ -79,6 +79,26 @@ struct IEallν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
     nq::Int
 end
 
+struct IEγν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
+    BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real,
+    IT<:AbstractInterpolation{T,1}
+    }
+    integrator::PI
+    par::CP
+    bg::BG
+    ih::IH
+    k::Tk
+    sΘ2::IT #This is kept separate from the neutrino interpolators for convenience rn, but need not be
+    sΠ::IT
+    s𝒳₀::AbstractArray{IT,1}
+    s𝒳₂::AbstractArray{IT,1}
+    Nᵧ₁::Int #pre-entry
+    Nᵧ₂::Int #recomb
+    Nᵧ₃::Int #post-recomb
+    nq::Int
+end
+
+
 IE(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real,
     sΘ2::AbstractInterpolation,sΠ::AbstractInterpolation,
@@ -95,18 +115,21 @@ IEν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractB
 
 IEallν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real,
-    # sx::AbstractArray{T,1},
-    # a𝒳₀::AbstractArray,a𝒳₂::AbstractArray,
     s𝒳₀::AbstractArray,s𝒳₂::AbstractArray,
     ℓ_γ=8, nq=15
     ) = IEallν(integrator, par, bg, ih, k, 
                 s𝒳₀, s𝒳₂, 
-                # sx,
-                # a𝒳₀,a𝒳₂,
-                # [linear_interpolation(sx,a𝒳₀[iq]) for iq in 1:nq+1],
-                # [linear_interpolation(sx,a𝒳₂[iq]) for iq in 1:nq+1],
                 ℓ_γ, nq)
 
+IEγν(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
+    ih::AbstractIonizationHistory, k::Real,
+    sΘ2::AbstractInterpolation,sΠ::AbstractInterpolation,
+    s𝒳₀::AbstractArray,s𝒳₂::AbstractArray,
+    Nᵧ₁=10, Nᵧ₂=100, Nᵧ₃=50, nq=15
+    ) = IEγν(integrator, par, bg, ih, k, 
+            sΘ2, sΠ,
+            s𝒳₀, s𝒳₂, 
+            Nᵧ₁,Nᵧ₂, Nᵧ₃, nq)
 
 struct ConformalIE{T<:Real,  H <: IE{T}, IT <: AbstractInterpolation{T}}
         ie::H
@@ -124,7 +147,10 @@ struct ConformalIEallν{T<:Real,  H <: IEallν{T}, IT <: AbstractInterpolation{T
         η2x::IT
     end
      
-
+struct ConformalIEγν{T<:Real,  H <: IEγν{T}, IT <: AbstractInterpolation{T}}
+        ie::H
+        η2x::IT
+    end
 
 function itersolve(Nₖ::Int,ie_0::IE{T};reltol=1e-6) where T
     x_grid = x_grid_ie(ie_0)
@@ -140,7 +166,7 @@ function itersolve(Nₖ::Int,ie_0::IE{T};reltol=1e-6) where T
     return u_all
 end
 
-function x_grid_ie(ie) 
+function x_grid_ie(ie) # will this just work on IEγν? don't see why not...
     bg,ih,k = ie.bg,ie.ih,ie.k
     # Three phases: 
     # 1. Pre-horizon entry:
@@ -177,18 +203,16 @@ end
 
 
 function boltsolve(ie::IE{T}, ode_alg=KenCarp4(); reltol=1e-6) where T #MD...
-    x_grid = x_grid_ie(ie)
-    xᵢ = first(x_grid)#ie.bg.x_grid)
+    x_grid = x_grid_ie(ie) #Is this ever actually used? i.e. does x_grid_ie[1]=bg.x_grid[1]? looks like yes...
+    xᵢ = first(x_grid)
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                saveat=x_grid,#ie.bg.x_grid, 
+                saveat=x_grid,
                 dense=false,
                 )
     return sol
 end
-
-
 function boltsolve(ie::IEν{T}, ode_alg=KenCarp4(); reltol=1e-6) where T 
     xᵢ = first(ie.bg.x_grid)
     u₀ = initial_conditions(xᵢ, ie)
@@ -204,18 +228,25 @@ function boltsolve(ie::IEallν{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
-                # saveat=ie.bg.x_grid, 
+                dense=false, #FIXME
+                )
+    return sol
+end
+function boltsolve(ie::IEγν{T}, ode_alg=KenCarp4(); reltol=1e-6) where T 
+    xᵢ = first(ie.bg.x_grid)
+    u₀ = initial_conditions(xᵢ, ie)
+    prob = ODEProblem{true}(ie!, u₀, (xᵢ , zero(T)), ie)
+    sol = solve(prob, ode_alg, reltol=reltol,
                 dense=false, #FIXME
                 )
     return sol
 end
 
-
 function boltsolve_conformal(confie::ConformalIE{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
     x_grid = η_grid_ie(ie,η2x,2048) #this is overkill/unoptomized but just to have something that decently agrees...
-    xᵢ = first(x_grid) #to be consistent
+    xᵢ = first(x_grid) #to be consistent # again this does nothing...
     # xᵢ = confie.η2x( ie.bg.η[1] ) 
     u₀ = initial_conditions(xᵢ, ie)
     Mpcfac = ie.bg.H₀*299792.458/100.
@@ -228,15 +259,11 @@ function boltsolve_conformal(confie::ConformalIE{T},#FIXME we don't need this? {
                 )
     return sol
 end
-
 function boltsolve_conformal(confie::ConformalIEν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
-    # x_grid = η_grid_ie(ie,η2x,2048) #why are we doing this? do something instead similar to perturbations.jl
-    # xᵢ = first(x_grid) #to be consistent
     xᵢ = η2x( ie.bg.η[1] ) 
     Mpcfac = ie.bg.H₀*299792.458/100.
-    # xᵢ = η2x( 1.0/Mpcfac ) 
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie_conformal!, u₀, 
     (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
@@ -249,6 +276,21 @@ function boltsolve_conformal(confie::ConformalIEν{T},#FIXME we don't need this?
     return sol
 end
 function boltsolve_conformal(confie::ConformalIEallν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
+    ode_alg=KenCarp4(); reltol=1e-6) where T
+    ie,η2x = confie.ie,confie.η2x
+    xᵢ = ie.bg.x_grid[1]
+    Mpcfac = ie.bg.H₀*299792.458/100.
+    u₀ = initial_conditions(xᵢ, ie)
+    prob = ODEProblem{true}(ie_conformal!, u₀, 
+        (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
+        min(ie.bg.η[end]*Mpcfac,ie.bg.η(ie.bg.x_grid[end])*Mpcfac)),
+        confie)
+    sol = solve(prob, ode_alg, reltol=reltol,
+                dense=false
+                )
+    return sol
+end
+function boltsolve_conformal(confie::ConformalIEγν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
     xᵢ = ie.bg.x_grid[1]#η2x( ie.bg.η[1] ) 
@@ -264,7 +306,7 @@ function boltsolve_conformal(confie::ConformalIEallν{T},#FIXME we don't need th
     return sol
 end
 
-
+#FIXME: This copied code is unnecessary, but in the end we won't need 3 of these...
 function ie_conformal!(du, u, confie::ConformalIE{T}, η) where T
     ie = confie.ie
     Mpcfac = ie.bg.H₀*299792.458/100.
@@ -274,7 +316,6 @@ function ie_conformal!(du, u, confie::ConformalIE{T}, η) where T
     du .*= ℋ / Mpcfac  # account for dx/dη
     return nothing
 end
-
 function ie_conformal!(du, u, confie::ConformalIEν{T}, η) where T
     ie = confie.ie
     Mpcfac = ie.bg.H₀*299792.458/100.
@@ -285,6 +326,15 @@ function ie_conformal!(du, u, confie::ConformalIEν{T}, η) where T
     return nothing
 end
 function ie_conformal!(du, u, confie::ConformalIEallν{T}, η) where T
+    ie = confie.ie
+    Mpcfac = ie.bg.H₀*299792.458/100.
+    x = confie.η2x(η  / Mpcfac )
+    ℋ = ie.bg.ℋ(x)
+    ie!(du, u, ie, x)
+    du .*= ℋ / Mpcfac  # account for dx/dη
+    return nothing
+end
+function ie_conformal!(du, u, confie::ConformalIEγν{T}, η) where T
     ie = confie.ie
     Mpcfac = ie.bg.H₀*299792.458/100.
     x = confie.η2x(η  / Mpcfac )
@@ -312,8 +362,6 @@ function itersolve_conformal(Nₖ::Int,confie::ConformalIE{T};reltol=1e-6) where
     end
     return u_all
 end
-
-
 
 # basic Newtonian gauge: establish the order of perturbative variables in the ODE solve
 function unpack(u, ie::IE{T, BasicNewtonian}) where T
@@ -356,6 +404,18 @@ function unpack(u, ie::IEallν{T, BasicNewtonian}) where T
     Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5)) #getting a little messy...
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
+function unpack(u, ie::IEγν{T, BasicNewtonian}) where T
+    ℓᵧ = 1 #only monopole and dipole for both scalar temp and polzn
+    nq = ie.nq
+    ℓ_ν=0 #2 
+    ℓ_mν = 0 #2 
+    Θ = OffsetVector(view(u, 1:(ℓᵧ+1)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
+    Θᵖ = OffsetVector(view(u, (ℓᵧ+2):(2ℓᵧ+2)), 0:ℓᵧ)  # indexed 0 through ℓᵧ
+    𝒩 = view(u, (2(ℓᵧ+1) + 1)) # only need dipole
+    ℳ = view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq ))   # only need dipole (at all q)
+    Φ, δ, v, δ_b, v_b = view(u, ((2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5)) #getting a little messy...
+    return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
+end
 
 #FIXME this is probably terrible for performance
 function ie_unpack(u, ie::IE{T, BasicNewtonian}) where T
@@ -375,21 +435,19 @@ function ie_unpack(u, ie::IE{T, BasicNewtonian}) where T
 	Φ, δ, v, δ_b, v_b = eachrow( view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5, :) ) #getting a little messy...
 	return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b #perts over all ie timesteps
 end
-
-# Dead code
-# function ie_unpack(u, ie::IEν{T, BasicNewtonian}) where T
-#     ℓᵧ =  ie.ℓ_γ
-#     ℓ_mν = ie.ℓ_mν #should be smaller than others
-#     nq = ie.nq
-#     N_ν = ie.N_ν
-#     ℓ_ν=2
-#     Θ = OffsetArray(view(u, 1:(ℓᵧ+1),:), 0:ℓᵧ, 1:N_ν)  # indexed 0 through ℓᵧ, 1 through Nᵧ
-#     Θᵖ = OffsetArray(view(u, (ℓᵧ+2):(2ℓᵧ+2),:), 0:ℓᵧ, 1:N_ν)  # indexed 0 through ℓᵧ
-#     𝒩 = OffsetArray(view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1),:) , 0:ℓ_ν, 1:N_ν)  # indexed 0 through ℓ_ν
-#     ℳ = OffsetArray(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq ),:) , 0:(ℓ_mν+1)*nq-1, 1:N_ν)  # indexed 0 through ℓ_mν
-# 	Φ, δ, v, δ_b, v_b = eachrow( view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5, :) ) #getting a little messy...
-# 	return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b #perts over all ie timesteps
-# end
+function ie_unpack(u, ie::IEγν{T, BasicNewtonian}) where T
+    ℓ_ν =  0
+    ℓ_mν = 0
+    nq = ie.nq
+    Nᵧ = ie.Nᵧ₁+ie.Nᵧ₂+ie.Nᵧ₃ 
+    ℓᵧ=1 #only monopole and dipole for both scalar temp and polzn
+    Θ = OffsetArray(view(u, 1:(ℓᵧ+1),:), 0:ℓᵧ, 1:Nᵧ)  # indexed 0 through ℓᵧ, 1 through Nᵧ
+    Θᵖ = OffsetArray(view(u, (ℓᵧ+2):(2ℓᵧ+2),:), 0:ℓᵧ, 1:Nᵧ)  # indexed 0 through ℓᵧ
+    𝒩 = view(u, (2(ℓᵧ+1) + 1):(2(ℓᵧ+1)+ℓ_ν+1),:)   # indexed 0 through ℓ_ν
+    ℳ = OffsetArray(view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+1):(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq ),:) , 0:nq-1, 1:Nᵧ)  # indexed 0 through ℓ_mν
+	Φ, δ, v, δ_b, v_b = eachrow( view(u, (2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+1 :(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq)+5, :) ) #getting a little messy...
+	return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b #perts over all ie timesteps
+end
 
 function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
     # compute cosmological quantities at time x, and do some unpacking
@@ -527,29 +585,13 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     ℓᵧ = ie.ℓ_γ
     ℓ_mν =  ie.ℓ_mν
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, ie)  # will be sweetened by .. syntax in 1.6
-    # Θ[2] = ie.sΘ2(x)# call the spline, update Θ₂ at top since we do not evolve it
-    
+    Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, ie)  # will be sweetened by .. syntax in 1.6    
     Mpcfac = ie.bg.H₀*299792.458/100.
-    # if ηₓ*Mpcfac >= 1.0 #overwrite the neutrino perts if sufficiently late
-    # 𝒩[0] = ie.s𝒩₀(x) #FIXME this sucks, need a ctime ie!
-    # 𝒩[2] = ie.s𝒩₂(x)
     𝒩₀ = ie.s𝒩₀(x)
     𝒩₂ = ie.s𝒩₂(x)
-    # end
 
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    # ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par)
-
-    # for idx_q in 0:(nq-1)
-        # println("massless M0[$(idx_q)] = $(ℳ[0*nq+idx_q] )")
-        # println("massless M1[$(idx_q)] = $(ℳ[1*nq+idx_q] )")
-        # println("massless M2[$(idx_q)] = $(ℳ[2*nq+idx_q] )")
-    # end
-
-    # println("massless ρℳ: ",ρℳ)
-    # println("massless σℳ: ",σℳ)
 
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
@@ -557,27 +599,12 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
                                   + σℳ / bg.ρ_crit /4
                                   )
 
-    # println("massless Ψ: ",Ψ)
-
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩₀ #𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         )
-    # println("type Phi: ", typeof(Φ′))
-    # println("type Phi2 : ", typeof(Φ′) <: ForwardDiff.Dual)
-
-    # if ((x<=-19.99 || x>=-0.01) &&  ~(typeof(Φ′) <: ForwardDiff.Dual))
-    #     println("x = ", x)
-    #     println("Φ′ = ", Φ′)
-    #     println("𝒩[0] after = ", 𝒩[0])
-    #     println("Θ[0] = ", Θ[0])
-    #     println("𝒩[2] after  = ", 𝒩[2])
-    #     println("Ψ = ", Ψ)
-    #     println("Ψ components: Θ₂ = $(Θ[2]), 𝒩₂ = $(𝒩[2]), σℳ = $(σℳ)")
-    # end
-    # println("massless Phi_prime: ",Φ′)
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
@@ -599,21 +626,7 @@ function ie!(du, u, ie::IEν{T, BasicNewtonian}, x) where T
     end
 
     # relativistic neutrinos (massless)
-    
-
-    # 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-    # 𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
     𝒩′ = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
-    #use truncation expression since we don't evolve octopole
-    # if ηₓ*Mpcfac < 1.0  #if early, need to actually evolve quadrupole
-    #     𝒩′[2] =  k / ℋₓ  * 𝒩[1] - 3/(ℋₓ *ηₓ) *𝒩[2]
-    # end #if later, just don't evolve this, result will be junk
-    # for ℓ in 2:(ℓ_ν-1)
-        # 𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
-    # end
-    #truncation (same between MB and Callin06/Dodelson)
-    # 𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]
-
 
     # photons (hierarchy way)
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
@@ -659,34 +672,17 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
     
     
     #update pert vectors with splines
-    #FIXME this is not strictly necessary, we could instead use the splines in eqns directly, but might be harder to read
-    #FIXME  need a ctime ie!
-    # 𝒩[0] = ie.s𝒳₀[1](x) 
-    # 𝒩[2] = ie.s𝒳₂[1](x)
     𝒩₀ = ie.s𝒳₀[1](x) 
     𝒩₂ = ie.s𝒳₂[1](x)
-
-
     # WARNING no longer an offset array!
     ℳ₀ = zeros(T,nq)
     ℳ₂ = zeros(T,nq)
-    for idx_q in 1:nq#0:(nq-1)
-        # ℳ[0*nq+idx_q] = ie.s𝒳₀[idx_q+2](x)
-        # ℳ[2*nq+idx_q] = ie.s𝒳₂[idx_q+2](x)
+    for idx_q in 1:nq
         ℳ₀[idx_q] = ie.s𝒳₀[idx_q+1](x)
         ℳ₂[idx_q] = ie.s𝒳₂[idx_q+1](x)
     end
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
     ρℳ, σℳ  =  @views ρ_σ(ℳ₀, ℳ₂, bg, a, par)
-
-    # for idx_q in 0:(nq-1)
-        # println("all M0[$(idx_q)] = $(ℳ[0*nq+idx_q] )")
-        # println("all M1[$(idx_q)] = $(ℳ[1*nq+idx_q] )")
-        # println("all M2[$(idx_q)] = $(ℳ[2*nq+idx_q] )")
-    # end
-
-    # println("all ρℳ: ",ρℳ)
-    # println("all σℳ: ",σℳ)
 
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
@@ -694,17 +690,12 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
                                   + σℳ / bg.ρ_crit /4
                                   )
 
-    # println("all Ψ: ",Ψ)
-
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩₀ #𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
         )
-
-    # println("all Phi_prime: ",Φ′)
-
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
@@ -717,20 +708,10 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
         ϵ = √(q^2 + (a*m_ν)^2)
         df0 = dlnf0dlnq(q,par)
         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
-        # ℳ′[0* nq+i_q] = - k / ℋₓ *  q/ϵ * ℳ[1* nq+i_q]  + Φ′ * df0
-        # ℳ′[1* nq+i_q] = k / (3ℋₓ) * ( q/ϵ * (ℳ[0* nq+i_q] - 2ℳ[2* nq+i_q])  - ϵ/q * Ψ  * df0)
         ℳ′[i_q+1] = k / (3ℋₓ) * ( q/ϵ * (ℳ₀[i_q+1] - 2ℳ₂[i_q+1])  - ϵ/q * Ψ  * df0)
-        # for ℓ in 2:(ℓ_mν-1)
-        #     ℳ′[ℓ* nq+i_q] =  k / ℋₓ * q / ((2ℓ+1)*ϵ) * ( ℓ*ℳ[(ℓ-1)* nq+i_q] - (ℓ+1)*ℳ[(ℓ+1)* nq+i_q] )
-        # end
-        # ℳ′[ℓ_mν* nq+i_q] =  q / ϵ * k / ℋₓ * ℳ[(ℓ_mν-1)* nq+i_q] - (ℓ_mν+1)/(ℋₓ *ηₓ) *ℳ[(ℓ_mν)* nq+i_q] #MB (58) similar to rel case but w/ q/ϵ
     end
 
     # relativistic neutrinos (massless)
-    
-
-    # 𝒩′[0] = -k / ℋₓ * 𝒩[1] - Φ′
-    # 𝒩′[1] = k/(3ℋₓ) * 𝒩[0] - 2*k/(3ℋₓ) *𝒩[2] + k/(3ℋₓ) *Ψ
     𝒩′ = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
 
 
@@ -759,8 +740,81 @@ function ie!(du, u, ie::IEallν{T, BasicNewtonian}, x) where T
 end
 
 
+function ie!(du, u, ie::IEγν{T, BasicNewtonian}, x) where T
+    # compute cosmological quantities at time x, and do some unpacking
+    k, ℓᵧ, ℓ_ν, ℓ_mν, par, bg, ih, nq = ie.k, 2, 0, 0, ie.par, ie.bg, ie.ih, ie.nq #zeros here used to be 2s
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    a = x2a(x)
+    R = 4Ω_r / (3Ω_b * a)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    csb² = ih.csb²(x)
 
-#FIXME: don't need to copy all this code?
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  
+    Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, ie)  
+    
+    #get perts from interpolators
+    Θ₂ = ie.sΘ2(x)
+    Π = ie.sΠ(x)
+    𝒩₀ = ie.s𝒳₀[1](x) 
+    𝒩₂ = ie.s𝒳₂[1](x)
+    # WARNING no longer an offset array!
+    ℳ₀ = zeros(T,nq)
+    ℳ₂ = zeros(T,nq)
+    for idx_q in 1:nq
+        ℳ₀[idx_q] = ie.s𝒳₀[idx_q+1](x)
+        ℳ₂[idx_q] = ie.s𝒳₂[idx_q+1](x)
+    end
+    #do the q integrals for massive neutrino perts (monopole and quadrupole)
+    ρℳ, σℳ  =  @views ρ_σ(ℳ₀, ℳ₂, bg, a, par)
+
+    # metric perturbations (00 and ij FRW Einstein eqns)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ₂
+                                  + Ω_ν * 𝒩₂
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩₀ 
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+
+    # matter
+    δ′ = k / ℋₓ * v - 3Φ′
+    v′ = -v - k / ℋₓ * Ψ
+    δ_b′ = k / ℋₓ * v_b - 3Φ′
+    v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
+
+    # neutrinos (massive dipole, MB 57)
+    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+        ϵ,df0 = √(q^2 + (a*m_ν)^2), dlnf0dlnq(q,par)
+        ℳ′[i_q+1] = k / (3ℋₓ) * ( q/ϵ * (ℳ₀[i_q+1] - 2ℳ₂[i_q+1])  - ϵ/q * Ψ  * df0)
+    end
+
+    # relativistic neutrinos (massless dipole)
+    𝒩′ = k/(3ℋₓ) * 𝒩₀ - 2*k/(3ℋₓ) *𝒩₂ + k/(3ℋₓ) *Ψ
+
+    # photons 
+    Θ′[0] = -k / ℋₓ * Θ[1] - Φ′
+    Θ′[1] = k / (3ℋₓ) * Θ[0] - 2k / (3ℋₓ) * Θ₂ + k / (3ℋₓ) * Ψ + τₓ′ * (Θ[1] + v_b/3)
+
+    # polarized photons
+    Θᵖ′[0] = -k / ℋₓ * Θᵖ[1] + τₓ′ * (Θᵖ[0] - Π / 2)
+    Θᵖ₂ = Π - Θᵖ[0] - Θ₂ #could drop this line but it makes things clearer
+    Θᵖ′[1] = k / (3ℋₓ) * Θᵖ[0] - 2k / (3ℋₓ) * Θᵖ₂ + τₓ′ * Θᵖ[1] 
+
+    du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
+    return nothing
+end
+
+
+
+#FIXME: we don't actually need ANY of these if we are going to just start from a hierarchy call?
 function initial_conditions(xᵢ, ie::IE{T, BasicNewtonian}) where T
     k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih, ie.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
@@ -981,6 +1035,53 @@ function initial_conditions(xᵢ, ie::IEallν{T, BasicNewtonian}) where T
     u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
     return u
 end
+
+#FIXME we don't actually need this, because we never initialize with the truncated hierarchy anwyways (these days)
+function initial_conditions(xᵢ, ie::IEγν{T, BasicNewtonian}) where T
+    k, ℓ_ν,ℓ_mν, par, bg, ih, nq = ie.k, 0, 0,ie.par, ie.bg, ie.ih, ie.nq
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    ℓᵧ = ie.ℓ_γ
+    u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
+    ℋₓ, _, ηₓ, τₓ′, _ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ are mutable views (see unpack)
+
+    aᵢ² = exp(xᵢ)^2
+    aᵢ = sqrt(aᵢ²)
+    f_ν = 1/(1 + 1/(7*(3/3)*par.N_ν/8 *(4/11)^(4/3)))
+
+    # metric and matter perturbations
+    Φ = 1.0
+    #choosing Φ=1 forces the following value for C, the rest of the ICs follow
+    C = -( (15 + 4f_ν)/(20 + 8f_ν) )
+
+    #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
+    Θ[0] = -40C/(15 + 4f_ν) / 4
+    Θ[1] = 10C/(15 + 4f_ν) * (k^2 * ηₓ) / (3*k)
+    Θ₂ = -8k / (15ℋₓ * τₓ′) * Θ[1]
+    Θᵖ[0] = (5/4) * Θ₂
+    Θᵖ[1] = -k / (4ℋₓ * τₓ′) * Θ₂
+
+
+    δ = 3/4 *(4Θ[0]) #the 4 converts δγ_MB -> Dodelson convention
+    δ_b = δ
+    #we have that Θc = Θb = Θγ = Θν, but need to convert Θ = - k v (i absorbed in v)
+    v = -3k*Θ[1]
+    v_b = v
+
+    # neutrino hierarchy
+    𝒩 = Θ[1]
+    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+        ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
+        df0 = dlnf0dlnq(q,par)
+        ℳ[1+i_q] = -ϵ/q * 𝒩 *df0
+    end
+
+    u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
+    return u
+end
+
 #FIXME ignore source functions for now - nothing will need to change except struct arg
 
 #---
@@ -1128,360 +1229,3 @@ end
 # ------------------------------
 # FFT Iteration functions
 
-# # /// IC Free streaming ///
-# # Relevant Bessel functions (ℓ=0,1,2)
-# #ℓ=0
-# j0(x) = (x > 0.01) ? sin(x)/x : 1 - x^2 /6 + x^4 /120 - x^6 /5040
-# j0′(x) = -j1(x)
-# #ℓ=1
-# j1(x) =  (x > 0.01) ?  (sin(x) - x*cos(x))/x^2 : x/3 - x^3 /30 + x^5 /840
-# R1(x) =  (x > 0.01) ? j1(x) - 3j2(x)/x : 2x/15 - 2x^3 /105 + x^5 /1260
-# #ℓ=2
-# j2(x) = (x > 0.01) ? -( 3x*cos(x) + (x^2 - 3)*sin(x) ) / x^3 : x^2 /15 - x^4 /210 + x^6 /7560
-# j2′(x) = (x > 0.01) ? ( -x*(x^2 -9)*cos(x) + (4x^2 -9)*sin(x) ) / x^4 : 2x /15 - 2x^3 /105 + x^5 /1260
-# j2′′(x) = (x > 0.2) ? ( x*(5x^2 -36)*cos(x) + (x^4 - 17x^2 +36)*sin(x) ) / x^5 : 2/15 - 2x^2 /35 + x^4 /252 - x^6 /8910
-# R2(x) = (x > 0.2) ? -( j2(x) + 3j2′′(x) ) / 2 : -1/5 + 11x^2 /210 -x^4 /280 +17x^4 /166320
-# # The W coupling kernel (sum truncated at ℓ=2)
-# W00(x) = j0(x)
-# W01(x) = j1(x)
-# W02(x) = j2(x)
-# W21(x) = -R1(x)
-# W22(x) = -R2(x)
-# function Wsum(x,𝒳ᵢ₀,𝒳ᵢ₁,𝒳ᵢ₂)
-#     𝒳ₛ₀ = W00(x)*𝒳ᵢ₀ - 3W01(x)*𝒳ᵢ₁ + 5W02(x)*𝒳ᵢ₂  #ℓ=0 ( use the subscript ₛ for streaming, this is the "free-streaming" piece)
-#     𝒳ₛ₂ = W02(x)*𝒳ᵢ₀ - 3W21(x)*𝒳ᵢ₁ + 5W22(x)*𝒳ᵢ₂ #ℓ=2
-#     return 𝒳ₛ₀, 𝒳ₛ₂
-# end
-
-# function get_Φ′_Ψ(u,hierarchy::Hierarchy{T},x) where T
-#     #TODO: can streamline hierarchy and source funcs with this helper function also
-#     k, par, bg, nq = hierarchy.k, hierarchy.par, hierarchy.bg,hierarchy.nq
-#     Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
-#     ℋₓ =  bg.ℋ(x)
-#     a = x2a(x)
-#     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-#     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-#     ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-#     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-#                                   Ω_ν * 𝒩[2]
-#                                   + σℳ / bg.ρ_crit /4
-#                                   )
-#     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-#         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-#         + 4Ω_r * a^(-2) * Θ[0]
-#         + 4Ω_ν * a^(-2) * 𝒩[0]
-#         + a^(-2) * ρℳ / bg.ρ_crit
-#         )
-#     return Φ′,Ψ
-# end
-
-# # Get the Φ' and Ψ (copy function in ie file) from hierarchy
-# function get_Φ′_Ψ(u,ie::IEν{T},x) where T
-#     #TODO: can streamline hierarchy and source funcs with this helper function also
-#     k, par, bg, nq = ie.k, ie.par, ie.bg,ie.nq
-#     Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
-#     ℋₓ =  bg.ℋ(x)
-#     a = x2a(x)
-#     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-#     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-#     𝒩[0] = ie.s𝒩₀(x)
-#     𝒩[2] = ie.s𝒩₂(x)#WHY DO WE NEED THIS HERE BUT NOT IN PHOTONS? AND NOT FOR MONO?
-#     ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-#     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-#                                   Ω_ν * 𝒩[2]
-#                                   + σℳ / bg.ρ_crit /4
-#                                   )
-#     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-#         Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-#         + 4Ω_r * a^(-2) * Θ[0]
-#         + 4Ω_ν * a^(-2) * 𝒩[0]
-#         + a^(-2) * ρℳ / bg.ρ_crit
-#         )
-#     return Φ′,Ψ
-# end
-
-# function fft_funcs(x, y, Φ′,Ψ, k,ℋ,q,m,𝕡)
-#     ϵ = (q^2 .+ exp.(2x)*m^2 ).^(1/2) #sqrt syntax doesn't work w/ bcast but put it back when undo bcast...
-#     q̃ = ϵ/q #convenience notation
-#     G₀ = ℋ .* q̃/k .* Φ′ * (m==0. ? -1 : dlnf0dlnq(q,𝕡)) #for integrating in y #
-#     G₁ = -q̃.^2 .* Ψ * (m==0. ? -1 : dlnf0dlnq(q,𝕡)) #
-#     K₀₀ = j0.(y) #1st index is ℓ 2nd index is derivative order
-#     K₀₁ = j0′.(y)
-#     K₂₀ = j2.(y) #
-#     K₂₁ = j2′.(y) #
-#     return G₀,K₀₀,K₀₁, G₁,K₂₀,K₂₁
-# end
-
-# function fft_integral(x, y,Φ′,Ψ,k,ℋ,q,m,𝕡,M) # for massive or massless neutrinos (𝒳=𝒩,ℳ)
-#     dy = y[2]-y[1]
-#     #  all ffts are performed in this function
-#     G₀,K₀₀,K₀₁, G₁,K₂₀,K₂₁ = fft_funcs(x,y, Φ′,Ψ, k,ℋ,q,m,𝕡) #
-#     # zero-pad the signals so convolution is not circular
-#     G₀,G₁ = [G₀; zeros(M-1)],[G₁; zeros(M-1)]
-#     K₀₀,K₀₁,K₂₀,K₂₁ = [K₀₀; zeros(M-1)],[K₀₁; zeros(M-1)],[K₂₀; zeros(M-1)],[K₂₁; zeros(M-1)] #
-#     # FFT the Gs, Ks
-#     G̃₀,G̃₁ = fft(G₀),fft(G₁)
-#     K̃₀₀, K̃₀₁, K̃₂₀, K̃₂₁ = fft(K₀₀),fft(K₀₁),fft(K₂₀),fft(K₂₁)#
-#     # Convolution theorem (iFFT pointwise product)
-#     𝒳₀ₓ = ifft(G̃₀.*K̃₀₀ .+ G̃₁.*K̃₀₁)[1:M]*dy 
-#     𝒳₂ₓ = ifft(G̃₀.*K̃₂₀ .+ G̃₁.*K̃₂₁)[1:M]*dy 
-#     return 𝒳₀ₓ,𝒳₂ₓ
-# end
-
-# function fft_ie(ie,perturb,M,m,q,i_q,u₀,x_grid)
-#     𝕡,bg,k,nq = ie_0.par,ie_0.bg,ie_0.k,ie.nq
-#     # Set up the "neutrino horizon" and FFT abscissas
-#     χνs = [Bolt.χν(x, q, m , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in x_grid]
-#     yyx = k.* (χνs .- χνs[1])
-#     dy=(yyx[end]-yyx[1])/(M-1)
-#     yy = yyx[1]:dy:yyx[end]
-#     invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
-#     # Get metric sources
-#     Φ′,Ψ = zeros(M),zeros(M)
-#     for j in 1:M
-#         Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
-#     end
-#     _,_,𝒩₀, ℳ₀,_,_,_,_,_ =  unpack(u₀,ie)   
-#     if m==0 
-#         𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀[0],𝒩₀[1],𝒩₀[2])) #massless
-#     else
-#         𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀[0+i_q],ℳ₀[0+nq+i_q],ℳ₀[0+2nq+i_q])) #massive
-#     end 
-#     # Compute the new perts via FFT
-#     𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), q,m,𝕡,M)#,
-#     # Put it all together
-#     𝒳₀ = 𝒳ₛ₀ .+ real.(𝒳₀ₓ) 
-#     𝒳₂ = 𝒳ₛ₂ .+ real.(𝒳₂ₓ) 
-#     return invx, linear_interpolation(invx,𝒳₀), linear_interpolation(invx,𝒳₂)
-# end
-
-# function fft_ie_c(ie,perturb,M,m,q,i_q,u₀,x_grid)
-#     𝕡,bg,k,nq = ie_0.par,ie_0.bg,ie_0.k,ie.nq
-#     # Set up the "neutrino horizon" and FFT abscissas
-#     χνs = [Bolt.χν(x, q, m , 𝕡 ,bg.quad_pts,bg.quad_wts) for x in x_grid]
-#     yyx = k.* (χνs .- χνs[1])
-#     dy=(yyx[end]-yyx[1])/(M-1)
-#     yy = yyx[1]:dy:yyx[end]
-#     invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
-#     # Get metric sources
-#     Φ′,Ψ = zeros(M),zeros(M)
-#     for j in 1:M
-#         Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb( bg.η(invx[j]) .*Mpcfac ),ie,invx[j])
-#     end
-#     _,_,𝒩₀, ℳ₀,_,_,_,_,_ =  unpack(u₀,ie)   
-#     if m==0 
-#         𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,𝒩₀[0],𝒩₀[1],𝒩₀[2])) #massless
-#     else
-#         𝒳ₛ₀, 𝒳ₛ₂ = unzip(Wsum.(yy,ℳ₀[0+i_q],ℳ₀[0+nq+i_q],ℳ₀[0+2nq+i_q])) #massive
-#     end 
-#     # Compute the new perts via FFT
-#     𝒳₀ₓ,𝒳₂ₓ = fft_integral(invx, yy, Φ′,Ψ, k, bg.ℋ(invx), q,m,𝕡,M)#,
-#     # Put it all together
-#     𝒳₀ = 𝒳ₛ₀ .+ real.(𝒳₀ₓ) 
-#     𝒳₂ = 𝒳ₛ₂ .+ real.(𝒳₂ₓ) 
-#     return invx, linear_interpolation(invx,𝒳₀), linear_interpolation(invx,𝒳₂)#,
-# end
-
-# function h_boltsolve_flex(hierarchy::Hierarchy{T},  x_ini,x_fin, u₀, ode_alg=KenCarp4(); reltol=1e-6) where T
-#     prob = ODEProblem{true}(Bolt.hierarchy!, u₀, (x_ini , x_fin), hierarchy)
-#     sol = solve(prob, ode_alg, reltol=reltol,
-#                 dense=false,
-#                 )
-#     return sol
-# end
-
-# function boltsolve_flex(ie::IEν{T}, x_ini,x_fin, u₀, ode_alg=KenCarp4(); reltol=1e-6) where T 
-#     prob = ODEProblem{true}(Bolt.ie!, u₀, (x_ini , x_fin), ie)
-#     sol = solve(prob, ode_alg, reltol=reltol,
-#                 saveat=ie.bg.x_grid, dense=false, #FIXME
-#                 )
-#     return sol
-# end
-
-# function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
-#     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
-#     hierarchy = confhierarchy.hierarchy
-#     Mpcfac = hierarchy.bg.H₀*299792.458/100.
-#     prob = ODEProblem{true}(Bolt.hierarchy_conformal!, u₀, 
-#                             (η_ini*Mpcfac , η_fin*Mpcfac),
-#                             confhierarchy)
-#     sol = solve(prob, ode_alg, reltol=reltol,
-#     dense=false
-#     )
-#     return sol
-# end
-
-# function boltsolve_conformal_flex(confie::ConformalIEν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
-#     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
-#     ie,η2x = confie.ie,confie.η2x
-#     Mpcfac = ie.bg.H₀*299792.458/100.
-#     prob = ODEProblem{true}(Bolt.ie_conformal!, u₀, 
-#                             (η_ini*Mpcfac, η_fin*Mpcfac),
-#                             confie)
-#     sol = solve(prob, ode_alg, reltol=reltol,
-#     dense=false
-#     )
-#     return sol
-# end
-
-
-# function iterate_fft(𝒩₀_km1,𝒩₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, ℓ_mν, n_q,
-#     M, reltol,x_ini, x_fin,u0) where T
-#     𝒩₀_k,𝒩₂_k = zero(𝒩₀_km1),zero(𝒩₂_km1) #need this line ow is never updated
-#     ie_k_late = IEν(BasicNewtonian(), 𝕡, bg, ih, k,
-#                     𝒩₀_km1, 𝒩₂_km1,
-#                     ℓᵧ, ℓ_mν, n_q)
-#     perturb_k_late = boltsolve_flex(ie_k_late, x_ini, x_fin, u0; reltol=reltol)
-#     xx,𝒩₀_k,𝒩₂_k = fft_ie(ie_k_late,perturb_k_late,M,0.,1.,0,
-#                         u0,perturb_k_late.t) #This is for massless only 
-#     return xx,𝒩₀_k,𝒩₂_k,perturb_k_late
-# end
-
-# function iterate_fft_c(𝒩₀_km1,𝒩₂_km1, 𝕡::CosmoParams{T}, bg, ih, k, ℓᵧ, ℓ_mν, n_q,
-#     M, reltol,η_ini, η_fin,u0) where T
-#     𝒩₀_k,𝒩₂_k = zero(𝒩₀_km1),zero(𝒩₂_km1) #need this line ow is never updated
-#     ie_k_late = IEν(BasicNewtonian(), 𝕡, bg, ih, k,
-#                     𝒩₀_km1, 𝒩₂_km1,
-#                     ℓᵧ, ℓ_mν, n_q)
-#     ie_k_conf_late_c = ConformalIEν(ie_k_late,η2x);
-#     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
-#     xx,𝒩₀_k,𝒩₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,0.,1.,0,
-#                         u0,η2x(perturb_k_late_c.t/Mpcfac)) #This is for massless only 
-#     return xx,𝒩₀_k,𝒩₂_k,perturb_k_late_c
-# end
-
-# #---------------------------------#
-# # Itersolves
-# #---------------------------------#
-# function itersolve_fft(Nₖ::Int,ie_0::IEν{T},M::Int,x_ini,x_fin,u0;reltol=1e-6) where T
-#     𝒩₀_0,𝒩₂_0 = ie_0.s𝒩₀,ie_0.s𝒩₂
-#     𝒩₀_k,𝒩₂_k = 𝒩₀_0,𝒩₂_0
-#     perturb_k = nothing
-#     xx_k = nothing
-#     for k in 1:Nₖ
-#         xx_k,𝒩₀_k,𝒩₂_k,perturb_k = iterate_fft(𝒩₀_k,𝒩₂_k,ie_0.par,ie_0.bg,ie_0.ih,
-#                                    ie_0.k,ie_0.ℓ_γ,ie_0.ℓ_mν,ie_0.nq,
-#                                    M,reltol,x_ini,x_fin,u0)
-#     end
-#     return xx_k, 𝒩₀_k,𝒩₂_k,perturb_k
-# end
-# #ctime version
-# function itersolve_fft(Nₖ::Int,ie_0_c::ConformalIEν{T},M::Int,η_ini, η_fin,u0;reltol=1e-6) where T
-#     𝒩₀_0,𝒩₂_0 = ie_0_c.ie.s𝒩₀,ie_0_c.ie.s𝒩₂
-#     𝒩₀_k,𝒩₂_k = 𝒩₀_0,𝒩₂_0
-#     perturb_k = nothing
-#     ηη_k = nothing
-#     for k in 1:Nₖ
-#         ηη_k,𝒩₀_k,𝒩₂_k,perturb_k = iterate_fft_c(𝒩₀_k,𝒩₂_k,ie_0_c.ie.par,ie_0_c.ie.bg,ie_0_c.ie.ih,
-#                                                ie_0_c.ie.k,ie_0_c.ie.ℓ_γ,ie_0_c.ie.ℓ_mν,ie_0_c.ie.nq,M,reltol,
-#                                                η_ini, η_fin,u0)
-#     end
-#     return ηη_k,𝒩₀_k,𝒩₂_k,perturb_k
-# end
-
-# # Helper functon for switch
-# function get_switch_u0(η,hierarchy_conf) #Input is η of the switch
-#     # switch_idx=740 #<- the switch idx for η=1.0ish
-#     hierarchy,bg = hierarchy_conf.hierarchy,hierarchy_conf.hierarchy.bg
-#     Mpcfac = bg.H₀*299792.458/100.
-#     switch_idx = argmin(abs.(bg.η*Mpcfac .-η)) #for now we use the bg to find the switch
-#     #solve the split ode
-#     ℓᵧ,ℓ_ν,n_q = hierarchy.ℓᵧ,hierarchy.ℓ_ν, hierarchy.nq
-#     pertlen=2(ℓᵧ+1) + (ℓ_ν+1) + (ℓ_mν+1)*n_q + 5
-#     # \/ we want to report this timing to get a full picture of total time (early+late)
-#     sol_early_c = h_boltsolve_conformal_flex(hierarchy_conf, bg.η[1], bg.η[switch_idx],  initial_conditions(bg.x_grid[1], hierarchy));
-#     # Get the new initial conditions
-#     u0_ie_c = zeros(2(ℓᵧ+1) + (2+1) + (ℓ_mν+1)*n_q + 5);
-#     for i in  1:2(ℓᵧ+1)+(2+1)
-#         u0_ie_c[i] = sol_early_c.u[end][i]
-#     end
-#     for i in  2(ℓᵧ+1)+(ℓ_ν+1)+1:pertlen
-#         down_shift = i-(ℓ_ν-2)
-#         u0_ie_c[down_shift] = sol_early_c.u[end][i]
-#     end
-#     return u0_ie_c
-# end
-
-
-# ------------------------------
-# Unused
-function rsa_perts!(u, ie::IE{T},x) where T
-    #redundant code for what we need to compute RSA perts in place in u
-    k, ℓᵧ, par, bg, ih, nq = ie.k, 2, ie.par, ie.bg, ie.ih,ie.nq
-    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
-    a = x2a(x)
-    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    csb² = ih.csb²(x)
-    ℓ_ν = ie.ℓ_ν
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]
-                                  + σℳ / bg.ρ_crit /4
-                                  )
-    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-        + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0]
-        + a^(-2) * ρℳ / bg.ρ_crit
-        )
-
-    #fixed RSA
-    Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-    Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
-                     + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
-    Θ[2] = 0
-    #massless neutrinos
-    𝒩[0] = Φ
-    𝒩[1] = -2ℋₓ/k *Φ′
-    𝒩[2] = 0
-
-    #set polarization to zero
-    Θᵖ[0] = 0
-    Θᵖ[1] = 0
-    Θᵖ[2] = 0
-
-    u[1] = Θ[0]
-    u[2] = Θ[1]
-    u[3] = Θ[2]
-
-    u[(ℓᵧ+1)+1] = Θᵖ[0]
-    u[(ℓᵧ+1)+2] = Θᵖ[1]
-    u[(ℓᵧ+1)+3] = Θᵖ[2]
-
-    u[2(ℓᵧ+1)+1] = 𝒩[0]
-    u[2(ℓᵧ+1)+2] = 𝒩[1]
-    u[2(ℓᵧ+1)+3] = 𝒩[2]
-
-    #zero the rest to avoid future confusion
-    for ℓ in 3:(ℓᵧ)
-        u[ℓ] = 0
-        u[(ℓᵧ+1)+ℓ] = 0
-    end
-    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
-    return nothing
-end
-
-function boltsolve_rsa(ie::IE{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
-    #call solve as usual first
-    perturb = boltsolve(ie, reltol=reltol)
-    x_grid = ie.bg.x_grid
-    pertlen = 2(2+1)+(ie.ℓ_ν+1)+(ie.ℓ_mν+1)*ie.nq+5
-    results=zeros(pertlen,length(x_grid))
-    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
-    #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    xrsa_hor = minimum(bg.x_grid[(@. k*bg.η .> 45)])
-    xrsa_od = minimum(bg.x_grid[(@. -ih.τ′*bg.η*bg.ℋ .<5)])
-    this_rsa_switch = max(xrsa_hor,xrsa_od)
-    x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
-    results_rsa = results[:,x_grid.>this_rsa_switch]
-    #(re)-compute the RSA perts so we can write them to the output vector
-    for i in 1:length(x_grid_rsa) #inside here use regular unpack since single step
-        rsa_perts!(view(results_rsa,:,i),ie,x_grid_rsa[i]) #to mutate need to use view...
-    end
-    results[:,x_grid.>this_rsa_switch] = results_rsa
-    sol = results
-    return sol
-end
