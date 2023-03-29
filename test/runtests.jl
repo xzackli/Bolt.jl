@@ -63,7 +63,7 @@ end
     @test (((fbg(0.046+ Δ) - fbg(0.046 - Δ)) / 2Δ - ForwardDiff.derivative(fbg, 0.046)) .< 1e-5)
 end
 
-# ih with recfast
+## ih with recfast
 @testset "ih_fwddiff" begin
     function fih(Ω_b::DT) where DT
        𝕡 = CosmoParams{DT}(Ω_b=Ω_b)
