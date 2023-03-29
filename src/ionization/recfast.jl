@@ -117,7 +117,7 @@ end
     Nnow::T = 3 * HO * HO * OmegaB / (8π * G * mu_H * m_H)  # TODO: should replace during GREAT GENERALIZATION
     fu::T = (Hswitch == 0) ? 1.14 : 1.125
     b_He::T = 0.86  # Set the He fudge factor
-    tol::T = 1e-6
+    tol::T = 1e-8
 end
 
 # helper constructor which dispatches on the background
