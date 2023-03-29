@@ -40,7 +40,7 @@ end
     z⃗, Xe_fort = recfastdata[:,1][1:end-5], recfastdata[:,2][1:end-5]
     𝕡 = CosmoParams(Σm_ν=0.0, N_ν=3.0, Ω_r=5.042e-5)
     bg = Background(𝕡)
-    𝕣 = Bolt.RECFAST(bg=bg, OmegaB=𝕡.Ω_b, Yp=𝕡.Y_p, OmegaG=𝕡.Ω_r, Tnow=2.725)
+    𝕣 = Bolt.RECFAST(bg; OmegaB=𝕡.Ω_b, Yp=𝕡.Y_p, OmegaG=𝕡.Ω_r, Tnow=2.725)
     rhist = Bolt.recfastsolve(𝕣)
     # xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
     #change to only test pre-reion (z≧50)
@@ -68,7 +68,7 @@ end
     function fih(Ω_b::DT) where DT
        𝕡 = CosmoParams{DT}(Ω_b=Ω_b)
        bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=15)
-       𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
+       𝕣 = Bolt.RECFAST(bg; Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
        #TODO?: Need to supply all three relevant cosmo params to recfast to avoid dual problem
        ih = IonizationHistory(𝕣, 𝕡, bg)
        return ih.csb²(0.)

@@ -395,7 +395,7 @@ function init_He_evolution(𝕣, z0)
     x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))  # He Saha
     x0 = x_He0
     x_He0 = (x0 - 1) / 𝕣.fHe
-    return SA[x_He0, Bolt.Tmat_early(𝕣, z0)]
+    return SA[x_He0, Tmat_early(𝕣, z0)]
 end
 
 
@@ -436,16 +436,16 @@ function Xe(rhist::RECFASTHistory, z)
         x_He0 = 0.5 * ( sqrt( (rhs-1)^2 + 4*(1+𝕣.fHe)*rhs ) - (rhs-1))
         return x_He0
     elseif (z > rhist.z_H_He_evo_start)
-        return Bolt.Xe_He_evolution(𝕣, z, rhist.sol_He)
+        return Xe_He_evolution(𝕣, z, rhist.sol_He)
     else
-        return Bolt.Xe_H_He_evolution(𝕣, z, rhist.sol_H_He)
+        return Xe_H_He_evolution(𝕣, z, rhist.sol_H_He)
     end
 end
 
 function Tmat(rhist::RECFASTHistory, z) 
     𝕣 = rhist.𝕣
     if (z > rhist.z_He_evo_start)
-        return Bolt.Tmat_early(𝕣, z)
+        return Tmat_early(𝕣, z)
     elseif (z > rhist.z_H_He_evo_start)
         return rhist.sol_He(z, idxs=2)
     else
@@ -459,25 +459,25 @@ function recfastsolve(𝕣, alg=Tsit5(), zinitial=10000., zfinal=0.)
 
     # figure out when to start Helium and Hydrogen+Helium evolutions
     z_He_evo_start = assume_nondual(solve(
-        IntervalNonlinearProblem(Bolt.end_of_saha_condition, 
+        IntervalNonlinearProblem(end_of_saha_condition, 
         (z_epoch_He_Saha_begin, zfinal), 𝕣), 
         Falsi(), reltol = 1e-4).u)
 
     z_H_He_evo_start = assume_nondual(solve(
-        IntervalNonlinearProblem(Bolt.end_He_evo_condition, 
+        IntervalNonlinearProblem(end_He_evo_condition, 
         (z_He_evo_start, zfinal), 𝕣), 
         Falsi(), reltol = 1e-4).u)
 
     # evolve Helium and Tmat
-    y2 = Bolt.init_He_evolution(𝕣, z_He_evo_start)
-    prob2 = ODEProblem{false}(Bolt.ion_recfast_H_Saha, y2, 
+    y2 = init_He_evolution(𝕣, z_He_evo_start)
+    prob2 = ODEProblem{false}(ion_recfast_H_Saha, y2, 
         (z_He_evo_start, z_H_He_evo_start), 𝕣)
     sol_He = solve(prob2, alg, reltol=𝕣.tol)
 
     # evolve Hydrogen, Helium, and Tmat
     z3 = z_H_He_evo_start
-    y3 = SA[Bolt.x_H0_H_Saha(𝕣, z3), sol_He(z3, idxs=1), sol_He(z3, idxs=2)]
-    prob3 = ODEProblem{false}(Bolt.ion_recfast, y3, (z3, zfinal), 𝕣)
+    y3 = SA[x_H0_H_Saha(𝕣, z3), sol_He(z3, idxs=1), sol_He(z3, idxs=2)]
+    prob3 = ODEProblem{false}(ion_recfast, y3, (z3, zfinal), 𝕣)
     sol_H_He = solve(prob3, alg, reltol=𝕣.tol)
 
     return RECFASTHistory(𝕣, zinitial, zfinal, 
@@ -489,7 +489,7 @@ function reionization_Xe(rh::RECFASTHistory, z)
     𝕣 = rh.𝕣
     X_fin = 1 + 𝕣.Yp / ( 𝕣.not4*(1-𝕣.Yp) ) #ionization frac today
     zre,α,ΔH,zHe,ΔHe,fHe = 7.6711,1.5,0.5,3.5,0.5,X_fin-1 #reion params, TO REPLACE
-    x_orig = Bolt.Xe(rh, z)
+    x_orig = Xe(rh, z)
     x_reio_H =  (X_fin - x_orig) / 2 * (
         1 + tanh(( (1+zre)^α - (1+z)^α ) / ( α*(1+zre)^(α-1) ) / ΔH)) + x_orig
     x_reio_He = fHe / 2 * ( 1 + tanh( (zHe - z) / ΔHe) )
@@ -536,14 +536,13 @@ function Tmat(trhist::TanhReionizationHistory, z)
 end
 
 function tanh_reio_solve(ion_hist, zre_ini=50.0)
-
     𝕣 = ion_hist.𝕣
-    zre_ini = 50.0
-    reio_prob = ODEProblem(Bolt.reionization_Tmat_ode, 
-        Bolt.Tmat(ion_hist, zre_ini), (zre_ini, ion_hist.zfinal), ion_hist)
+    reio_prob = ODEProblem(reionization_Tmat_ode, 
+        Tmat(ion_hist, zre_ini), (zre_ini, ion_hist.zfinal), ion_hist)
     sol_reio_Tmat = solve(reio_prob, Tsit5(), reltol=𝕣.tol)
-    trh = Bolt.TanhReionizationHistory(zre_ini, ion_hist, sol_reio_Tmat);
+    trh = TanhReionizationHistory(zre_ini, ion_hist, sol_reio_Tmat);
 
+    return trh
 end
 
 
