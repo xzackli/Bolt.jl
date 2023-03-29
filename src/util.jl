@@ -21,6 +21,8 @@ from_ui(x,lqmi,lqma) = lqmi + (lqma- lqmi) / (1- (-1)) * (x- (-1))
 dxdq(q,logqmin,logqmax) = (1+to_ui(1+logqmin,logqmin,logqmax))/(q*log(10))
 xq2q(x,logqmin,logqmax) = 10.0 ^ from_ui(x,logqmin,logqmax)
 
+unzip(a) = map(x->getfield.(a, x), fieldnames(eltype(a)))
+
 
 
 # utilities for applying an FFTLog transformation ===
@@ -40,7 +42,7 @@ struct FFTLogPlan{T, OT, AA<:AbstractArray{Complex{T},1},
     ifftplan!::IPT
 end
 
-function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
+function plan_fftlog(r::AA, μ, q, uₘ, k₀r₀=1.0;
                      kropt=true) where {T, AA<:AbstractArray{T,1}}
     logrmin = log(first(r))
     logrmax = log(last(r))
@@ -69,8 +71,15 @@ function plan_fftlog(r::AA, μ, q, k₀r₀=1.0;
 end
 
 
+# jms: These are ordinary (2D) Bessel function kernels
+# We should add the spherical (3D) Bessels as well
 U_μ(μ, x) = exp(x * log(2.) - lgamma(0.5 * (μ + 1 - x)) + lgamma(0.5 * (μ + 1 + x)))
 uₘ(m, μ, q, dlnr, k₀r₀, N) = (k₀r₀)^(-2π * im * m / (dlnr * N)) * U_μ(μ, q + 2π * im * m / (dlnr * N) )
+
+#3D Bessel j Mellin kernel
+M_μ(μ, x) = exp( (x-0.5)*log(2.) - lgamma(0.5 * (μ + 2 - x)) + lgamma(0.5 * (μ + 1 + x)))
+mₘ(m, μ, q, dlnr, k₀r₀, N) = (k₀r₀)^(-2π * im * m / (dlnr * N)) * M_μ(μ, q + 2π * im * m / (dlnr * N) )
+
 
 function k₀r₀_low_ringing(N, μ, q, L, k₀r₀=1.0)
     # from pyfftlog
