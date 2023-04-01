@@ -125,7 +125,8 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
     ρ₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[1] for x in x_grid], x_grid)
     # P₀ℳ_ = spline([ρP_0(x2a(x), par,quad_pts,quad_wts)[2] for x in x_grid], x_grid)
     ℋ_  = spline([ℋ(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
-    η_   = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
+    Mpcfac = H₀(par)*299792.458/100.
+    η_   = spline([η(x, par,quad_pts,quad_wts)*Mpcfac for x in x_grid], x_grid)
     # χν_   = spline([χν(x, q, par,quad_pts,quad_wts) for x in x_grid], x_grid)
 
     return Background(

@@ -52,7 +52,8 @@ function Θl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
     xgrid = bg.x_grid
     for i in x_i:length(xgrid)-1
         x = xgrid[i]
-        sb = bes(k*(bg.η₀ - bg.η(x)))
+        Mpcfac = hierarchy.bg.H₀*299792.458/100.
+        sb = bes(k*(bg.η₀ - bg.η(x)/Mpcfac)) #only η interpolator has diff units
         source = s_itp(x, k)
         s += sb * source * (xgrid[i+1] - xgrid[i])
     end
@@ -65,8 +66,9 @@ function Pl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
     xgrid = bg.x_grid
     for i in x_i:length(xgrid)-1
         x = xgrid[i]
-        sb = bes(k*(bg.η₀ - bg.η(x)))
-        source = s_itp(x, k) / (bg.η₀ - bg.η(x))^2
+        Mpcfac = hierarchy.bg.H₀*299792.458/100.
+        sb = bes(k*(bg.η₀ - bg.η(x)/Mpcfac))
+        source = s_itp(x, k) / (bg.η₀ - bg.η(x)/Mpcfac)^2
         s += sb * source * (xgrid[i+1] - xgrid[i])
     end
     return s

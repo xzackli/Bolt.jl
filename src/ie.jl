@@ -294,11 +294,13 @@ function boltsolve_conformal(confie::ConformalIEγν{T},#FIXME we don't need thi
     ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
     xᵢ = ie.bg.x_grid[1]#η2x( ie.bg.η[1] ) 
-    Mpcfac = ie.bg.H₀*299792.458/100.
+    # Mpcfac = ie.bg.H₀*299792.458/100.
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie_conformal!, u₀, 
-        (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
-        min(ie.bg.η[end]*Mpcfac,ie.bg.η(ie.bg.x_grid[end])*Mpcfac)),
+        # (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
+        # min(ie.bg.η[end]*Mpcfac,ie.bg.η(ie.bg.x_grid[end])*Mpcfac)),
+        (max(ie.bg.η[1],ie.bg.η(ie.bg.x_grid[1])), 
+        min(ie.bg.η[end],ie.bg.η(ie.bg.x_grid[end]))),
         confie)
     sol = solve(prob, ode_alg, reltol=reltol,
                 dense=false
@@ -337,7 +339,8 @@ end
 function ie_conformal!(du, u, confie::ConformalIEγν{T}, η) where T
     ie = confie.ie
     Mpcfac = ie.bg.H₀*299792.458/100.
-    x = confie.η2x(η  / Mpcfac )
+    # println("about to call η2x at ", η  / Mpcfac) # too many calls for this to be useful
+    x = confie.η2x(η)#  / Mpcfac )
     ℋ = ie.bg.ℋ(x)
     ie!(du, u, ie, x)
     du .*= ℋ / Mpcfac  # account for dx/dη
@@ -457,7 +460,8 @@ function ie!(du, u, ie::IE{T, BasicNewtonian}, x) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    Mpcfac = ie.bg.H₀*299792.458/100. 
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x)/Mpcfac, ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
@@ -747,7 +751,9 @@ function ie!(du, u, ie::IEγν{T, BasicNewtonian}, x) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    Mpcfac = ie.bg.H₀*299792.458/100. 
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x)/Mpcfac, ih.τ′(x), ih.τ′′(x)
+    #FIXME drop the unused things
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
@@ -1043,7 +1049,8 @@ function initial_conditions(xᵢ, ie::IEγν{T, BasicNewtonian}) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
-    ℋₓ, _, ηₓ, τₓ′, _ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    Mpcfac = ie.bg.H₀*299792.458/100. 
+    ℋₓ, _, ηₓ, τₓ′, _ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)/Mpcfac, ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ are mutable views (see unpack)
 
     aᵢ² = exp(xᵢ)^2
@@ -1136,15 +1143,17 @@ end
 function _IΘ2(x, x′,k,
     Π, Θ0, v_b, Φ′, Ψ,
     ih, bg) #for testing
+    Mpcfac = ie.bg.H₀*299792.458/100. #FIXME won't need this anymore when k in correct units
     τ′,η = ih.τ′,bg.η #all splines of x
-    y = k*( η(x)-η(x′) )#Bessel argument
+    y = k*( η(x)-η(x′) )/Mpcfac #Bessel argument
     IΘ2 = ( Θ0 - Φ′/ (-τ′(x′))  )*j2(y) - ( v_b   - ( k/bg.ℋ(x′) )*Ψ / (-τ′(x′)) )*j2′(y)  - Π*R2(y) / 2 
     return IΘ2
 end
 
 function _IΠ(x, x′,k, Π, bg)
     η = bg.η #all splines of x
-    y = k*( η(x)-η(x′) )#Bessel argument
+    Mpcfac = ie.bg.H₀*299792.458/100. 
+    y = k*( η(x)-η(x′) )/Mpcfac  #Bessel argument
     IE2 = j2bx2(y)*Π
     IΠ = 9IE2
     return IΠ
@@ -1586,9 +1595,10 @@ end
 function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
-    Mpcfac = hierarchy.bg.H₀*299792.458/100.
+    # Mpcfac = hierarchy.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(Bolt.hierarchy_conformal!, u₀, 
-                            (η_ini*Mpcfac , η_fin*Mpcfac),
+                            # (η_ini*Mpcfac , η_fin*Mpcfac),
+                            (η_ini , η_fin),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
     dense=false
@@ -1599,9 +1609,10 @@ end
 function boltsolve_conformal_flex(confie::ConformalIEν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
-    Mpcfac = ie.bg.H₀*299792.458/100.
+    # Mpcfac = ie.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(Bolt.ie_conformal!, u₀, 
-                            (η_ini*Mpcfac, η_fin*Mpcfac),
+                            # (η_ini*Mpcfac, η_fin*Mpcfac),
+                            (η_ini, η_fin),
                             confie)
     sol = solve(prob, ode_alg, reltol=reltol,
     dense=false
@@ -1623,9 +1634,10 @@ end
 function boltsolve_conformal_flex(confie::ConformalIEγν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
-    Mpcfac = ie.bg.H₀*299792.458/100.
+    # Mpcfac = ie.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(Bolt.ie_conformal!, u₀, 
-                            (η_ini*Mpcfac, η_fin*Mpcfac),
+                            # (η_ini*Mpcfac, η_fin*Mpcfac),
+                            (η_ini, η_fin),
                             confie)
     sol = solve(prob, ode_alg, reltol=reltol,
     dense=false
@@ -1654,7 +1666,10 @@ function iterate_fft_c(𝒩₀_km1,𝒩₂_km1, 𝕡::CosmoParams{T}, bg, ih, k,
     ie_k_conf_late_c = ConformalIEν(ie_k_late,η2x);
     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
     xx,𝒩₀_k,𝒩₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,m,q,i_q,
-                        u0,η2x(perturb_k_late_c.t/Mpcfac)) 
+                        u0,
+                        # η2x(perturb_k_late_c.t/Mpcfac)
+                        η2x(perturb_k_late_c.t)
+                        ) 
     return xx,𝒩₀_k,𝒩₂_k,perturb_k_late_c
 end
 
@@ -1677,7 +1692,10 @@ function iterate_fft_allν_c(𝒳₀_km1,𝒳₂_km1, 𝕡::CosmoParams{T}, bg, 
     ie_k_conf_late_c = ConformalIEallν(ie_k_late,η2x);
     perturb_k_late_c = boltsolve_conformal_flex(ie_k_conf_late_c, η_ini, η_fin, u0; reltol=reltol)
     xx,𝒳₀_k,𝒳₂_k = fft_ie_c(ie_k_conf_late_c.ie,perturb_k_late_c,M,
-                        u0,η2x(perturb_k_late_c.t/Mpcfac)) 
+                        u0,
+                        # η2x(perturb_k_late_c.t/Mpcfac)
+                        η2x(perturb_k_late_c.t)
+                        ) 
     return xx,𝒳₀_k,𝒳₂_k,perturb_k_late_c
 end
 
@@ -1742,7 +1760,7 @@ function get_switch_u0(η,hierarchy_conf) #Input is η of the switch
     # This function assumes truncated hierarchies for all neutrinos (but not yet photons)
     hierarchy,bg = hierarchy_conf.hierarchy,hierarchy_conf.hierarchy.bg
     Mpcfac = bg.H₀*299792.458/100.
-    switch_idx = argmin(abs.(bg.η*Mpcfac .-η)) #for now we use the bg to find the switch
+    switch_idx = argmin(abs.(bg.η .-η)) #for now we use the bg to find the switch
     #solve the split ode
     ℓᵧ,ℓ_ν,n_q = hierarchy.ℓᵧ,hierarchy.ℓ_ν, hierarchy.nq
     pertlen=2(ℓᵧ+1) + (ℓ_ν+1) + (ℓ_mν+1)*n_q + 5
@@ -1800,28 +1818,41 @@ function x_grid_ie(ie,x_ini,x_fin) # We don't want this to use the background...
     #If we start before horizon entry we can still use the below scheme for setting x trapz points
     # and we should make Nᵧ₁ small
     #Actually, is this fine?
-
+    # digits=3
     # Three phases: 
     # 1. Pre-horizon entry:
-    xhor = bg.x_grid[argmin(abs.(k .* bg.η .- 2π))] #horizon crossing ish
+    Mpcfac = ie.bg.H₀*299792.458/100.
+    xhor = bg.x_grid[argmin(abs.(k .* bg.η /Mpcfac .- 2π))] #horizon crossing ish
     # x_ph_i, x_ph_f, n_ph = bg.x_grid[1], xhor, ie.Nᵧ₁ #10.
     x_ph_i, x_ph_f, n_ph = x_ini, xhor, ie.Nᵧ₁ 
     dx_ph = (x_ph_f-x_ph_i)/(n_ph-1)
     # x_ph = -20.:dx_ph:x_ph_f
     # x_ph = -20. .+ dx_ph*collect(0:1:n_ph-1)
-    x_ph = x_ini .+ dx_ph*collect(0:1:n_ph-1)
+    # x_ph = x_ph_i .+ dx_ph*collect(0:1:n_ph-1)
+    x_ph = collect(range(x_ph_i,x_ph_f,length=n_ph-1))
+
     # 2. Wiggly time (recomb):
-    xdec = bg.x_grid[argmin(abs.( -ih.τ′ .* bg.ℋ .*bg.η .- 1))] #decoupling ish
+    xdec = bg.x_grid[argmin(abs.( -ih.τ′ .* bg.ℋ .*bg.η /Mpcfac .- 1))] #decoupling ish
     x_rc_f, n_rc = xdec, ie.Nᵧ₂ #100
     dx_rc = (x_rc_f-x_ph_f)/n_rc
-    x_rc = x_ph_f .+ dx_rc * collect(1:1:n_rc)
+    # x_rc = x_ph_f .+ dx_rc * collect(1:1:n_rc)
+    x_rc = range(x_ph_f,xdec,length=n_rc-1)
 
     # 3. Post-recomb:
     n_pr = ie.Nᵧ₃ #50
     # dx_pr = (bg.x_grid[end] -x_rc_f)/n_pr
     dx_pr = (x_fin -x_rc_f)/n_pr
-    x_pr = x_rc_f .+ dx_pr* collect(1:1:n_pr )
+    # x_pr = x_rc_f .+ dx_pr* collect(1:1:n_pr )
+    x_pr = range(x_ph_f,xdec,length=n_rc-1)
+    println("1,2,3 = ($(x_ph_i),$(x_ph_f),$(x_rc_f))")
+    println("dx1,dx2,dx3 = ($(dx_ph),$(dx_rc),$(dx_pr))")
     x_sparse = vcat(x_ph,x_rc,x_pr)
+
+
+    x_sparse = unique([range(x_ph_i,x_ph_f,n_ph+1);
+                       range(x_ph_f,x_rc_f,n_rc+1); 
+                       range(x_rc_f,x_fin,n_pr)])
+
     return x_sparse
 end
 
@@ -1866,6 +1897,11 @@ function fft_ie(ie::IEγν,M,u₀,x_grid,sΦ′,sΨ)
     # Do the massless case
     χνs = cumul_integrate(exp.(x_grid),  [χ′z(exp(x),1.0,0.0,bg.quad_pts,bg.quad_wts,𝕡) for x in x_grid]) #bg.η
     yyx = k.* (χνs .- χνs[1])
+    println("x_grid[1]", x_grid[1])
+    println("x_grid[end]", x_grid[end])
+    # println("χνs[end]", χνs[end])
+    # println("k", k)
+    # println("yyx[end]: ", yyx)
     dy=(yyx[end]-yyx[1])/(M-1)
     yy = yyx[1]:dy:yyx[end]
     invx = linear_interpolation(yyx,x_grid).(yy) #get xpoints at equispaced "neutrino ctime" FIXME use spline?
@@ -1876,6 +1912,7 @@ function fft_ie(ie::IEγν,M,u₀,x_grid,sΦ′,sΨ)
     # for j in 1:M
     #     Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
     # end
+    println("invx[1]", invx[1])
     Φ′,Ψ = sΦ′(invx),sΨ(invx)
 
     # Free-streaming piece

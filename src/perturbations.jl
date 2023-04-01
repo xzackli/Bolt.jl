@@ -44,10 +44,12 @@ function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't
     hierarchy = confhierarchy.hierarchy
     xᵢ = hierarchy.bg.x_grid[1]#confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
     u₀ = initial_conditions(xᵢ, hierarchy)
-    Mpcfac = hierarchy.bg.H₀*299792.458/100.
+    # Mpcfac = hierarchy.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
-                            (max(hierarchy.bg.η[1]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac), 
-                            min(hierarchy.bg.η[end]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac)),
+                            # (max(hierarchy.bg.η[1]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac), 
+                            # min(hierarchy.bg.η[end]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac)),
+                            (max(hierarchy.bg.η[1],hierarchy.bg.η(hierarchy.bg.x_grid[1])), 
+                            min(hierarchy.bg.η[end],hierarchy.bg.η(hierarchy.bg.x_grid[end]))),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
                 # saveat=hierarchy.bg.η, 
@@ -73,7 +75,7 @@ end
 function hierarchy_conformal!(du, u, confhierarchy::ConformalHierarchy{T}, η) where T
     hierarchy = confhierarchy.hierarchy
     Mpcfac = hierarchy.bg.H₀*299792.458/100.
-    x = confhierarchy.η2x(η  / Mpcfac )
+    x = confhierarchy.η2x(η)#  / Mpcfac )
     ℋ = hierarchy.bg.ℋ(x)
     hierarchy!(du, u, hierarchy, x)
     du .*= ℋ / Mpcfac  # account for dx/dη
@@ -88,7 +90,8 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     # q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    Mpcfac = hierarchy.bg.H₀*299792.458/100.
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x)/Mpcfac, ih.τ′(x), ih.τ′′(x)
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
@@ -237,7 +240,8 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    Mpcfac = hierarchy.bg.H₀*299792.458/100.
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)/Mpcfac, ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
