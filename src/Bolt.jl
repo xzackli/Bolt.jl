@@ -6,7 +6,7 @@ export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
 export Peebles, PeeblesI
 export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
 export Hierarchy, boltsolve, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa,boltsolve_conformal,ConformalHierarchy
-export IE,initial_conditions,unpack,ie_unpack, IEν, IEallν,IEγν, x_grid_ie,itersolve,ConformalIE,boltsolve_conformal,itersolve_conformal,ConformalIEν,ConformalIEallν,ConformalIEγν,boltsolve_flex,h_boltsolve_flex,boltsolve_conformal_flex,h_boltsolve_conformal_flex
+export IE,initial_conditions,unpack,ie_unpack, IEν, IEallν,IEγν, x_grid_ie,η_grid_ie,itersolve,ConformalIE,boltsolve_conformal,itersolve_conformal,ConformalIEν,ConformalIEallν,ConformalIEγν,boltsolve_flex,h_boltsolve_flex,boltsolve_conformal_flex,h_boltsolve_conformal_flex
 export g_weight_trapz_ie,fft_ie,χ′z
 export source_grid, quadratic_k, cltt,log10_k,plin
 export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq, unzip

@@ -28,11 +28,11 @@ struct ConformalHierarchy{T<:Real,  H <: Hierarchy{T}, IT <: AbstractInterpolati
 end
 #^Not sure this is the best way to wrap this...
 
-function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,abstol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
     u₀ = initial_conditions(xᵢ, hierarchy)
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,
+    sol = solve(prob, ode_alg, reltol=reltol,abstol=abstol,
                 # saveat=hierarchy.bg.x_grid, 
                 dense=false,
                 )
@@ -40,7 +40,7 @@ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) whe
 end
 
 function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
-                         ode_alg=KenCarp4(); reltol=1e-6) where T
+                         ode_alg=KenCarp4(); reltol=1e-6,abstol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
     xᵢ = hierarchy.bg.x_grid[1]#confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
     u₀ = initial_conditions(xᵢ, hierarchy)
@@ -51,7 +51,7 @@ function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't
                             (max(hierarchy.bg.η[1],hierarchy.bg.η(hierarchy.bg.x_grid[1])), 
                             min(hierarchy.bg.η[end],hierarchy.bg.η(hierarchy.bg.x_grid[end]))),
                             confhierarchy)
-    sol = solve(prob, ode_alg, reltol=reltol,
+    sol = solve(prob, ode_alg, reltol=reltol,abstol=abstol,
                 # saveat=hierarchy.bg.η, 
                 dense=false
                 )

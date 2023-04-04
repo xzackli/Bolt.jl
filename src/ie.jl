@@ -1143,7 +1143,7 @@ end
 function _IΘ2(x, x′,k,
     Π, Θ0, v_b, Φ′, Ψ,
     ih, bg) #for testing
-    Mpcfac = ie.bg.H₀*299792.458/100. #FIXME won't need this anymore when k in correct units
+    Mpcfac = bg.H₀*299792.458/100. #FIXME won't need this anymore when k in correct units
     τ′,η = ih.τ′,bg.η #all splines of x
     y = k*( η(x)-η(x′) )/Mpcfac #Bessel argument
     IΘ2 = ( Θ0 - Φ′/ (-τ′(x′))  )*j2(y) - ( v_b   - ( k/bg.ℋ(x′) )*Ψ / (-τ′(x′)) )*j2′(y)  - Π*R2(y) / 2 
@@ -1152,7 +1152,7 @@ end
 
 function _IΠ(x, x′,k, Π, bg)
     η = bg.η #all splines of x
-    Mpcfac = ie.bg.H₀*299792.458/100. 
+    Mpcfac = bg.H₀*299792.458/100. 
     y = k*( η(x)-η(x′) )/Mpcfac  #Bessel argument
     IE2 = j2bx2(y)*Π
     IΠ = 9IE2
@@ -1844,8 +1844,8 @@ function x_grid_ie(ie,x_ini,x_fin) # We don't want this to use the background...
     dx_pr = (x_fin -x_rc_f)/n_pr
     # x_pr = x_rc_f .+ dx_pr* collect(1:1:n_pr )
     x_pr = range(x_ph_f,xdec,length=n_rc-1)
-    println("1,2,3 = ($(x_ph_i),$(x_ph_f),$(x_rc_f))")
-    println("dx1,dx2,dx3 = ($(dx_ph),$(dx_rc),$(dx_pr))")
+    # println("1,2,3 = ($(x_ph_i),$(x_ph_f),$(x_rc_f))")
+    # println("dx1,dx2,dx3 = ($(dx_ph),$(dx_rc),$(dx_pr))")
     x_sparse = vcat(x_ph,x_rc,x_pr)
 
 
@@ -1854,6 +1854,30 @@ function x_grid_ie(ie,x_ini,x_fin) # We don't want this to use the background...
                        range(x_rc_f,x_fin,n_pr)])
 
     return x_sparse
+end
+
+
+function η_grid_ie(ie,η_ini,η_fin,η2x) # We don't want this to use the background...
+    bg,ih,k = ie.bg,ie.ih,ie.k
+    η_grid = range(η_ini,η_fin,1024)
+    τ′ = ih.τ′(η2x(η_grid))
+    ℋ = bg.ℋ(η2x(η_grid))
+    # Three phases: 
+    # 1. Pre-horizon entry:
+    Mpcfac = ie.bg.H₀*299792.458/100.
+    ηhor = η_grid[argmin(abs.(k .* η_grid /Mpcfac .- 2π))] #horizon crossing ish
+    # x_ph_i, x_ph_f, n_ph = bg.x_grid[1], xhor, ie.Nᵧ₁ #10.
+    η_ph_i, η_ph_f, n_ph = η_ini, ηhor, ie.Nᵧ₁ 
+    # 2. Wiggly time (recomb):
+    ηdec = η_grid[argmin(abs.( -τ′ .* ℋ .*η_grid /Mpcfac .- 1))] #decoupling ish
+    η_rc_f, n_rc = ηdec, ie.Nᵧ₂ 
+    # 3. Post-recomb:
+    n_pr = ie.Nᵧ₃ 
+    η_sparse = unique([range(η_ph_i,η_ph_f,n_ph+1);
+                       range(η_ph_f,η_rc_f,n_rc+1); 
+                       range(η_rc_f,η_fin,n_pr)])
+
+    return η_sparse
 end
 
 
@@ -1897,8 +1921,8 @@ function fft_ie(ie::IEγν,M,u₀,x_grid,sΦ′,sΨ)
     # Do the massless case
     χνs = cumul_integrate(exp.(x_grid),  [χ′z(exp(x),1.0,0.0,bg.quad_pts,bg.quad_wts,𝕡) for x in x_grid]) #bg.η
     yyx = k.* (χνs .- χνs[1])
-    println("x_grid[1]", x_grid[1])
-    println("x_grid[end]", x_grid[end])
+    # println("x_grid[1]", x_grid[1])
+    # println("x_grid[end]", x_grid[end])
     # println("χνs[end]", χνs[end])
     # println("k", k)
     # println("yyx[end]: ", yyx)
@@ -1912,7 +1936,7 @@ function fft_ie(ie::IEγν,M,u₀,x_grid,sΦ′,sΨ)
     # for j in 1:M
     #     Φ′[j],Ψ[j] = get_Φ′_Ψ(perturb(invx[j]),ie,invx[j])
     # end
-    println("invx[1]", invx[1])
+    # println("invx[1]", invx[1])
     Φ′,Ψ = sΦ′(invx),sΨ(invx)
 
     # Free-streaming piece
