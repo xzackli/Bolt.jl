@@ -358,6 +358,20 @@ function h_boltsolve_flex(hierarchy::Hierarchy{T},  x_ini,x_fin, u₀, ode_alg=K
     return sol
 end
 
+function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
+    η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
+    hierarchy = confhierarchy.hierarchy
+    # Mpcfac = hierarchy.bg.H₀*299792.458/100.
+    prob = ODEProblem{true}(Bolt.hierarchy_conformal!, u₀, 
+                            # (η_ini*Mpcfac , η_fin*Mpcfac),
+                            (η_ini , η_fin),
+                            confhierarchy)
+    sol = solve(prob, ode_alg, reltol=reltol,
+    dense=false
+    )
+    return sol
+end
+
 function boltsolve_flex(ie::IEγν{T}, x_ini,x_fin, u₀, ode_alg=KenCarp4(); reltol=1e-6) where T 
     prob = ODEProblem{true}(Bolt.ie!, u₀, (x_ini , x_fin), ie)
     sol = solve(prob, ode_alg, reltol=reltol,
@@ -365,6 +379,8 @@ function boltsolve_flex(ie::IEγν{T}, x_ini,x_fin, u₀, ode_alg=KenCarp4(); re
                 )
     return sol
 end
+
+
 
 function boltsolve_conformal_flex(confie::ConformalIEγν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
@@ -379,6 +395,8 @@ function boltsolve_conformal_flex(confie::ConformalIEγν{T},#FIXME we don't nee
     )
     return sol
 end
+
+
 
 
 #---------------------------------#
