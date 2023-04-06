@@ -353,7 +353,7 @@ end
 function h_boltsolve_flex(hierarchy::Hierarchy{T},  x_ini,x_fin, u₀, ode_alg=KenCarp4(); reltol=1e-6) where T
     prob = ODEProblem{true}(Bolt.hierarchy!, u₀, (x_ini , x_fin), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
-                dense=false,
+                dense=true,
                 )
     return sol
 end
@@ -367,7 +367,7 @@ function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME 
                             (η_ini , η_fin),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
-    dense=false
+    dense=true
     )
     return sol
 end
@@ -589,5 +589,168 @@ function fft_ie(ie::IEγν,M,u₀,x_grid,sΦ′,sΨ)
 
 
     return invx, all_splines₀, all_splines₂
+end
+
+
+function get_perts(u,ie::IEγν{T},x) where T
+    k, par, bg, nq = ie.k, ie.par, ie.bg,ie.nq
+    Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 
+    ℋₓ =  bg.ℋ(x)
+    a = x2a(x)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie) 
+    Θ₂ = ie.sΘ2(x)
+    𝒩₀,𝒩₂  = ie.s𝒳₀[1](x),ie.s𝒳₂[1](x)
+    ℳ₀,ℳ₂ = zeros(T,nq),zeros(T,nq)
+    for idx_q in 1:nq
+        ℳ₀[idx_q] = ie.s𝒳₀[idx_q+1](x)
+        ℳ₂[idx_q] = ie.s𝒳₂[idx_q+1](x)
+    end
+    ρℳ, σℳ  =  @views ρ_σ(ℳ₀, ℳ₂, bg, a, par)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ₂ +
+                                  Ω_ν * 𝒩₂
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩₀
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+
+    Π = ie.sΠ(x)
+    return Φ′,Ψ,Θ[0],Π,v_b
+end
+
+
+#merged iterate  #FIXME remove this
+function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1, 
+                 ie::IEγν{T},
+                 M,x_ini, x_fin,u0,reltol) where T
+    𝕡, bg, ih, k, n_q,Nᵧ₁,Nᵧ₂,Nᵧ₃ = ie.par,ie.bg,ie.ih,ie.k,ie.nq,ie.Nᵧ₁,ie.Nᵧ₂,ie.Nᵧ₃ #FIXME get rid of this line
+    ie_k = IEγν(BasicNewtonian(), 𝕡, bg, ih, k,
+            Θ₂_km1,Π_km1,
+            𝒳₀_km1,𝒳₂_km1,
+            Nᵧ₁,Nᵧ₂,Nᵧ₃,
+            n_q)
+
+    # Do the truncated boltzmann solve
+    perturb_k = boltsolve_flex(ie_k, x_ini, x_fin, u0; reltol=reltol)
+
+    # Get metric and photon-relevant perturbation variables
+    #FIXME may want to put this in its own function
+    xgi = x_grid_ie(ie_k,x_ini,x_fin)
+
+    N = length(xgi)
+    Φ′,Ψ,Θ₀,Π,v_b = zeros(N),zeros(N),zeros(N),zeros(N),zeros(N)
+    u_all = perturb_k(xgi)
+
+    for (j,u) in enumerate( eachcol(u_all) )
+        Φ′[j],Ψ[j],Θ₀[j],Π[j],v_b[j] = get_perts(u,ie_k,xgi[j])
+    end
+
+    #photons
+    aΘ₂_k,aΠ_k = zeros(N),zeros(N)
+    for i in 3:N
+        aΘ₂_k[i],aΠ_k[i] = g_weight_trapz_ie(i,xgi,ie_k,Φ′,Ψ,Θ₀,Π,v_b)
+    end
+    Θ₂_k,Π_k = linear_interpolation(xgi,aΘ₂_k), linear_interpolation(xgi,aΠ_k)
+    sΦ′,sΨ = linear_interpolation(xgi,Φ′),linear_interpolation(xgi,Ψ)
+
+    #neutrinos
+    xx,𝒳₀_k,𝒳₂_k = fft_ie(ie_k,M,u0,perturb_k.t,sΦ′,sΨ) 
+    return xx,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k
+end
+
+function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1, 
+            cie::ConformalIEγν{T},
+             M,x_ini, x_fin,u0,reltol) where T
+    ie = cie.ie
+    𝕡, bg, ih, k, n_q,Nᵧ₁,Nᵧ₂,Nᵧ₃ = ie.par,ie.bg,ie.ih,ie.k,ie.nq,ie.Nᵧ₁,ie.Nᵧ₂,ie.Nᵧ₃ #FIXME get rid of this line
+    ie_k = IEγν(BasicNewtonian(), 𝕡, bg, ih, k,
+                    Θ₂_km1,Π_km1,
+                    𝒳₀_km1,𝒳₂_km1,
+                    Nᵧ₁,Nᵧ₂,Nᵧ₃,
+                    n_q)
+
+    cie_k = ConformalIEγν(ie_k,cie.η2x)
+    perturb_k = boltsolve_conformal_flex(cie_k, bg.η(x_ini), bg.η(x_fin), u0, reltol=reltol)
+    # xgi = x_grid_ie(ie_k,x_ini,x_fin)
+    xgi = cie_k.η2x(η_grid_ie(ie_k,bg.η(x_ini),bg.η(x_fin),cie_k.η2x)) #FIXME HACK
+    # xgi = cie_k.η2x(range(bg.η(x_ini),bg.η(x_fin),2048)) #Manual uniform eta grid
+
+    N = length(xgi)
+    Φ′,Ψ,Θ₀,Π,v_b = zeros(N),zeros(N),zeros(N),zeros(N),zeros(N)
+    u_all = perturb_k(bg.η(xgi))
+
+    for (j,u) in enumerate( eachcol(u_all) )
+            Φ′[j],Ψ[j],Θ₀[j],Π[j],v_b[j] = get_perts(u,ie_k,xgi[j])
+    end
+
+    #photons
+    aΘ₂_k,aΠ_k = zeros(N),zeros(N)
+    for i in 3:N
+            aΘ₂_k[i],aΠ_k[i] = g_weight_trapz_ie(i,xgi,ie_k,Φ′,Ψ,Θ₀,Π,v_b)
+    end
+    Θ₂_k,Π_k = linear_interpolation(xgi,aΘ₂_k), linear_interpolation(xgi,aΠ_k)
+    sΦ′,sΨ = linear_interpolation(xgi,Φ′),linear_interpolation(xgi,Ψ)
+
+    #neutrinos
+    xx,𝒳₀_k,𝒳₂_k = fft_ie(ie_k,M,u0,xgi,sΦ′,sΨ)
+
+    return xx,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k
+end
+
+
+function itersolve(Nₖ::Int,
+                   cie_0::ConformalIEγν{T},
+                   M::Int,x_ini,x_fin,u0;reltol=1e-6) where T
+    ie_0 = cie_0.ie
+    𝒳₀_k,𝒳₂_k = ie_0.s𝒳₀,ie_0.s𝒳₂
+    Θ₂_k,Π_k = ie_0.sΘ2,ie_0.sΠ
+    xx_k,perturb_k = nothing,nothing
+    for k in 1:Nₖ
+        xx_k,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate(Θ₂_k,Π_k, 𝒳₀_k,𝒳₂_k,
+                                                    cie_0,# ie_0,
+                                                    M,x_ini,x_fin,u0,
+                                                    reltol)
+    end
+    return xx_k,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k
+end
+
+
+# Helper functon for switch
+# function get_switch_u0(η,hierarchy,reltol) #Input is η of the switch
+function get_switch_u0(η,hierarchy_conf,reltol) 
+    # This function assumes truncated hierarchies for all neutrinos (but not yet photons)
+    hierarchy = hierarchy_conf.hierarchy
+    bg =hierarchy.bg
+    switch_idx = argmin(abs.(bg.η .-η)) #for now we use the bg to find the switch
+    #solve the split ode
+    ℓᵧ,ℓ_ν,ℓ_mν,n_q = hierarchy.ℓᵧ,hierarchy.ℓ_ν,hierarchy.ℓ_mν, hierarchy.nq
+    pertlen=2(ℓᵧ+1) + (ℓ_ν+1) + (ℓ_mν+1)*n_q + 5
+    # \/ we want to report this timing to get a full picture of total time (early+late)
+    sol_early_c = Bolt.h_boltsolve_conformal_flex(hierarchy_conf, bg.η(bg.x_grid[1]), bg.η(bg.x_grid[switch_idx]),  initial_conditions(bg.x_grid[1], hierarchy),reltol=reltol);
+
+    # Get the new initial conditions
+    u0_ie = zeros(2(2) + (0+1) + (0+1)*n_q + 5);
+    # The first split for photons
+    u0_ie[1] = sol_early_c.u[end][1]
+    u0_ie[2] = sol_early_c.u[end][2]
+    u0_ie[3] = sol_early_c.u[end][(ℓᵧ+1)+1]
+    u0_ie[4] = sol_early_c.u[end][(ℓᵧ+1)+3]
+    #set the massless neutrino dipole
+    u0_ie[2(2)+1] = sol_early_c.u[end][2(ℓᵧ+1)+2]
+
+    #massive neutrinos, now we just do the dipole again
+    # start at the dipole first q idx, go up to the last dipole q idx (in the hierarchy)   
+    for i in 1:n_q 
+        u0_ie[2(2)+1+i] = sol_early_c.u[end][2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1+i]
+    end
+    #metric and cold perts
+    for i in 1:5 #skip the higher massless hierarchy multipoles
+        u0_ie[2(2)+1+n_q+i] = sol_early_c.u[end][pertlen-5+i]
+    end
+    return u0_ie
 end
 

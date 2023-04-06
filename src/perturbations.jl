@@ -34,7 +34,7 @@ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,abst
     prob = ODEProblem{true}(hierarchy!, u₀, (xᵢ , zero(T)), hierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,abstol=abstol,
                 # saveat=hierarchy.bg.x_grid, 
-                dense=false,
+                dense=true,
                 )
     return sol
 end
@@ -53,7 +53,7 @@ function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,abstol=abstol,
                 # saveat=hierarchy.bg.η, 
-                dense=false
+                dense=true
                 )
     return sol
 end
