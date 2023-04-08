@@ -68,7 +68,7 @@ end
     function fih(Ω_b::DT) where DT
        𝕡 = CosmoParams{DT}(Ω_b=Ω_b)
        bg = Background(𝕡; x_grid=-20.0:0.1:0.0, nq=15)
-       𝕣 = Bolt.RECFAST(bg; Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
+       𝕣 = Bolt.RECFAST(bg; Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r, tol=1e-10)
        #TODO?: Need to supply all three relevant cosmo params to recfast to avoid dual problem
        ih = IonizationHistory(𝕣, 𝕡, bg)
        return ih.csb²(0.)
