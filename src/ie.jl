@@ -730,8 +730,7 @@ function get_switch_u0(η,hierarchy_conf,reltol)
     ℓᵧ,ℓ_ν,ℓ_mν,n_q = hierarchy.ℓᵧ,hierarchy.ℓ_ν,hierarchy.ℓ_mν, hierarchy.nq
     pertlen=2(ℓᵧ+1) + (ℓ_ν+1) + (ℓ_mν+1)*n_q + 5
     # \/ we want to report this timing to get a full picture of total time (early+late)
-    sol_early_c = Bolt.h_boltsolve_conformal_flex(hierarchy_conf, bg.η(bg.x_grid[1]), bg.η(bg.x_grid[switch_idx]),  initial_conditions(bg.x_grid[1], hierarchy),reltol=reltol);
-
+    sol_early_c = h_boltsolve_conformal_flex(hierarchy_conf, bg.η(bg.x_grid[1]), bg.η(bg.x_grid[switch_idx]),  initial_conditions(bg.x_grid[1], hierarchy),reltol=reltol);
     # Get the new initial conditions
     u0_ie = zeros(2(2) + (0+1) + (0+1)*n_q + 5);
     # The first split for photons
