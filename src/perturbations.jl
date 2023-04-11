@@ -26,7 +26,6 @@ struct ConformalHierarchy{T<:Real,  H <: Hierarchy{T}, IT <: AbstractInterpolati
     hierarchy::H
     η2x::IT
 end
-#^Not sure this is the best way to wrap this...
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,abstol=1e-6) where T
     xᵢ = first(hierarchy.bg.x_grid)
