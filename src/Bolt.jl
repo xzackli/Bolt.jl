@@ -11,7 +11,7 @@ export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
 
 using Parameters
 using Unitful, UnitfulAstro
-using NLsolve
+using NonlinearSolve
 using OrdinaryDiffEq
 using Interpolations
 using OffsetArrays
