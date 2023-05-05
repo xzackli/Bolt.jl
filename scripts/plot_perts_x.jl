@@ -1,4 +1,4 @@
-using Revise
+# using Revise
 using Bolt
 using Plots
 using Printf
@@ -36,7 +36,7 @@ kclass = retnf[2][1] #read class k mode from file (in h/Mpc)
 k = (bg.H₀*3e5/100)*kclass #get k in our units
 class_pxs = transpose(reduce(hcat,ret[1:end .!= 2]))
 class_pxsnf = transpose(reduce(hcat,retnf[1:end .!= 2]))
-dipole_fac = kclass/𝕡.h #for later normalization
+dipole_fac = 2kclass #for later normalization
 
 #see above plot but for this particular mode at this cosmology the k condition happens later
 this_rsa_switch = x_grid[argmin(abs.(k .* bg.η.(x_grid) .- 45))]
@@ -49,7 +49,7 @@ println("k = ", kclass," log10k = ", log10(kclass), " h/Mpc")
 ℓᵧ=50
 ℓ_ν=50
 ℓ_mν=20
-reltol=1e-5 #cheaper  rtol
+reltol=1e-8 #cheaper  rtol
 pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
 results=zeros(pertlen,length(x_grid))
 ℳρ,ℳσ = zeros(length(x_grid)),zeros(length(x_grid)) #arrays for the massive neutrino integrated perts
@@ -77,18 +77,22 @@ results_with_rsa = boltsolve_rsa(hierarchy; reltol=reltol)
 #photon Θ0 monopole
 plot(class_pxs[1,:],log10.(abs.(class_pxsnf[2,:])),
       label=raw"$\Theta_{0,\rm{CLASS}}$",legend=:topleft)
-plot!(x_grid, log10.(abs.(results_with_rsa[1,:]* 𝕡.h*4)),
-      label=raw"$4 h \Theta_{0,\rm{Bolt}}$",ls=:dash)
+plot!(x_grid, log10.(abs.(results_with_rsa[1,:]*4)),
+      label=raw"$4 \Theta_{0,\rm{Bolt,rsa}}$",ls=:dash)
+plot!(x_grid, log10.(abs.(results[1,:]*4)),
+      label=raw"$4 \Theta_{0,\rm{Bolt}}$",ls=:dash)
 vline!([this_rsa_switch],label="RSA switch",ls=:dot)
 xlims!(-8,0)
 xlabel!(raw"$x$")
 ylabel!(raw"$\delta_{i}(x)$")
 #photon Θ1 dipole
 plot(class_pxs[1,:],log10.(abs.(class_pxsnf[10,:])),
-     label=raw"$\Theta_{0,\rm{CLASS}}$",
+     label=raw"$\Theta_{1,\rm{CLASS}}$",
      legend=:topleft)
 plot!(x_grid, log10.(abs.(results_with_rsa[2,:] * dipole_fac)),
-      label=raw"$4 h \Theta_{0,\rm{Bolt}}$",ls=:dash)
+      label=raw"$4 \Theta_{1,\rm{Bolt,rsa}}$",ls=:dash)
+plot!(x_grid, log10.(abs.(results[2,:] * dipole_fac)),
+      label=raw"$4 \Theta_{1,\rm{Bolt}}$",ls=:dash)
 vline!([this_rsa_switch],label="RSA switch",ls=:dot)
 xlims!(-5,1)
 xlims!(-7,0)
@@ -96,8 +100,8 @@ xlims!(-7,0)
 #neutrino 𝒩0 monopole
 plot(class_pxs[1,:],log10.(abs.(class_pxsnf[5,:])),
       label=raw"$\mathcal{N}_{0,\rm{CLASS}}$",legend=:topleft)
-plot!(x_grid, log10.(abs.(results_with_rsa[1+2(ℓᵧ+1),:]* 𝕡.h*4)),
-      label=raw"$4 h \mathcal{N}_{0,\rm{Bolt}}$",ls=:dash)
+plot!(x_grid, log10.(abs.(results_with_rsa[1+2(ℓᵧ+1),:]*4)),
+      label=raw"$4 \mathcal{N}_{0,\rm{Bolt}}$",ls=:dash)
 vline!([this_rsa_switch],label="RSA switch",ls=:dot)
 ylims!(-.2,1)
 xlims!(-7,0)
@@ -105,7 +109,7 @@ xlims!(-7,0)
 plot(class_pxs[1,:],log10.(abs.(class_pxs[13,:])),
       label=raw"$\mathcal{N}_{0,\rm{CLASS}}$",legend=:topleft)
 plot!(x_grid, log10.(abs.(results_with_rsa[2(ℓᵧ+1)+2,:]* dipole_fac)),
-      label=raw"$4 h \mathcal{N}_{0,\rm{Bolt}}$",ls=:dash)
+      label=raw"$4 \mathcal{N}_{0,\rm{Bolt}}$",ls=:dash)
 vline!([this_rsa_switch],label="RSA switch",ls=:dot)
 xlims!(-5,1)
 
@@ -124,15 +128,15 @@ ours_2_Mpcm1 = 1/(2.1331e-35 *3e5) #unit conversion 1/([km/s/Mpc]*[c/km/s])
 plot(class_pxsnf[1,:],log10.(abs.(class_pxsnf[4,:])),
      label=raw"$\delta_{c,\rm{CLASS}}$",
      legend=:topleft)
-plot!(x_grid,log10.(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:]* 𝕡.h),
+plot!(x_grid,log10.(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2,:]),
       label=raw"$h \delta_{\rm{Bolt}}$",ls=:dash)
 
 #baryon δ_b
 plot(class_pxsnf[1,:],log10.(abs.(class_pxsnf[3,:])),
     label=raw"$\delta_{b,\rm{CLASS}}$",legend=:topleft)
-plot!(x_grid,log10.(abs.(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:]* 𝕡.h)),
+plot!(x_grid,log10.(abs.(results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4,:])),
     label=raw"$h \delta_{b,\rm{Bolt}}$",ls=:dash)
-xlims!(-8,-4)
+xlims!(-8,0)
 
 #massive neutrino monopole ℳ0
 plot(class_pxsnf[1,:],log10.(abs.(class_pxsnf[6,:])),
@@ -141,7 +145,7 @@ plot(class_pxsnf[1,:],log10.(abs.(class_pxsnf[6,:])),
 plot!(class_pxs[1,:],log10.(abs.(class_pxs[6,:])),
     label=raw"$m\nu_{0,\rm{CLASS,f}}$",
     ls=:dot)
-plot!(x_grid, log10.(abs.(ℳρ* 𝕡.h)),
+plot!(x_grid, log10.(abs.(ℳρ)),
     label=raw"$h m\nu_{0,\rm{Bolt}}$",ls=:dash)
     #ls=:dot)
 vline!([xhor],ls=:dot,c=:black,label=raw"$k/(2\pi a H h)=1$")

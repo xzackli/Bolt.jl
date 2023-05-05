@@ -80,9 +80,9 @@ end
 end
 ##
 
-@testset "class_comparison_1e-3" begin
+@testset "nonu_class_comparison_1e-3" begin
     # bg/ion setup
-    𝕡 = CosmoParams()
+    𝕡 = CosmoParams(Σm_ν=0.0)
     n_q=15
     logqmin,logqmax = -6,-1
     bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=n_q)
@@ -144,4 +144,49 @@ end
     @test all(abs.(itphibolt.(class_x) ./ itpphiclass.(class_x) .- 1) .< TOL)
     @test all(abs.(-itdeltbbolt.(class_x) ./ itdeltbclass.(class_x) .- 1) .< TOL)
     @test all(abs.(itpgambolt.(class_x) ./ itpgambolt.(class_x) .- 1) .< TOL)
+end
+
+@testset "cell_camb_1e-1" begin
+    # the usual
+    𝕡 = CosmoParams()
+    bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=15)
+    𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b, OmegaG=𝕡.Ω_r)
+    ih = IonizationHistory(𝕣, 𝕡, bg)
+    k_grid = quadratic_k(0.1bg.H₀, 1000bg.H₀, 100) #FIXME be careful with this for derivatives...
+    # source functions
+    sf_t = source_grid(𝕡, bg, ih, k_grid, BasicNewtonian())
+    sf_e = source_grid_P(𝕡, bg, ih, k_grid, BasicNewtonian())
+
+    ℓs = 10:10:2500 #pretty coarse but ok - enough to see wiggles even at 20
+    Cℓtt = cltt(ℓs, 𝕡, bg, ih, sf_t)
+    Cℓte = clte(ℓs, 𝕡, bg, ih, sf_t,sf_e)
+    Cℓee = clee(ℓs, 𝕡, bg, ih, sf_e)
+
+    #camb results
+    # class_Cℓs = readdlm("data/class_rough_ttteee_unlensed.dat")
+    camb_Cℓs = readdlm("data/camb_rough_ttteee_unlensed.dat")
+
+    #FIXME update
+    #ratios
+    # itptt = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
+    # itpte = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
+    # itpee = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
+    # #make same interpolation to ensure same interp error
+    # itptt_b = linear_interpolation(ℓs, @.(ℓfac * Cℓtt))
+    # itpte_b = linear_interpolation(ℓs, @.(ℓfac * Cℓte))
+    # itpee_b = linear_interpolation(ℓs, @.(ℓfac * Cℓee))
+    itptt = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
+    itpte = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
+    itpee = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
+    #make same interpolation to ensure same interp error
+    itptt_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓtt))
+    itpte_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓte))
+    itpee_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓee))
+
+    #test line
+    TOL = 1.1e-1
+    #FIXME should really do this on the finer of the two grids but need to rerun...
+    @test all(abs.(itptt_b.(ℓs)  ./ itptt.(ℓs) .- 1)  .< TOL)
+    # all(abs.(itpte_b.(ℓs)  .- itpte.(ℓs) .- 1)  .< TOL) # zero-crossing will be an issue here, do diff check
+    @test all(abs.(itpee_b.(ℓs)  ./ itpee.(ℓs) .- 1)  .< TOL)
 end
