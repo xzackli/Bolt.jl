@@ -80,7 +80,7 @@ end
 
 # a background is parametrized on the scalar type T, the interpolator type IT,
 # and a type for the grid GT
-abstract type AbstractBackground{T, IT<:AbstractInterpolation{T,1}, GT} end
+abstract type AbstractBackground{T, IT, GT} end
 
 struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
     H₀::T

@@ -13,7 +13,7 @@ using Parameters
 using Unitful, UnitfulAstro
 using NonlinearSolve
 using OrdinaryDiffEq
-using Interpolations
+using DataInterpolations
 using OffsetArrays
 using QuadGK
 using ThreadPools
@@ -27,6 +27,7 @@ using LinearAlgebra
 
 
 using FFTW
+import Interpolations
 import SpecialFunctions: logabsgamma, loggamma, gamma, sphericalbesselj
 import HypergeometricFunctions: pochhammer, errcheck, pFqmaclaurin
 import AbstractFFTs: fftfreq, Plan, plan_fft!, plan_ifft!

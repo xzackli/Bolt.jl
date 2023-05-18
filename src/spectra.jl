@@ -17,7 +17,7 @@ function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
         end
     end
     # return grid
-    itp = LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Line())
+    itp = Interpolations.LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Interpolations.Line())
     return itp
 end
 
@@ -36,7 +36,7 @@ function source_grid_P(par::AbstractCosmoParams{T}, bg, ih, k_grid,
         end
     end
     # return grid
-    itp = LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Line())
+    itp = Interpolations.LinearInterpolation((x_grid, k_grid), grid, extrapolation_bc = Interpolations.Line())
     return itp
 end
 

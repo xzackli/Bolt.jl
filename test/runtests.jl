@@ -3,7 +3,7 @@ using Test
 using DelimitedFiles
 using LinearAlgebra
 using ForwardDiff
-using Interpolations, DataInterpolations
+using DataInterpolations
 using Printf
 
 include("testbessel.jl")
@@ -175,13 +175,14 @@ end
     # itptt_b = linear_interpolation(ℓs, @.(ℓfac * Cℓtt))
     # itpte_b = linear_interpolation(ℓs, @.(ℓfac * Cℓte))
     # itpee_b = linear_interpolation(ℓs, @.(ℓfac * Cℓee))
-    itptt = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
-    itpte = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
-    itpee = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
+    ℓfac = ℓs.*(ℓs.+1)
+    itptt = LinearInterpolation(camb_Cℓs[2,:], camb_Cℓs[1,:])
+    itpte = LinearInterpolation(camb_Cℓs[3,:], camb_Cℓs[1,:])
+    itpee = LinearInterpolation(camb_Cℓs[4,:], camb_Cℓs[1,:])
     #make same interpolation to ensure same interp error
-    itptt_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓtt))
-    itpte_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓte))
-    itpee_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓee))
+    itptt_b = LinearInterpolation(@.(ℓfac * Cℓtt), ℓs)
+    itpte_b = LinearInterpolation(@.(ℓfac * Cℓte), ℓs)
+    itpee_b = LinearInterpolation(@.(ℓfac * Cℓee), ℓs)
 
     #test line
     TOL = 1.1e-1

@@ -106,7 +106,9 @@ function _fill_sph_bessel_interp(config::MomentTableConfig{T, TX, NU, O},
             moments[i] = sph_j_moment_asymp_all_orders(config, x, prefactors...)
         end
     end
-    return scale(interpolate(moments, BSpline(Cubic(Line(OnGrid())))), xs_Tx)
+    return Interpolations.scale(Interpolations.interpolate(
+        moments, Interpolations.BSpline(Interpolations.Cubic(
+            Interpolations.Line(Interpolations.OnGrid())))), xs_Tx)
 end
 
 

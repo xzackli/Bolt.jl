@@ -1,5 +1,5 @@
 abstract type IonizationIntegrator end
-abstract type AbstractIonizationHistory{T, IT<:AbstractInterpolation{T,1}} end
+abstract type AbstractIonizationHistory{T, IT} end
 
 const H0_natural_unit_conversion = ustrip(unnatural(u"s", 1.0*unit(natural(1u"s"))))
 const Kelvin_natural_unit_conversion = ustrip(unnatural(1u"K", 1.0*unit(natural(1u"K")) ))

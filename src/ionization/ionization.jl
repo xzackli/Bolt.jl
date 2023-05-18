@@ -111,8 +111,11 @@ function τ_functions(x, Xₑ_function, par::AbstractCosmoParams,ℋ_function)
     τ_primes = [τ′(x_, Xₑ_function, par, ℋ_function) for x_ in x]
     τ_integrated = reverse(cumul_integrate(rx, reverse(τ_primes)))
 
-    τ̂ = interpolate((x,),τ_integrated,Gridded(Linear()))
-    τ̂′ = interpolate((x,),τ_primes,Gridded(Linear()))
+    # τ̂ = interpolate((x,),τ_integrated,Gridded(Linear()))
+    # τ̂′ = interpolate((x,),τ_primes,Gridded(Linear()))
+    
+    τ̂ = spline(τ_integrated, x)
+    τ̂′ = spline(τ_primes, x)
     return τ̂, τ̂′
 end
 
