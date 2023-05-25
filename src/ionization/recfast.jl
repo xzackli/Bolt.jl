@@ -21,80 +21,80 @@ end
 
 @with_kw struct RECFAST{T, AB<:AbstractBackground{T}} <: IonizationIntegrator
     bg::AB  # a RECFAST has an associated background evolution
-    C::T  = 2.99792458e8  # Fundamental constants in SI units
-    k_B::T = 1.380658e-23
-    h_P::T = 6.6260755e-34
-    m_e::T = 9.1093897e-31
-    m_H::T = 1.673575e-27  #	av. H atom
+    C::Float64  = 2.99792458e8  # Fundamental constants in SI units
+    k_B::Float64 = 1.380658e-23
+    h_P::Float64 = 6.6260755e-34
+    m_e::Float64 = 9.1093897e-31
+    m_H::Float64 = 1.673575e-27  #	av. H atom
     # note: neglecting deuterium, making an O(e-5) effect
-    not4::T = 3.9715e0  # mass He/H atom  ("not4" pointed out by Gary Steigman)
-    sigma::T = 6.6524616e-29
-    a::T = 7.565914e-16
-    G::T = 6.6742e-11 	# new value
+    not4::Float64 = 3.9715e0  # mass He/H atom  ("not4" pointed out by Gary Steigman)
+    sigma::Float64 = 6.6524616e-29
+    a::Float64 = 7.565914e-16
+    G::Float64 = 6.6742e-11 	# new value
 
-    Lambda::T = 8.2245809e0
-    Lambda_He::T = 51.3e0              # new value from Dalgarno
-    L_H_ion::T = 1.096787737e7         # level for H ion. (in m^-1)
-    L_H_alpha::T = 8.225916453e6       # averaged over 2 levels
-    L_He1_ion::T = 1.98310772e7        # from Drake (1993)
-    L_He2_ion::T = 4.389088863e7       # from JPhysChemRefData (1987)
-    L_He_2s::T	= 1.66277434e7          # from Drake (1993)
-    L_He_2p::T	= 1.71134891e7          # from Drake (1993)
+    Lambda::Float64 = 8.2245809e0
+    Lambda_He::Float64 = 51.3e0              # new value from Dalgarno
+    L_H_ion::Float64 = 1.096787737e7         # level for H ion. (in m^-1)
+    L_H_alpha::Float64 = 8.225916453e6       # averaged over 2 levels
+    L_He1_ion::Float64 = 1.98310772e7        # from Drake (1993)
+    L_He2_ion::Float64 = 4.389088863e7       # from JPhysChemRefData (1987)
+    L_He_2s::Float64	= 1.66277434e7          # from Drake (1993)
+    L_He_2p::Float64	= 1.71134891e7          # from Drake (1993)
     # C	2 photon rates and atomic levels in SI units
 
-    A2P_s::T = 1.798287e9              # Morton, Wu & Drake (2006)
-    A2P_t::T = 177.58e0                # Lach & Pachuski (2001)
-    L_He_2Pt::T = 1.690871466e7        # Drake & Morton (2007)
-    L_He_2St::T = 1.5985597526e7       # Drake & Morton (2007)
-    L_He2St_ion::T = 3.8454693845e6    # Drake & Morton (2007)
-    sigma_He_2Ps::T = 1.436289e-22     # Hummer & Storey (1998)
-    sigma_He_2Pt::T = 1.484872e-22     # Hummer & Storey (1998)
+    A2P_s::Float64 = 1.798287e9              # Morton, Wu & Drake (2006)
+    A2P_t::Float64 = 177.58e0                # Lach & Pachuski (2001)
+    L_He_2Pt::Float64 = 1.690871466e7        # Drake & Morton (2007)
+    L_He_2St::Float64 = 1.5985597526e7       # Drake & Morton (2007)
+    L_He2St_ion::Float64 = 3.8454693845e6    # Drake & Morton (2007)
+    sigma_He_2Ps::Float64 = 1.436289e-22     # Hummer & Storey (1998)
+    sigma_He_2Pt::Float64 = 1.484872e-22     # Hummer & Storey (1998)
     # C	Atomic data for HeI
 
-    AGauss1::T	= -0.14e0               # Amplitude of 1st Gaussian
-    AGauss2::T = 0.079e0               # Amplitude of 2nd Gaussian
-    zGauss1::T = 7.28e0                # ln(1+z) of 1st Gaussian
-    zGauss2::T = 6.73e0                # ln(1+z) of 2nd Gaussian
-    wGauss1::T = 0.18e0                # Width of 1st Gaussian
-    wGauss2::T = 0.33e0                # Width of 2nd Gaussian
+    AGauss1::Float64	= -0.14e0               # Amplitude of 1st Gaussian
+    AGauss2::Float64 = 0.079e0               # Amplitude of 2nd Gaussian
+    zGauss1::Float64 = 7.28e0                # ln(1+z) of 1st Gaussian
+    zGauss2::Float64 = 6.73e0                # ln(1+z) of 2nd Gaussian
+    wGauss1::Float64 = 0.18e0                # Width of 1st Gaussian
+    wGauss2::Float64 = 0.33e0                # Width of 2nd Gaussian
     # Gaussian fits for extra H physics (fit by Adam Moss, modified by Antony Lewis)
 
     # the Pequignot, Petitjean & Boisson fitting parameters for Hydrogen
-	a_PPB::T = 4.309
-	b_PPB::T = -0.6166
-	c_PPB::T = 0.6703
-	d_PPB::T = 0.5300
+	a_PPB::Float64 = 4.309
+	b_PPB::Float64 = -0.6166
+	c_PPB::Float64 = 0.6703
+	d_PPB::Float64 = 0.5300
     # the Verner and Ferland type fitting parameters for Helium
     # fixed to match those in the SSS papers, and now correct
-	a_VF::T = 10^(-16.744)
-	b_VF::T = 0.711
-	T_0::T = 10^(0.477121)	#!3K
-	T_1::T = 10^(5.114)
+	a_VF::Float64 = 10^(-16.744)
+	b_VF::Float64 = 0.711
+	T_0::Float64 = 10^(0.477121)	#!3K
+	T_1::Float64 = 10^(5.114)
     # fitting parameters for HeI triplets
     # (matches Hummer's table with <1% error for 10^2.8 < T/K < 10^4)
-	a_trip::T = 10^(-16.306)
-	b_trip::T = 0.761
+	a_trip::Float64 = 10^(-16.306)
+	b_trip::Float64 = 0.761
 
     # Set up some constants so they don't have to be calculated later
-    Lalpha::T = 1/L_H_alpha
-    Lalpha_He::T = 1/L_He_2p
-    DeltaB::T = h_P*C*(L_H_ion-L_H_alpha)
-    CDB::T = DeltaB/k_B
-    DeltaB_He::T = h_P*C*(L_He1_ion-L_He_2s)	# 2s, not 2p
-    CDB_He::T = DeltaB_He/k_B
-    CB1::T = h_P*C*L_H_ion/k_B
-    CB1_He1::T = h_P*C*L_He1_ion/k_B	# ionization for HeI
-    CB1_He2::T = h_P*C*L_He2_ion/k_B	# ionization for HeII
-    CR::T = 2π * (m_e/h_P)*(k_B/h_P)
-    CK::T = Lalpha^3/(8π)
-    CK_He::T = Lalpha_He^3/(8π)
-    CL::T = C*h_P/(k_B*Lalpha)
-    CL_He::T = C*h_P/(k_B/L_He_2s)	# comes from det.bal. of 2s-1s
-    CT::T = (8/3)*(sigma/(m_e*C))*a
-    Bfact::T = h_P*C*(L_He_2p-L_He_2s)/k_B
+    Lalpha::Float64 = 1/L_H_alpha
+    Lalpha_He::Float64 = 1/L_He_2p
+    DeltaB::Float64 = h_P*C*(L_H_ion-L_H_alpha)
+    CDB::Float64 = DeltaB/k_B
+    DeltaB_He::Float64 = h_P*C*(L_He1_ion-L_He_2s)	# 2s, not 2p
+    CDB_He::Float64 = DeltaB_He/k_B
+    CB1::Float64 = h_P*C*L_H_ion/k_B
+    CB1_He1::Float64 = h_P*C*L_He1_ion/k_B	# ionization for HeI
+    CB1_He2::Float64 = h_P*C*L_He2_ion/k_B	# ionization for HeII
+    CR::Float64 = 2π * (m_e/h_P)*(k_B/h_P)
+    CK::Float64 = Lalpha^3/(8π)
+    CK_He::Float64 = Lalpha_He^3/(8π)
+    CL::Float64 = C*h_P/(k_B*Lalpha)
+    CL_He::Float64 = C*h_P/(k_B/L_He_2s)	# comes from det.bal. of 2s-1s
+    CT::Float64 = (8/3)*(sigma/(m_e*C))*a
+    Bfact::Float64 = h_P*C*(L_He_2p-L_He_2s)/k_B
 
     # Matter departs from radiation when t(Th) > H_frac * t(H)
-    H_frac::T = 1e-3  # choose some safely small number
+    H_frac::Float64 = 1e-3  # choose some safely small number
 
     # switches
     Hswitch::Int64 = 1
@@ -115,9 +115,10 @@ end
     fHe::T = Yp/(not4*(1 - Yp))		# n_He_tot / n_H_tot
 
     Nnow::T = 3 * HO * HO * OmegaB / (8π * G * mu_H * m_H)  # TODO: should replace during GREAT GENERALIZATION
-    fu::T = (Hswitch == 0) ? 1.14 : 1.125
-    b_He::T = 0.86  # Set the He fudge factor
-    tol::T = 1e-8
+    fu::Float64 = (Hswitch == 0) ? 1.14 : 1.125
+    b_He::Float64 = 0.86  # Set the He fudge factor
+    tol::Float64 = 1e-8
+    
 end
 
 # helper constructor which dispatches on the background
@@ -501,7 +502,6 @@ end
 function reionization_Tmat_ode(Tm, rh::RECFASTHistory, z)
     𝕣 = rh.𝕣
     x_reio = reionization_Xe(rh, z)
-
 	a = 1 / (1+z)
 	x_a = a2x(a)
 	Hz = 𝕣.bg.ℋ(x_a) / a / H0_natural_unit_conversion

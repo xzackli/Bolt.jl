@@ -3,8 +3,8 @@ module Bolt
 export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
-export Peebles, PeeblesI
-export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
+export Peebles, PeeblesI,ihPeebles
+export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a,H_a #FIXME: quick hack to look at perts
 export Hierarchy, boltsolve, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa
 export IE,initial_conditions,unpack,ie_unpack
 export source_grid, quadratic_k, cltt,log10_k,plin
