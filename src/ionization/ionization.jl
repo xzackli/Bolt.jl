@@ -9,11 +9,61 @@ saha_T_b(a, par) = PeeblesT₀ / a #j why does this take par?
 saha_rhs(a, par) = (m_e * saha_T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
     exp(-ε₀_H / saha_T_b(a, par))  # rhs of Callin06 eq. 12
 
-function saha_Xₑ(x, par::AbstractCosmoParams)
-    rhs = saha_rhs(x2a(x), par)
-    return  (√(rhs^2 + 4rhs) - rhs) / 2  # solve Xₑ² / (1-Xₑ) = RHS, it's a polynomial
+function saha_Xₑ(x, par::AbstractCosmoParams, bg)
+    z = x2z(x)
+    CR = 1.7998756579640975e14
+    CB1 = 157802.38230335814
+    G = 6.6742e-11
+    m_H = 1.673575e-27
+    Yp = 0.24
+    mu_H = 1 / (1 - Yp)	
+    Tnow =  (15/ π^2 *bg.ρ_crit * par.Ω_r)^(1/4) * Kelvin_natural_unit_conversion
+    HO =  bg.H₀ / H0_natural_unit_conversion
+    OmegaB=par.Ω_b
+    Nnow = 3 * HO * HO * OmegaB / (8π * G * mu_H * m_H) 
+    sqrtrhs = exp(1.5 * log(CR*Tnow/(1+z))/2 - CB1/(Tnow*(1+z))/2) / sqrt(Nnow)
+    return 2sqrtrhs / (√(sqrtrhs^2 + 4) + sqrtrhs)  # this form is more stable
 end
 saha_Xₑ(par) = (x -> saha_Xₑ(x, par))
+
+function get_saha_ih(par::AbstractCosmoParams{T}, bg::AbstractBackground{T}) where T
+    Xₑ_function(x) = saha_Xₑ(x, par, bg)
+    OmegaG = par.Ω_r
+    Tnow =  (15/ π^2 *bg.ρ_crit * OmegaG)^(1/4) * Kelvin_natural_unit_conversion
+    Tmat_function(x) = Tnow / exp(x)
+    C  = 2.99792458e8 
+    k_B = 1.380658e-23
+    m_H = 1.673575e-27
+    not4 = 3.9715e0
+    Yp = 0.24
+    mu_T = not4/(not4-(not4-1)*Yp)
+    csb²_pre(x) = C^-2 * k_B/m_H * ( 1/mu_T + (1-Yp)*Xₑ_function(x) ) 
+    csb²_function(x) = csb²_pre(x) * (Tmat_function(x) - 1/3 * (-Tmat_function(x)))
+
+    ℋ_function = bg.ℋ
+    x_grid = bg.x_grid
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
+    g̃ = g̃_function(τ, τ′)
+
+    Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
+    τ_ = spline(τ.(x_grid), x_grid)
+    g̃_ = spline(g̃.(x_grid), x_grid)
+    Tmat_ = spline(Tmat_function.(x_grid), x_grid)
+    csb²_ = spline(csb²_function.(x_grid), x_grid)
+
+    return IonizationHistory(
+		T(τ(0.)),
+        Xₑ_,
+        τ_,
+        spline_∂ₓ(τ_, x_grid),
+        spline_∂ₓ²(τ_, x_grid),
+        g̃_,
+        spline_∂ₓ(g̃_, x_grid),
+        spline_∂ₓ²(g̃_, x_grid),
+        Tmat_,
+		csb²_,
+    )
+end
 
 
 ## Peebles Equation
@@ -138,7 +188,7 @@ end
 
 
 """Convenience function to create an ionisation history from some tables"""
-function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
+function customion(par::AbstractCosmoParams{T}, bg, Xₑ_function, Tmat_function, csb²_function) where T
      x_grid = bg.x_grid
      τ, τ′ = Bolt.τ_functions(x_grid, Xₑ_function, par, bg.ℋ)
      g̃ = Bolt.g̃_function(τ, τ′)
@@ -146,11 +196,11 @@ function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
      Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
      τ_ = spline(τ.(x_grid), x_grid)
      g̃_ = spline(g̃.(x_grid), x_grid)
-     Tmat_ = spline(Tmat_function.(x_grid), x_grid)
+     Tmat_ = spline(T.(Tmat_function.(x_grid)), x_grid)
      csb²_ = spline(csb²_function.(x_grid), x_grid)
  
      return IonizationHistory(
-           (τ(0.)),
+         T(τ(0.)),
          Xₑ_,
          τ_,
          spline_∂ₓ(τ_, x_grid),
