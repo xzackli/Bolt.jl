@@ -5,15 +5,65 @@
 const PeeblesT₀ = ustrip(natural(2.725u"K"))  # CMB temperature [K]  # TODO: make this a parameter of the ionization
 n_b(a, par) = par.Ω_b * ρ_crit(par) / (m_H * a^3)
 n_H(a, par) = n_b(a, par) *(1-par.Y_p) #Adding Helium!
-saha_T_b(a) = PeeblesT₀ / a #j why does this take par?
-saha_rhs(a, par) = (m_e * saha_T_b(a) / 2π)^(3/2) / n_H(a, par) *
-    exp(-ε₀_H / saha_T_b(a))  # rhs of Callin06 eq. 12
+saha_T_b(a, par) = PeeblesT₀ / a #j why does this take par?
+saha_rhs(a, par) = (m_e * saha_T_b(a, par) / 2π)^(3/2) / n_H(a, par) *
+    exp(-ε₀_H / saha_T_b(a, par))  # rhs of Callin06 eq. 12
 
-function saha_Xₑ(x, par::AbstractCosmoParams)
-    rhs = saha_rhs(x2a(x), par)
-    return  (√(rhs^2 + 4rhs) - rhs) / 2  # solve Xₑ² / (1-Xₑ) = RHS, it's a polynomial
+function saha_Xₑ(x, par::AbstractCosmoParams, bg)
+    z = x2z(x)
+    CR = 1.7998756579640975e14
+    CB1 = 157802.38230335814
+    G = 6.6742e-11
+    m_H = 1.673575e-27
+    Yp = 0.24
+    mu_H = 1 / (1 - Yp)	
+    Tnow =  (15/ π^2 *bg.ρ_crit * par.Ω_r)^(1/4) * Kelvin_natural_unit_conversion
+    HO =  bg.H₀ / H0_natural_unit_conversion
+    OmegaB=par.Ω_b
+    Nnow = 3 * HO * HO * OmegaB / (8π * G * mu_H * m_H) 
+    sqrtrhs = exp(1.5 * log(CR*Tnow/(1+z))/2 - CB1/(Tnow*(1+z))/2) / sqrt(Nnow)
+    return 2sqrtrhs / (√(sqrtrhs^2 + 4) + sqrtrhs)  # this form is more stable
 end
 saha_Xₑ(par) = (x -> saha_Xₑ(x, par))
+
+function get_saha_ih(par::AbstractCosmoParams{T}, bg::AbstractBackground{T}) where T
+    Xₑ_function(x) = saha_Xₑ(x, par, bg)
+    OmegaG = par.Ω_r
+    Tnow =  (15/ π^2 *bg.ρ_crit * OmegaG)^(1/4) * Kelvin_natural_unit_conversion
+    Tmat_function(x) = Tnow / exp(x)
+    C  = 2.99792458e8 
+    k_B = 1.380658e-23
+    m_H = 1.673575e-27
+    not4 = 3.9715e0
+    Yp = 0.24
+    mu_T = not4/(not4-(not4-1)*Yp)
+    csb²_pre(x) = C^-2 * k_B/m_H * ( 1/mu_T + (1-Yp)*Xₑ_function(x) ) 
+    csb²_function(x) = csb²_pre(x) * (Tmat_function(x) - 1/3 * (-Tmat_function(x)))
+
+    ℋ_function = bg.ℋ
+    x_grid = bg.x_grid
+    τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
+    g̃ = g̃_function(τ, τ′)
+
+    Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
+    τ_ = spline(τ.(x_grid), x_grid)
+    g̃_ = spline(g̃.(x_grid), x_grid)
+    Tmat_ = spline(Tmat_function.(x_grid), x_grid)
+    csb²_ = spline(csb²_function.(x_grid), x_grid)
+
+    return IonizationHistory(
+		T(τ(0.)),
+        Xₑ_,
+        τ_,
+        spline_∂ₓ(τ_, x_grid),
+        spline_∂ₓ²(τ_, x_grid),
+        g̃_,
+        spline_∂ₓ(g̃_, x_grid),
+        spline_∂ₓ²(g̃_, x_grid),
+        Tmat_,
+		csb²_,
+    )
+end
 
 
 ## Peebles Equation
@@ -27,17 +77,6 @@ const m_H = ustrip(natural(float(ProtonMass)))
 const α = ustrip(natural(float(FineStructureConstant)))
 const σ_T = ustrip(natural(float(ThomsonCrossSection)))
 
-const C_rf = 2.99792458e8 
-const k_B_rf = 1.380658e-23
-const m_H_rf = 1.673575e-27
-const not4_rf = 3.9715e0 
-const xinitial_RECFAST = z2x(10000.0)
-const sigma = 6.6524616e-29
-const m_e_rf = 9.1093897e-31
-const zre_ini = 50.0
-const tol_rf = 1e-8
-# const Kelvin_natural_unit_conversion = # this is defined in recfast
-
 # auxillary equations
 ϕ₂(T_b) = 0.448 * log(ε₀_H / T_b)
 α⁽²⁾(T_b) = (64π / √(27π)) * (α^2 / m_e^2) * √(ε₀_H / T_b) * ϕ₂(T_b)
@@ -45,7 +84,7 @@ const tol_rf = 1e-8
 β⁽²⁾(T_b) = β(T_b) * exp(3ε₀_H / 4T_b)
 n₁ₛ(a, Xₑ, par) = (1 - Xₑ) * n_H(a, par)
 #Problem is here \/ since Lyα rate is given by redshifting out of line need H
-Λ_α(a, Xₑ, par) = H_a(a, par) * (3ε₀_H)^3 / ((8π)^2 * n₁ₛ(a, Xₑ, par))
+Λ_α(a, Xₑ, par) = oldH_a(a, par) * (3ε₀_H)^3 / ((8π)^2 * n₁ₛ(a, Xₑ, par))
 new_Λ_α(a, Xₑ, par, ℋ_function) = ℋ_function(log(a)) * (3ε₀_H)^3 / ((8π)^2 * n₁ₛ(a, Xₑ, par))
 Cᵣ(a, Xₑ, T_b, par) = (Λ_2s_to_1s + Λ_α(a, Xₑ, par)) / (
     Λ_2s_to_1s + Λ_α(a, Xₑ, par) + β⁽²⁾(T_b))
@@ -53,10 +92,10 @@ new_Cᵣ(a, Xₑ, T_b, par,ℋ_function) = (Λ_2s_to_1s + new_Λ_α(a, Xₑ, par
     Λ_2s_to_1s + new_Λ_α(a, Xₑ, par,ℋ_function) + β⁽²⁾(T_b))
 
 # RHS of Callin06 eq. 13
-function peebles_Xₑ′(Xₑ, par::CosmoParams{T}, x) where T
+function peebles_Xₑ′(Xₑ, par, x)
     a = exp(x)
-    T_b_a = BigFloat(saha_T_b(a))  # handle overflows by switching to bigfloat
-    return T(Cᵣ(a, Xₑ, T_b_a, par) / H_a(a, par) * (
+    T_b_a = BigFloat(saha_T_b(a, par))  # handle overflows by switching to bigfloat
+    return float(Cᵣ(a, Xₑ, T_b_a, par) / oldH_a(a, par) * (
         β(T_b_a) * (1 - Xₑ) - n_H(a, par) * α⁽²⁾(T_b_a) * Xₑ^2))
 end
 
@@ -140,7 +179,7 @@ function τ′(x, Xₑ_function, par, ℋ_function)
 end
 function oldτ′(x, Xₑ_function, par)
     a = x2a(x)
-    return -Xₑ_function(x) * n_H(a, par) * a * σ_T / (a*H_a(a,par))
+    return -Xₑ_function(x) * n_H(a, par) * a * σ_T / (a*oldH_a(a,par))
 end
 
 function g̃_function(τ_x_function, τ′_x_function)
@@ -149,7 +188,7 @@ end
 
 
 """Convenience function to create an ionisation history from some tables"""
-function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
+function customion(par::AbstractCosmoParams{T}, bg, Xₑ_function, Tmat_function, csb²_function) where T
      x_grid = bg.x_grid
      τ, τ′ = Bolt.τ_functions(x_grid, Xₑ_function, par, bg.ℋ)
      g̃ = Bolt.g̃_function(τ, τ′)
@@ -157,11 +196,11 @@ function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
      Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
      τ_ = spline(τ.(x_grid), x_grid)
      g̃_ = spline(g̃.(x_grid), x_grid)
-     Tmat_ = spline(Tmat_function.(x_grid), x_grid)
+     Tmat_ = spline(T.(Tmat_function.(x_grid)), x_grid)
      csb²_ = spline(csb²_function.(x_grid), x_grid)
  
      return IonizationHistory(
-           (τ(0.)),
+         T(τ(0.)),
          Xₑ_,
          τ_,
          spline_∂ₓ(τ_, x_grid),
@@ -171,108 +210,5 @@ function customion(par, bg, Xₑ_function, Tmat_function, csb²_function)
          spline_∂ₓ²(g̃_, x_grid),
          Tmat_,
            csb²_,
-    )
-end
-
-#-----------------------
-
-function reionization_Xe(𝕡::CosmoParams, Xe_func, z)
-    X_fin = 1 + 𝕡.Y_p / ( not4_rf*(1-𝕡.Y_p) ) #ionization frac today
-    zre,α,ΔH,zHe,ΔHe,fHe = 7.6711,1.5,0.5,3.5,0.5,X_fin-1 #reion params, TO REPLACE
-    x_orig = Xe_func(z2x(z))
-    x_reio_H =  (X_fin - x_orig) / 2 * (
-        1 + tanh(( (1+zre)^α - (1+z)^α ) / ( α*(1+zre)^(α-1) ) / ΔH)) + x_orig
-    x_reio_He = fHe / 2 * ( 1 + tanh( (zHe - z) / ΔHe) )
-    x_reio = x_reio_H + x_reio_He
-    return x_reio
-end
-
-function reionization_Tmat_ode(Tm,z)
-    x_reio = reionization_Xe(𝕡, Xe_func,z)
-	a = 1 / (1+z)
-	x_a = a2x(a)
-	Hz = bg.ℋ(x_a) / a / H0_natural_unit_conversion
-	Trad =Tnow_rf * (1+z)
-    CT_rf = (8/3)*(sigma/(m_e_rf*C_rf))*a
-    fHe = 𝕡.Y_p/(not4_rf*(1 -  𝕡.Y_p))
-	dTm = CT_rf * Trad^4 * x_reio/(1 + x_reio + fHe) *
-        (Tm - Trad) / (Hz * (1 + z)) + 2 * Tm / (1 + z)
-	return dTm
-end
-
-function tanh_reio_solve(Tmat0; zre_ini=50.0,zfinal=0.0)
-    reio_prob = ODEProblem(reionization_Tmat_ode, 
-        Tmat0, 
-        (zre_ini, zfinal))
-    sol_reio_Tmat = solve(reio_prob, Tsit5(), reltol=tol_rf)
-    trh = TanhReionizationHistory(zre_ini, ion_hist, sol_reio_Tmat);
-    return trh
-end
-
-
-# struct Peebles_hist{T, AB<:AbstractBackground{T},CT<:AbstractCosmoParams{T}} <: IonizationIntegrator
-#     par::CT
-#     bg::AB  
-#     Xe
-# end
-
-function ihPeebles(par::AbstractCosmoParams{T}, bg::AbstractBackground{T};zfinal=0.0) where T
-
-    x_grid = bg.x_grid
-    Xₑ_function = saha_peebles_recombination(par)
-    τ, τ′ = τ_functions(x_grid, Xₑ_function, par, bg.ℋ)
-    g̃ = Bolt.g̃_function(τ, τ′)
-    spline, spline_∂ₓ, spline_∂ₓ² = Bolt.spline, Bolt.spline_∂ₓ, Bolt.spline_∂ₓ²
-    Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
-    τ_ = spline(τ.(x_grid), x_grid)
-    g̃_ = spline(g̃.(x_grid), x_grid)
-
-    Tnow_rf = (15/ π^2 *bg.ρ_crit * par.Ω_r)^(1/4) * Kelvin_natural_unit_conversion #last thing is natural to K
-    Trad_function = x -> Tnow_rf * (1 + x2z(x))
-    
-    # trhist = tanh_reio_solve(rhist)
-    Tmat0=Trad_function(xinitial_RECFAST) #FIXME CHECK
-
-    function reionization_Tmat_ode(Tm,p,z)
-        x_reio = reionization_Xe(par, Xₑ_,z)
-        Trad = Tnow_rf * (1 + z)
-        Hz = bg.ℋ(z2x(z)) * (1 + z) / H0_natural_unit_conversion
-        a=z2a(z)
-        CT_rf = (8/3)*(sigma/(m_e_rf*C_rf))*a
-        fHe = par.Y_p/(not4_rf*(1 -  par.Y_p))
-        return CT_rf * Trad^4 * x_reio/(1 + x_reio + fHe) *
-        (Tm - Trad) / (Hz * (1 + z)) + 2 * Tm / (1 + z)
-    end
-    zre_ini=50.0
-    reio_prob = ODEProblem(reionization_Tmat_ode, 
-        Tmat0, 
-        (zre_ini, zfinal))
-    sol_reio_Tmat = solve(reio_prob, Tsit5(), reltol=tol_rf)
-    # trh = TanhReionizationHistory(zre_ini, ion_hist, sol_reio_Tmat)
-
-    Tmat_function = x -> (x < z2x(zre_ini)) ?
-        Trad_function(x) : sol_reio_Tmat(x2z(x))
-
-    Tmat_ = spline(Tmat_function.(x_grid), x_grid)
-    Yp = par.Y_p
-    mu_T_rf = not4_rf/(not4_rf-(not4_rf-1)*Yp)
-    csb²_pre = @.( C_rf^-2 * k_B_rf/m_H_rf * ( 1/mu_T_rf + (1-Yp)*Xₑ_(x_grid) ) ) #not the most readable...
-	#FIXME probably this is a bad way to do this...
-	csb²_ = spline(csb²_pre .* (Tmat_.(x_grid) .- 1/3 *spline_∂ₓ(Tmat_, x_grid).(x_grid)),x_grid)
-    # csb²_ = spline(csb²_function.(x_grid), x_grid)
-
-    # println("typeof(Xₑ_) $(typeof(Xₑ_))")
-    # println("typeof(τ_) $(typeof(τ_))")
-    return IonizationHistory(
-        T(τ(0.)),
-        Xₑ_,
-        τ_,
-        spline_∂ₓ(τ_, x_grid),
-        spline_∂ₓ²(τ_, x_grid),
-        g̃_,
-        spline_∂ₓ(g̃_, x_grid),
-        spline_∂ₓ²(g̃_, x_grid),
-        Tmat_,
-        csb²_,
     )
 end
