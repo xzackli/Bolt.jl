@@ -4,7 +4,7 @@ using LinearAlgebra, Statistics,Lux
 rng = Xoshiro(123)
 using Bolt
 using Plots
-using Optimization,SciMLSensitivity,OptimizationOptimisers,ComponentArrays
+using Optimization,SciMLSensitivity,OptimizationOptimisers,ComponentArrays,OptimizationOptimJL
 using AbstractDifferentiation
 import AbstractDifferentiation as AD, ForwardDiff
 
@@ -136,36 +136,61 @@ AD.jacobian(ab,predict,ComponentArray(p))
 losses = [];
 callback = function (p, l)
     push!(losses, l)
-    # if length(losses) % 50 == 0
+    if length(losses) % 5 == 0
     println("Current loss after $(length(losses)) iterations: $(losses[end])")
-    # end
+    end
     return false
 end
-niter=2#80
-res1 = Optimization.solve(optprob, ADAM(1.0), callback = callback, maxiters = niter)
+niter_1,niter_2,niter_3 =50,50,20
+η_1,η_2,η_3 = 1.0,0.1,0.01
+res1 = Optimization.solve(optprob, ADAM(1.0), callback = callback, maxiters = niter_1)
 # this is pretty slow, on the order of half an hour, but it is at least running!
 # Now idk what is wrong with reverse mode...but getting errors about typing...
-
+#Current loss after 50 iterations: 3.8709838260084415
 # Get the result
 test_predict_o1 = predict(res1.u)
 
+optprob2 = remake(optprob,u0 = res1.u);
+res2 = Optimization.solve(optprob2, ADAM(η_2), callback = callback, maxiters = niter_2)
+test_predict_o2 = predict(res2.u)
+#Current loss after 100 iterations: 1.1319215191941459
+
+optprob3 = remake(optprob2,u0 = res2.u);
+res3 = Optimization.solve(optprob3, ADAM(η_3), callback = callback, maxiters = niter_3)
+test_predict_o3 = predict(res3.u)
+#Current loss after 120 iterations: 1.0862281116475199
+
+# FIXME MORE INVOLVED ADAM SCHEDULE
+
+# for the heck of it try BFGS, not sure what parameters it usually takes
+optprob4 = remake(optprob3,u0 = res3.u);
+res4 = Optimization.solve(optprob3, BFGS(), 
+                            callback = callback, maxiters = 10)
+test_predict_o4 = predict(res4.u)
+# wow this is slow...I guess due to Hessian approximation?
+# We have the gradient so idk why this takes so much longer than ADAM?
+# Somehow loss actually goes up also? Maybe we overshoot, can try again with specified initial stepsize...
 
 # Plots of the learned perturbations
 Plots.scatter(bgtest.x_grid,Ytrain_ode[:,1],label="data")
 Plots.plot!(bgtest.x_grid,δ_true,label="truth",yscale=:log10,lw=2.5)
 Plots.plot!(bgtest.x_grid,test_predict_o1[:,1],label="opt-v1",lw=2.5,ls=:dash)
+Plots.plot!(bgtest.x_grid,test_predict_o4[:,1],label="opt-v1-full",lw=2.5,ls=:dot)
 Plots.title!(raw"$\delta_{c}$")
 Plots.xlabel!(raw"$\log(a)$")
 Plots.ylabel!(raw"$\delta_{c}(a)$")
-savefig("../plots/deltac_learning_v1_multnoise$(σfakeode)_Adam$(niter)_$(η).png")
+savefig("../plots/deltac_learning_v1_multnoise$(σfakeode)_Adam$(niter_1)_$(niter_2)_$(niter_3)_$(η_1)_$(η_2)_$(η_3)_bfgs.png")
 
-Plots.scatter(bgtest.x_grid,Ytrain_ode[:,2],label="data",yscale=:log10,legend=:bottomright)
+log10.(test_predict_o4[:,2])
+
+Plots.scatter(bgtest.x_grid,Ytrain_ode[:,2],label="data")#,legend=:bottomright)
 Plots.plot!(bgtest.x_grid,v_true,label="truth")
 Plots.plot!(bgtest.x_grid,test_predict_o1[:,2],label="opt-v1")
+Plots.plot!(bgtest.x_grid,test_predict_o4[:,2],label="opt-v1-full",lw=2.5,ls=:dot)
 Plots.title!(raw"$v_{c}$")
 Plots.xlabel!(raw"$\log(a)$")
 Plots.ylabel!(raw"$v_{c}(a)$")
-savefig("../plots/vc_learning_v1_multnoise$(σfakeode)_Adam$(niter)_$(η).png")
+savefig("../plots/vc_learning_v1_multnoise$(σfakeode)_Adam$(niter_1)_$(niter_2)_$(niter_3)_$(η_1)_$(η_2)_$(η_3)_bfgs.png")
 
 
 function get_Φ′_Ψ(u,hierarchy::Hierarchy{T},x) where T
@@ -196,7 +221,8 @@ nn_δ′,nn_v′ = zeros(length(hierarchytest.bg.x_grid)),zeros(length(hierarchy
 for j in 1:length(hierarchytest.bg.x_grid)
     Φ′_true[j],Ψ_true[j] = get_Φ′_Ψ(ode_data[:,j],hierarchytest,hierarchytest.bg.x_grid[j])
     nnin = hcat([ode_data[:,j]...,hierarchytest.bg.x_grid[j]])
-    nn_u′ = U(nnin,res1.u,st)[1]
+    # nn_u′ = U(nnin,res1.u,st)[1]
+    nn_u′ = U(nnin,res4.u,st)[1]
     nn_δ′[j],nn_v′[j] = nn_u′[1], nn_u′[2]
 end
 
@@ -206,17 +232,27 @@ true_v′ = -v_true .- hierarchytestnn.k  ./ hierarchytestnn.bg.ℋ  .* Ψ_true
 
 Plots.plot(hierarchytestnn.bg.x_grid, true_δ′,label="truth",lw=2.5)
 Plots.plot!(hierarchytestnn.bg.x_grid,nn_δ′,label="nn-v1",lw=2.5)
+Plots.plot!(hierarchytestnn.bg.x_grid,nn_δ′,label="nn-v1-full",lw=2.5)
 Plots.xlabel!(raw"$\log(a)$")
 Plots.ylabel!(raw"$\delta'(a)$")
-Plots.title!(raw"recon $v_{c}$")
-savefig("../plots/deltacprime_learning_v1_multnoise$(σfakeode)_Adam$(niter)_$(η).png")
+Plots.title!(raw"recon $\delta_{c}$")
+savefig("../plots/deltacprime_learning_v1_multnoise$(σfakeode)_Adam$(niter_1)_$(niter_2)_$(niter_3)_$(η_1)_$(η_2)_$(η_3)_bfgs.png")
 
 Plots.plot(hierarchytestnn.bg.x_grid,true_v′,label="truth",lw=2.5)
 Plots.plot!(hierarchytestnn.bg.x_grid,nn_v′,label="nn-v1",lw=2.5)
+Plots.plot!(hierarchytestnn.bg.x_grid,nn_v′,label="nn-v1-full",lw=2.5)
 Plots.xlabel!(raw"$\log(a)$")
 Plots.ylabel!(raw"$v'(a)$")
 Plots.title!(raw"recon $v_{c}$")
-savefig("../plots/vcprime_learning_v1_multnoise$(σfakeode)_Adam$(niter)_$(η).png")
+savefig("../plots/vcprime_learning_v1_multnoise$(σfakeode)_Adam$(niter_1)_$(niter_2)_$(niter_3)_$(η_1)_$(η_2)_$(η_3)_bfgs.png")
+
+
+# loss
+Plots.plot(losses)
+Plots.xlabel!(raw"iters")
+Plots.ylabel!(raw"loss")
+savefig("../plots/loss_learning_v1_multnoise$(σfakeode)_Adam$(niter_1)_$(niter_2)_$(niter_3)_$(η_1)_$(η_2)_$(η_3)_bfgs.png")
+
 
 # --------------------------------
 # Old code testing AD backends
