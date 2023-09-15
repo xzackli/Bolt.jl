@@ -3,8 +3,8 @@
 
 const ζ = 1.2020569 #Riemann ζ(3) for phase space integrals
 
-H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100
-ρ_crit(par::AbstractCosmoParams) = (3 / 8π) * H₀(par)^2 / G_natural
+H₀(par::AbstractCosmoParams{T}) = par.h * T(km_s_Mpc_100)
+ρ_crit(par::AbstractCosmoParams{T}) = T( (3 / 8π) * H₀(par)^2 / G_natural )
 function Ω_Λ(par::AbstractCosmoParams)
     #Below can definitely be more streamlined, I am just making it work for now
     return 1 - (par.Ω_r + par.Ω_b + par.Ω_c) 
@@ -25,9 +25,9 @@ H(x, par::AbstractCosmoParams) = H_a(x2a(x),par)
 ℋ(x, par::AbstractCosmoParams) = ℋ_a(x2a(x), par)
 
 # conformal time
-function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
-    logamin,logamax=-13.75,log10(x2a(x))
-    Iη(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par))/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
+function η(x, par::AbstractCosmoParams{T},quad_pts,quad_wts) where T
+    logamin,logamax=-T(13.75),log10(x2a(x))
+    Iη(y) = 1 / (T(xq2q(y,logamin,logamax)) * ℋ_a(T(xq2q(y,logamin,logamax)), par))/ T(dxdq(xq2q(y,logamin,logamax),logamin,logamax))
     return sum(Iη.(quad_pts).*quad_wts)
 end
 
@@ -60,7 +60,7 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
     η_  = spline([η(x, par,quad_pts,quad_wts) for x in x_grid], x_grid)
     return Background(
         T(H₀(par)),
-        T(η(0.0, par,quad_pts,quad_wts)),
+        T(η(zero(T), par,quad_pts,quad_wts)),
         T(ρ_crit(par)),
         T(Ω_Λ(par)),
 
