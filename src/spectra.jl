@@ -83,36 +83,20 @@ function cltt(ℓ⃗, par::AbstractCosmoParams, bg, ih, sf)
 end
 
 
-function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,
-    n_q=15,ℓᵧ=50,ℓ_ν=50,ℓ_mν=20,x=0,reltol=1e-5) where T
+function plin(k, 𝕡::AbstractCosmoParams{T},bg,ih,ℓᵧ=15,x=0,reltol=1e-5) where T
     #copy code abvoe
-    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ,ℓ_ν,ℓ_mν,n_q) #shoddy quality test values
+    hierarchy = Hierarchy(BasicNewtonian(), 𝕡, bg, ih, k, ℓᵧ) #shoddy quality test values
     perturb = boltsolve(hierarchy; reltol=reltol)
     results = perturb(x)
-    ℳρ,_ = ρ_σ(results[2(ℓᵧ+1)+(ℓ_ν+1)+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q],
-                    results[2(ℓᵧ+1)+(ℓ_ν+1)+2*n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+3*n_q],
-                    bg,exp(x),𝕡)./ bg.ρ₀ℳ(x)
-    #Below assumes negligible neutrino pressure for the normalization (fine at z=0)
-    ℳθ = k*θ(results[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+2n_q],
-            bg,exp(x),𝕡)./ bg.ρ₀ℳ(x)
     #Also using the fact that a=1 at z=0
-    δcN,δbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+2],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+4]
-    vcN,vbN = results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+3],results[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5]
-    ℳρN,ℳθN = ℳρ,ℳθ
-    vmνN = -ℳθN / k
+    δcN,δbN = results[2(ℓᵧ+1)+2,:],results[2(ℓᵧ+1)+4,:]
+    vcN,vbN = results[2(ℓᵧ+1)+3,:],results[2(ℓᵧ+1)+5,:]
     #omegas to get weighted sum for total matter in background
-    Tγ = (15/ π^2 *bg.ρ_crit *𝕡.Ω_r)^(1/4)
-    ζ = 1.2020569
-    νfac = (90 * ζ /(11 * π^4)) * (𝕡.Ω_r * 𝕡.h^2 / Tγ) *((𝕡.N_ν/3)^(3/4))
-    #^the factor that goes into nr approx to neutrino energy density, plus equal sharing ΔN_eff factor for single massive neutrino
-    Ω_ν = 𝕡.Σm_ν*νfac/𝕡.h^2
-    Ωm = 𝕡.Ω_c+𝕡.Ω_b+Ω_ν
+    Ωm = 𝕡.Ω_c+𝕡.Ω_b
     #construct gauge-invariant versions of density perturbations
     δc = δcN - 3bg.ℋ(x)*vcN /k 
     δb = δbN - 3bg.ℋ(x)*vbN /k 
-    #assume neutrinos fully non-relativistic and can be described by fluid (ok at z=0)
-    δmν = ℳρN - 3bg.ℋ(x)*vmνN /k 
-    δm = (𝕡.Ω_c*δc + 𝕡.Ω_b*δb + Ω_ν*δmν) / Ωm
+    δm = (𝕡.Ω_c*δc + 𝕡.Ω_b*δb) / Ωm
     As=𝕡.A
     Pprim = As*(k/0.05)^(𝕡.n-1) #pivot scale from Planck (in Mpc^-1)
     PL= (2π^2 / k^3)*δm^2 *Pprim

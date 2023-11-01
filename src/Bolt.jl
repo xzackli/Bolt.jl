@@ -3,12 +3,13 @@ module Bolt
 export CosmoParams, AbstractCosmoParams
 export Background, AbstractBackground
 export IonizationHistory, AbstractIonizationHistory, IonizationIntegrator
-export Peebles, PeeblesI
-export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a #FIXME: quick hack to look at perts
-export Hierarchy, boltsolve, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa
+export Peebles, PeeblesI,ihPeebles
+export ρ_σ,ρP_0,f0,dlnf0dlnq,θ,oldH_a,H_a #FIXME: quick hack to look at perts
+export Hierarchy, unpack_nn, Hierarchy_nn,initial_conditions_nn,hierarchy_nn!,boltsolve,boltsolve_nn, BasicNewtonian,unpack,rsa_perts!,boltsolve_rsa
+export Hierarchy_spl,hierarchy_spl!,unpack_spl,boltsolve_spl,Hierarchy_nn
 export IE,initial_conditions,unpack,ie_unpack
 export source_grid, quadratic_k, cltt,log10_k,plin
-export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq
+export z2a, a2z, x2a, a2x, z2x, x2z, to_ui, from_ui, dxdq,δ_kron
 
 using Parameters
 using Unitful, UnitfulAstro
@@ -25,6 +26,7 @@ using StaticArrays
 using DoubleFloats
 using MuladdMacro
 using LinearAlgebra
+using SimpleChains,Random
 
 
 using FFTW
@@ -60,8 +62,7 @@ abstract type AbstractCosmoParams{T} end
     A = 2.097e-9 # scalar amplitude, 1e-10*exp(3.043)
     n = 1.0  # scalar spectral index
     Y_p = 0.24  # primordial helium fraction
-    N_ν = 3.046 #effective number of relativisic species (PDG25 value)
-    Σm_ν = 0.06 #sum of neutrino masses (eV), Planck 15 default ΛCDM value
+    α_c = -3.0  # not sure if this would be a problem if it were an int?
 end
 
 include("util.jl")
