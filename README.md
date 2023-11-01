@@ -2,6 +2,7 @@
 
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://xzackli.github.io/Bolt.jl/dev)
 [![](https://img.shields.io/badge/source-github-blue)](https://github.com/xzackli/Bolt.jl) 
+[![DOI](https://zenodo.org/badge/328298090.svg)](https://zenodo.org/doi/10.5281/zenodo.10065125)
 
 [![Build Status](https://github.com/xzackli/Bolt.jl/workflows/CI/badge.svg)](https://github.com/xzackli/Bolt.jl/actions)
 [![codecov](https://codecov.io/gh/xzackli/Bolt.jl/branch/main/graph/badge.svg?token=NDj9hvOUkN)](https://codecov.io/gh/xzackli/Bolt.jl)
