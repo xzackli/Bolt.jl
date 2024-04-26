@@ -24,6 +24,7 @@ using StaticArrays
 using DoubleFloats
 using MuladdMacro
 using LinearAlgebra
+using Roots
 
 
 using FFTW
@@ -77,5 +78,6 @@ include("ionization/ionization.jl")
 include("ionization/recfast.jl")
 include("perturbations.jl")
 include("spectra.jl")
+include("nonlinear.jl")
 
 end
