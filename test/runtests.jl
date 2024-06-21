@@ -44,7 +44,7 @@ end
     rhist = Bolt.recfastsolve(𝕣)
     # xe_bespoke, Tmat_bespoke = Bolt.recfast_xe(𝕣; Nz=1000, zinitial=10000., zfinal=0.)
     #change to only test pre-reion (z≧50)
-    @test all(abs.(Xe_fort .- Bolt.Xe.((rhist,), z⃗)) .< 1e-4)
+    @test all(abs.(Xe_fort .- Bolt.Xe_RECFAST.((rhist,), z⃗)) .< 1e-4)
 end
 
 ##
