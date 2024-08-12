@@ -2,7 +2,6 @@
 # OPTIMIZATION OPPORTUNITY
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
-const c = 2.99792e5
 
 function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
         integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
@@ -90,8 +89,7 @@ function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
         k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
         th = Tl(x_i, k, s_itp, bes, bg)
-        k_hMpc=k/(bg.H₀*c/100.0) #This is messy...
-        Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
+        Pprim = par.A*(k/0.05)^(par.n-1)
         s += th^2 * Pprim * dk / k
     end
     return 4π*s
@@ -109,8 +107,7 @@ function clte(ℓ, s_itp_t, s_itp_e, kgrid, par::AbstractCosmoParams{T}, bg) whe
         dk = kgrid[i+1] - kgrid[i]
         th = Tl(x_i, k, s_itp_t, bes, bg)
         ep = Tl(x_i, k, s_itp_e, bes, bg) * ℓð
-        k_hMpc=k/(bg.H₀*c/100) #This is messy...
-        Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
+        Pprim = par.A*(k/0.05)^(par.n-1)
         s += th * ep * Pprim * dk / k
     end
     return 4π*s
@@ -126,8 +123,7 @@ function clee(ℓ, s_itp_p, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
         k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
         ep = Tl(x_i, k, s_itp_p, bes, bg) * ℓð
-        k_hMpc=k/(bg.H₀*c/100) #This is messy...
-        Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
+        Pprim = par.A*(k/0.05)^(par.n-1)
         s += ep^2 * Pprim * dk / k
     end
     return 4π*s
