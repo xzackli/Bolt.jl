@@ -2,6 +2,8 @@
 # OPTIMIZATION OPPORTUNITY
 # should save u and du over the x_xgrid, it's an ODE option
 # ℓᵧ is the Boltzmann hierarchy cutoff
+const c = 2.99792e5
+
 function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
         integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
     x_grid = bg.x_grid
@@ -66,7 +68,7 @@ function log10_k(kmin::T, kmax::T, nk) where T
     return T[10 ^(log10(kmin) + (log10(kmax/kmin))*(i-1)/(nk-1))  for i in 1:nk]
 end
 
-function Θl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
+function Θl(x_i, k, s_itp, bes, bg) where {T}
     s = zero(T)
     xgrid = bg.x_grid
     for i in x_i:length(xgrid)-1
@@ -79,7 +81,7 @@ function Θl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
 end
 
 # For polzn we have moved the factor of (bg.η₀ - bg.η(x))^-2 from S_p to here
-function Pl(x_i, k, s_itp, bes, par::AbstractCosmoParams{T}, bg) where {T}
+function Pl(x_i, k, s_itp, bes, bg) where {T}
     s = zero(T)
     xgrid = bg.x_grid
     for i in x_i:length(xgrid)-1
@@ -96,14 +98,14 @@ function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
     s = zero(T)
     for i in 1:length(kgrid)-1
-        k = kgrid[i]
+        k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
         th = Θl(x_i, k, s_itp, bes, par, bg)
-        k_hMpc=k/(bg.H₀*2.99792e5/100) #This is messy...
+        k_hMpc=k/(bg.H₀*c/100.0) #This is messy...
         Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
         s += th^2 * Pprim * dk / k
     end
-    return s
+    return 4π*s
 end
 
 #jms 6/7/22 UNTESTED
@@ -113,15 +115,16 @@ function clte(ℓ, s_itp_t, s_itp_e, kgrid, par::AbstractCosmoParams{T}, bg) whe
     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
     s = zero(T)
     for i in 1:length(kgrid)-1
-        k = kgrid[i]
+        # k = kgrid[i]
+        k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
         th = Θl(x_i, k, s_itp_t, bes, par, bg)
         ep = Pl(x_i, k, s_itp_e, bes, par, bg) * ℓð
-        k_hMpc=k/(bg.H₀*2.99792e5/100) #This is messy...
+        k_hMpc=k/(bg.H₀*c/100) #This is messy...
         Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
         s += th * ep * Pprim * dk / k
     end
-    return s
+    return 4π*s
 end
 
 function clee(ℓ, s_itp_p, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
@@ -130,14 +133,15 @@ function clee(ℓ, s_itp_p, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     x_i = findfirst(bg.x_grid .> -8)  # start integrating after recombination
     s = zero(T)
     for i in 1:length(kgrid)-1
-        k = kgrid[i]
+        # k = kgrid[i]
+        k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
         ep = Pl(x_i, k, s_itp_p, bes, par, bg) * ℓð
-        k_hMpc=k/(bg.H₀*2.99792e5/100) #This is messy...
+        k_hMpc=k/(bg.H₀*c/100) #This is messy...
         Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
-        s += ep^2 * Pprim *  dk / k
+        s += ep^2 * Pprim * dk / k
     end
-    return s
+    return 4π*s
 end
 
 function cltt(ℓ::Int, par::AbstractCosmoParams, bg, ih, sf)
