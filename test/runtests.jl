@@ -3,7 +3,7 @@ using Test
 using DelimitedFiles
 using LinearAlgebra
 using ForwardDiff
-using Interpolations, DataInterpolations
+using DataInterpolations
 using Printf
 
 include("testbessel.jl")
@@ -166,15 +166,7 @@ end
     # class_Cℓs = readdlm("data/class_rough_ttteee_unlensed.dat")
     camb_Cℓs = readdlm("data/camb_rough_ttteee_unlensed.dat")
 
-    #FIXME update
     #ratios
-    # itptt = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
-    # itpte = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
-    # itpee = linear_interpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
-    # #make same interpolation to ensure same interp error
-    # itptt_b = linear_interpolation(ℓs, @.(ℓfac * Cℓtt))
-    # itpte_b = linear_interpolation(ℓs, @.(ℓfac * Cℓte))
-    # itpee_b = linear_interpolation(ℓs, @.(ℓfac * Cℓee))
     itptt = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[2,:])
     itpte = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[3,:])
     itpee = LinearInterpolation(camb_Cℓs[1,:], camb_Cℓs[4,:])
