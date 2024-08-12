@@ -68,29 +68,18 @@ function log10_k(kmin::T, kmax::T, nk) where T
     return T[10 ^(log10(kmin) + (log10(kmax/kmin))*(i-1)/(nk-1))  for i in 1:nk]
 end
 
-function Θl(x_i, k, s_itp, bes, bg) where {T}
-    s = zero(T)
-    xgrid = bg.x_grid
-    for i in x_i:length(xgrid)-1
-        x = xgrid[i]
-        sb = bes(k*(bg.η₀ - bg.η(x)))
-        source = s_itp(x, k)
-        s += sb * source * (xgrid[i+1] - xgrid[i])
+function Tl(x_i, k, s_itp, bes, bg)
+    s = _Tl_integrand(x_i, k, s_itp, bes, bg)
+    for i in (x_i+1):(length(bg.x_grid)-1)
+        s += _Tl_integrand(i, k, s_itp, bes, bg)
     end
     return s
 end
 
-# For polzn we have moved the factor of (bg.η₀ - bg.η(x))^-2 from S_p to here
-function Pl(x_i, k, s_itp, bes, bg) where {T}
-    s = zero(T)
-    xgrid = bg.x_grid
-    for i in x_i:length(xgrid)-1
-        x = xgrid[i]
-        sb = bes(k*(bg.η₀ - bg.η(x)))
-        source = s_itp(x, k)
-        s += sb * source * (xgrid[i+1] - xgrid[i])
-    end
-    return s
+function _Tl_integrand(i, k, s_itp, bes, bg)
+    x = bg.x_grid[i]
+    dx = bg.x_grid[i+1] - x
+    return bes(k*(bg.η₀ - bg.η(x))) * s_itp(x, k) * dx
 end
 
 function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
@@ -100,7 +89,7 @@ function cltt(ℓ, s_itp, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
     for i in 1:length(kgrid)-1
         k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
-        th = Θl(x_i, k, s_itp, bes, bg)
+        th = Tl(x_i, k, s_itp, bes, bg)
         k_hMpc=k/(bg.H₀*c/100.0) #This is messy...
         Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
         s += th^2 * Pprim * dk / k
@@ -118,8 +107,8 @@ function clte(ℓ, s_itp_t, s_itp_e, kgrid, par::AbstractCosmoParams{T}, bg) whe
         # k = kgrid[i]
         k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
-        th = Θl(x_i, k, s_itp_t, bes, bg)
-        ep = Pl(x_i, k, s_itp_e, bes, bg) * ℓð
+        th = Tl(x_i, k, s_itp_t, bes, bg)
+        ep = Tl(x_i, k, s_itp_e, bes, bg) * ℓð
         k_hMpc=k/(bg.H₀*c/100) #This is messy...
         Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
         s += th * ep * Pprim * dk / k
@@ -136,7 +125,7 @@ function clee(ℓ, s_itp_p, kgrid, par::AbstractCosmoParams{T}, bg) where {T}
         # k = kgrid[i]
         k = (kgrid[i] + kgrid[i+1])/2 #use midpoint
         dk = kgrid[i+1] - kgrid[i]
-        ep = Pl(x_i, k, s_itp_p, bes, bg) * ℓð
+        ep = Tl(x_i, k, s_itp_p, bes, bg) * ℓð
         k_hMpc=k/(bg.H₀*c/100) #This is messy...
         Pprim = par.A*(k_hMpc/0.05)^(par.n-1)
         s += ep^2 * Pprim * dk / k
