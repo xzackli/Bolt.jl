@@ -1,4 +1,4 @@
-using Bolt, Plots, DelimitedFiles
+using Bolt, Plots, DelimitedFiles, Revise
 
 #FIXME adjust the cl test accordingly
 
@@ -25,7 +25,7 @@ function clttteee(ℓs, 𝕡, bg, ih, sf,sf_P; Dℓ=true)
     Cᵀᴱ = clte(ℓs, 𝕡, bg, ih, sf,sf_P)
     Cᴱᴱ = clee(ℓs, 𝕡, bg, ih, sf_P)
     if Dℓ
-        ℓsq = 4π .* ℓs.*(ℓs.+1) #*norm_fac
+        ℓsq = ℓs.*(ℓs.+1) ./ 2π # Dℓ = ℓ(ℓ+1)/(2π) C_ℓ
         return  ℓsq.*Cᵀᵀ, ℓsq.*Cᵀᴱ, ℓsq.*Cᴱᴱ
     else
         return Cᵀᵀ*norm_fac, Cᵀᴱ*norm_fac, Cᴱᴱ*norm_fac
@@ -106,19 +106,125 @@ nkk = [100,150,200]
 
 
 all_test = single_experiment(400,200) 
-
-
 bg_test = Background(𝕡; x_grid=-20.0:(0.0+20.0)/400:0.0);
 ks_test = quadratic_k(0.1bg_test.H₀,1000bg_test.H₀,200);
+
+# transfer fucntions
+camb_T_ℓ_k = readdlm("./test/data/camb_v_class_2022_default_camb_cmb_transfers_T_ell_k.dat")
+camb_E_ℓ_k = readdlm("./test/data/camb_v_class_2022_default_camb_cmb_transfers_E_ell_k.dat")
+camb_ℓ = readdlm("./test/data/camb_v_class_2022_default_camb_cmb_transfers_ell.dat")
+camb_k = readdlm("./test/data/camb_v_class_2022_default_camb_cmb_transfers_k.dat")
+
+test_xi = findfirst(bg_test.x_grid .> -8)
+function tΘl(x_i, k, s_itp, bes, bg)
+    s = zero(Float64)
+    xgrid = bg.x_grid
+    for i in x_i:length(xgrid)-1
+        x = xgrid[i]
+        sb = bes(k*(bg.η₀ - bg.η(x)))
+        source = s_itp(x, k)
+        s += sb * source * (xgrid[i+1] - xgrid[i])
+    end
+    return s
+end
+
+tΘl_arr = zeros(length(camb_ℓ),length(ks_test))
+for (i,ℓ) in enumerate(camb_ℓ)
+    println(i)
+    for (j,k) in enumerate(ks_test)
+        bes = Bolt.bessel_interpolator(ℓ, k * bg_test.η₀)
+        tΘl_arr[i,j] = tΘl(test_xi,k,all_test[7],bes,bg_test)
+    end
+end
+
+#ℓ = 2
+plot(camb_k, camb_T_ℓ_k[1,:],xscale=:log10,label="camb")
+scatter!(ks_test, tΘl_arr[1,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$\Theta_{\ell=2}(k)$")
+savefig("../../misc_plots/Θl_ℓ=2.png")
+
+#ℓ = 40
+plot(camb_k, camb_T_ℓ_k[26,:],xscale=:log10,label="camb")
+scatter!(ks_test, tΘl_arr[26,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$\Theta_{\ell=40}(k)$")
+savefig("../../misc_plots/Θl_ℓ=40.png")
+
+#ℓ = 200
+plot(camb_k, camb_T_ℓ_k[41,:],xscale=:log10,label="camb")
+scatter!(ks_test, tΘl_arr[41,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$\Theta_{\ell=200}(k)$")
+savefig("../../misc_plots/Θl_ℓ=200.png")
+
+#ℓ = 2000
+plot(camb_k, camb_T_ℓ_k[end-10,:],xscale=:log10,label="camb")
+scatter!(ks_test, tΘl_arr[end-10,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$\Theta_{\ell=2000}(k)$")
+savefig("../../misc_plots/Θl_ℓ=2000.png")
+
+# polzn
+function tEl(x_i, k, s_itp, bes, bg)
+    # function Pl(x_i, k, s_itp, bes, bg) where {T}
+        s = zero(Float64)
+        xgrid = bg.x_grid
+        for i in x_i:length(xgrid)-1
+            x = xgrid[i]
+            sb = bes(k*(bg.η₀ - bg.η(x)))
+            source = s_itp(x, k)
+            s += sb * source * (xgrid[i+1] - xgrid[i])
+        end
+        return s
+    end
+# end
+
+tEl_arr = zeros(length(camb_ℓ),length(ks_test))
+for (i,ℓ) in enumerate(camb_ℓ)
+    println(i)
+    ℓð = sqrt((ℓ+2)*(ℓ+1)*ℓ*(ℓ-1)) #spin factor
+    for (j,k) in enumerate(ks_test)
+        bes = Bolt.bessel_interpolator(ℓ, k * bg_test.η₀)
+        tEl_arr[i,j] = tEl(test_xi,k,all_test[8],bes,bg_test)
+    end
+end
+
+#ℓ = 2
+plot(camb_k, camb_E_ℓ_k[1,:],xscale=:log10,label="camb")
+scatter!(ks_test, tEl_arr[1,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$E_{\ell=2}(k)$")
+savefig("../../misc_plots/El_ℓ=2.png")
+
+#ℓ = 40
+plot(camb_k, camb_E_ℓ_k[26,:],xscale=:log10,label="camb")
+scatter!(ks_test, tEl_arr[26,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$E_{\ell=40}(k)$")
+savefig("../../misc_plots/El_ℓ=40.png")
+
+#ℓ = 200
+plot(camb_k, camb_E_ℓ_k[41,:],xscale=:log10,label="camb")
+scatter!(ks_test, tEl_arr[41,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$E_{\ell=200}(k)$")
+savefig("../../misc_plots/El_ℓ=200.png")
+
+#ℓ = 2000
+plot(camb_k, camb_E_ℓ_k[end-10,:],xscale=:log10,label="camb")
+scatter!(ks_test, tEl_arr[end-10,:],xscale=:log10,label="bolt")
+xlabel!(raw"$k$")
+ylabel!(raw"$E_{\ell=2000}(k)$")
+savefig("../../misc_plots/El_ℓ=2000.png")
+
+
 
 # Structured runs
 # the scheme is a list with [(nx_1,nk_1), (nx_1,nk_2),...,(nx_2,nk_1),...]
 rrs = [single_experiment(nx,nk) 
         for nk in nkk 
          for nx in nxx]
-
-
-
 
 # channge surface plot angle
 plot(all_test[7](bg_test.x_grid,log10.(ks_test)))
@@ -127,16 +233,6 @@ surface(all_test[8](bg_test.x_grid,ks_test),camera=(130,20))
 surface(all_test[8](bg_test.x_grid[1:end-20],ks_test[20:end]),camera=(130,20))
 
         
-plot(all_test[7](bg_test.x_grid))
-
-
-# look at source function
-surface(all_test[7])
-surface(all_test[8])
-all_test[8]
-
-plot(ℓs, )
-plot(ℓs,all_test[4]./ camb_Cᵀᵀ)
 
 plot(ℓs, camb_Cᵀᵀ)
 plot!(ℓs, all_test[4],label="midpoint TT")
