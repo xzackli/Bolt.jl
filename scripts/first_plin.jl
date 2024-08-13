@@ -4,7 +4,7 @@ using ForwardDiff
 using Plots
 using BenchmarkTools
 using Printf
-using Interpolations
+using Interpolations,DataInterpolations
 using Plots.PlotMeasures
 
 #input ingredients
@@ -19,10 +19,10 @@ logq_pts = logqmin:(logqmax-logqmin)/(n_q-1):logqmax
 kmin,kmax= 0.1bg.H₀*100,5000bg.H₀
 k_grid = log10_k(kmin,kmax,33)
 
-ℓᵧ=500 #cutoff
-ℓ_ν=500#10
+ℓᵧ=25 #cutoff
+ℓ_ν=25#10
 ℓ_mν=20
-reltol=1e-5 #cheaper  rtol
+reltol=1e-8 #cheaper  rtol
 x=0
 a=exp(x)
 pertlen = 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*n_q+5
@@ -33,6 +33,7 @@ for (i_k, k) in enumerate(k_grid)
     perturb = boltsolve(hierarchy; reltol=reltol)
     u = perturb(x)  #z this can be optimized away, save timesteps at the grid!
     results[:,i_k] = u #z should use unpack somehow
+    # results[:,i_k] .= boltsolve_rsa(hierarchy;reltol=reltol)[:,end]
 end
 results
 
@@ -48,7 +49,7 @@ for (i_k, k) in enumerate(k_grid)
     #Also using the fact that a=1 at z=0
 end
 
-k_grid_hMpc = k_grid/(bg.H₀*3e5/100)
+k_grid_hMpc = k_grid/(bg.H₀*299792.458/100)#3e5/100)
 #^convert our units of eV/(eV 100 h /c) to km/s/Mpc/h
 
 #put together the matter transfer function (Newtonian gauge)
@@ -100,36 +101,41 @@ hline!([1],c="black",ls=:dot)
 δm = (𝕡.Ω_m*δc + 𝕡.Ω_b*δb + Ω_ν*δmν) ./ Ωm
 As=1e-10*exp(3.043)
 Pprim = As*(k_grid_hMpc./0.05).^(𝕡.n-1)
-PL_un = (2π^2 ./ k_grid_hMpc.^3).*(δm*𝕡.h).^2 .*Pprim
+PL_un = (2π^2 ./ k_grid_hMpc.^3).*(δm).^2 .*Pprim
 
 #Load and plot the CLASS matter power at z=0
-ret = open("../compare/class_pk_x0_nofluid.dat","r") do datafile
+ret = open("/Users/jsull/Documents/berkeley/bolt/compare/zack_N_class_pk_dense_x0_nofluid_nonu.dat","r") do datafile
+# ret = open("../compare/class_pk_x0_nofluid.dat","r") do datafile
 # ret = open("../compare/class_pk_xm5_nofluid.dat","r") do datafile
     [parse.(Float64, split(line)) for line in eachline(datafile)]
 end
 class_pk = reduce(hcat,ret)
 
 #plot power
-p1 = plot(log10.(k_grid_hMpc),log10.(PL_un),label="Bolt")
-plot!(log10.(class_pk[1,:]),log10.(class_pk[2,:]),label="CLASS",ls=:dash)
+itpclass = CubicSpline(class_pk[2,:], class_pk[1,:])
+p1 = plot(log10.(k_grid_hMpc[minkcut:maxkcut]),log10.(PL_un[minkcut:maxkcut]),label="Bolt")#,marker=:dot)
+# plot!(log10.(class_pk[1,:]),log10.(class_pk[2,:]),label="CLASS",ls=:dash)
+plot!(log10.(k_grid_hMpc[minkcut:maxkcut]),log10.(itpclass.(k_grid_hMpc[minkcut:maxkcut])),label="CLASS",ls=:dash)
 ylabel!(raw"$\log ~P_{L}(k)$")
 
 #interpolate to get ratio
-class_pk[1,:]
-itpclass = LinearInterpolation(class_pk[1,:],class_pk[2,:])
 minkcut=1
-p2=plot(log10.(k_grid_hMpc[minkcut:end]), (PL_un[minkcut:end])./itpclass.(k_grid_hMpc[minkcut:end]),
-        legend=false,left_margin=4mm,marker=:circle )
-hline!([1],ls=:dot,c=:black)
+maxkcut=length(k_grid_hMpc)-3
+p2=plot(log10.(k_grid_hMpc[minkcut:maxkcut]), (PL_un[minkcut:maxkcut])./itpclass.(k_grid_hMpc[minkcut:maxkcut]),
+        legend=false,left_margin=4mm)#,marker=:circle )
+hline!([1],ls=:dash,c=:black)
+hline!([1.0001],ls=:dot,c=:black)
+hline!([0.9999],ls=:dot,c=:black)
+ylims!(.999,1.001)
 ylabel!(raw"$\frac{P_{L,\rm{Bolt}}}{P_{L,\rm{CLASS}}}(k)$")
 xlabel!(raw"$\log ~k \ [h/Mpc]$")
-xlims!(log10(minimum(k_grid_hMpc)),log10(maximum(class_pk[1,:])))
-
+# xlims!(log10(minimum(class_pk[1,:])),log10(maximum(class_pk[1,:])))
+# (2*PL_un[minkcut:end])./itpclass.(k_grid_hMpc[minkcut:end])
 
 l = @layout [a  ; b]
 plot(p1, p2, layout = l)
 title!("Plin CLASS - Bolt - z=$(@sprintf("%.0f", exp(-x)-1))")
-savefig("../compare/reion_plin_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
+savefig("/Users/jsull/Documents/berkeley/bolt/compare/ellmax25_plin_both_class_bolt_perts_k_z$(@sprintf("%.0f", exp(-x)-1)).png")
 
 #----
 #This is old

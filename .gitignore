@@ -3,4 +3,8 @@
 *.jl.mem
 /docs/build/
 .vscode
-Manifest.toml
+/Manifest.toml
+.ipynb_checkpoints
+test/Manifest.toml
+examples/Manifest.toml
+.DS_Store
