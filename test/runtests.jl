@@ -158,6 +158,7 @@ end
     sf_e = source_grid_P(𝕡, bg, ih, k_grid, BasicNewtonian())
 
     ℓs = 10:10:2500 #pretty coarse but ok - enough to see wiggles even at 20
+    ℓfac = ℓs.*(ℓs.+1) ./ (2π)
     Cℓtt = cltt(ℓs, 𝕡, bg, ih, sf_t)
     Cℓte = clte(ℓs, 𝕡, bg, ih, sf_t,sf_e)
     Cℓee = clee(ℓs, 𝕡, bg, ih, sf_e)
