@@ -47,11 +47,8 @@ function boltsolve_conformal(confie::ConformalIEγν{T},#FIXME we don't need thi
     ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
     xᵢ = ie.bg.x_grid[1]#η2x( ie.bg.η[1] ) 
-    # Mpcfac = ie.bg.H₀*299792.458/100.
     u₀ = initial_conditions(xᵢ, ie)
     prob = ODEProblem{true}(ie_conformal!, u₀, 
-        # (max(ie.bg.η[1]*Mpcfac,ie.bg.η(ie.bg.x_grid[1])*Mpcfac), 
-        # min(ie.bg.η[end]*Mpcfac,ie.bg.η(ie.bg.x_grid[end])*Mpcfac)),
         (max(ie.bg.η[1],ie.bg.η(ie.bg.x_grid[1])), 
         min(ie.bg.η[end],ie.bg.η(ie.bg.x_grid[end]))),
         confie)
@@ -63,12 +60,10 @@ end
 
 function ie_conformal!(du, u, confie::ConformalIEγν{T}, η) where T
     ie = confie.ie
-    Mpcfac = ie.bg.H₀*299792.458/100.
-    # println("about to call η2x at ", η  / Mpcfac) # too many calls for this to be useful
-    x = confie.η2x(η)#  / Mpcfac )
+    x = confie.η2x(η)
     ℋ = ie.bg.ℋ(x)
     ie!(du, u, ie, x)
-    du .*= ℋ / Mpcfac  # account for dx/dη
+    du .*= ℋ  # account for dx/dη
     return nothing
 end
 
@@ -109,8 +104,8 @@ function ie!(du, u, ie::IEγν{T, BasicNewtonian}, x) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Ω_r, Ω_b, Ω_c, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    Mpcfac = ie.bg.H₀*299792.458/100. 
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x)/Mpcfac, ih.τ′(x), ih.τ′′(x)
+    ℋₓ, ℋₓ′, ηₓ  = bg.ℋ(x), bg.ℋ′(x), bg.η(x) 
+    τₓ′,τₓ′′ = ih.τ′(x),ih.τ′′(x)
     #FIXME drop the unused things
     a = x2a(x)
     R = 4Ω_r / (3Ω_b * a)
@@ -185,8 +180,8 @@ function initial_conditions(xᵢ, ie::IEγν{T, BasicNewtonian}) where T
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
-    Mpcfac = ie.bg.H₀*299792.458/100. 
-    ℋₓ, _, ηₓ, τₓ′, _ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)/Mpcfac, ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    ℋₓ, _, ηₓ  = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)
+    τₓ′ = ih.τ′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie)  # the Θ, Θᵖ are mutable views (see unpack)
 
     aᵢ² = exp(xᵢ)^2
@@ -251,17 +246,15 @@ end
 function _IΘ2(x, x′,k,
     Π, Θ0, v_b, Φ′, Ψ,
     ih, bg) #for testing
-    Mpcfac = bg.H₀*299792.458/100. #FIXME won't need this anymore when k in correct units
     τ′,η = ih.τ′,bg.η #all splines of x
-    y = k*( η(x)-η(x′) )/Mpcfac #Bessel argument
+    y = k*( η(x)-η(x′) ) #Bessel argument
     IΘ2 = ( Θ0 - Φ′/ (-τ′(x′))  )*j2(y) - ( v_b   - ( k/bg.ℋ(x′) )*Ψ / (-τ′(x′)) )*j2′(y)  - Π*R2(y) / 2 
     return IΘ2
 end
 
 function _IΠ(x, x′,k, Π, bg)
     η = bg.η #all splines of x
-    Mpcfac = bg.H₀*299792.458/100. 
-    y = k*( η(x)-η(x′) )/Mpcfac  #Bessel argument
+    y = k*( η(x)-η(x′) )  #Bessel argument
     IE2 = j2bx2(y)*Π
     IΠ = 9IE2
     return IΠ
@@ -361,10 +354,8 @@ end
 function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
-    # Mpcfac = hierarchy.bg.H₀*299792.458/100.
     println("h_boltsolve_conformal_flex. η_ini = ",η_ini,", η_fin = ",η_fin)
     prob = ODEProblem{true}(Bolt.hierarchy_conformal!, u₀, 
-                            # (η_ini*Mpcfac , η_fin*Mpcfac),
                             (η_ini , η_fin),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
@@ -386,9 +377,7 @@ end
 function boltsolve_conformal_flex(confie::ConformalIEγν{T},#FIXME we don't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     ie,η2x = confie.ie,confie.η2x
-    # Mpcfac = ie.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(Bolt.ie_conformal!, u₀, 
-                            # (η_ini*Mpcfac, η_fin*Mpcfac),
                             (η_ini, η_fin),
                             confie)
     sol = solve(prob, ode_alg, reltol=reltol,
@@ -419,8 +408,7 @@ function x_grid_ie(ie,x_ini,x_fin) # We don't want this to use the background...
     # digits=3
     # Three phases: 
     # 1. Pre-horizon entry:
-    Mpcfac = ie.bg.H₀*299792.458/100.
-    xhor = bg.x_grid[argmin(abs.(k .* bg.η /Mpcfac .- 2π))] #horizon crossing ish
+    xhor = bg.x_grid[argmin(abs.(k .* bg.η .- 2π))] #horizon crossing ish
     # x_ph_i, x_ph_f, n_ph = bg.x_grid[1], xhor, ie.Nᵧ₁ #10.
     x_ph_i, x_ph_f, n_ph = x_ini, xhor, ie.Nᵧ₁ 
     dx_ph = (x_ph_f-x_ph_i)/(n_ph-1)
@@ -430,7 +418,7 @@ function x_grid_ie(ie,x_ini,x_fin) # We don't want this to use the background...
     x_ph = collect(range(x_ph_i,x_ph_f,length=n_ph-1))
 
     # 2. Wiggly time (recomb):
-    xdec = bg.x_grid[argmin(abs.( -ih.τ′ .* bg.ℋ .*bg.η /Mpcfac .- 1))] #decoupling ish
+    xdec = bg.x_grid[argmin(abs.( -ih.τ′ .* bg.ℋ .*bg.η .- 1))] #decoupling ish
     x_rc_f, n_rc = xdec, ie.Nᵧ₂ #100
     dx_rc = (x_rc_f-x_ph_f)/n_rc
     # x_rc = x_ph_f .+ dx_rc * collect(1:1:n_rc)
@@ -462,12 +450,11 @@ function η_grid_ie(ie,η_ini,η_fin,η2x) # We don't want this to use the backg
     ℋ = bg.ℋ(η2x(η_grid))
     # Three phases: 
     # 1. Pre-horizon entry:
-    Mpcfac = ie.bg.H₀*299792.458/100.
-    ηhor = η_grid[argmin(abs.(k .* η_grid /Mpcfac .- 2π))] #horizon crossing ish
+    ηhor = η_grid[argmin(abs.(k .* η_grid .- 2π))] #horizon crossing ish
     # x_ph_i, x_ph_f, n_ph = bg.x_grid[1], xhor, ie.Nᵧ₁ #10.
     η_ph_i, η_ph_f, n_ph = η_ini, ηhor, ie.Nᵧ₁ 
     # 2. Wiggly time (recomb):
-    ηdec = η_grid[argmin(abs.( -τ′ .* ℋ .*η_grid /Mpcfac .- 1))] #decoupling ish
+    ηdec = η_grid[argmin(abs.( -τ′ .* ℋ .*η_grid .- 1))] #decoupling ish
     η_rc_f, n_rc = ηdec, ie.Nᵧ₂ 
     # 3. Post-recomb:
     n_pr = ie.Nᵧ₃ 

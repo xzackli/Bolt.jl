@@ -43,10 +43,7 @@ function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't
     hierarchy = confhierarchy.hierarchy
     xᵢ = hierarchy.bg.x_grid[1]#confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
     u₀ = initial_conditions(xᵢ, hierarchy)
-    # Mpcfac = hierarchy.bg.H₀*299792.458/100.
     prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
-                            # (max(hierarchy.bg.η[1]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[1])*Mpcfac), 
-                            # min(hierarchy.bg.η[end]*Mpcfac,hierarchy.bg.η(hierarchy.bg.x_grid[end])*Mpcfac)),
                             (max(hierarchy.bg.η[1],hierarchy.bg.η(hierarchy.bg.x_grid[1])), 
                             min(hierarchy.bg.η[end],hierarchy.bg.η(hierarchy.bg.x_grid[end]))),
                             confhierarchy)
@@ -73,11 +70,10 @@ end
 
 function hierarchy_conformal!(du, u, confhierarchy::ConformalHierarchy{T}, η) where T
     hierarchy = confhierarchy.hierarchy
-    Mpcfac = hierarchy.bg.H₀*299792.458/100.
-    x = confhierarchy.η2x(η)#  / Mpcfac )
+    x = confhierarchy.η2x(η)
     ℋ = hierarchy.bg.ℋ(x)
     hierarchy!(du, u, hierarchy, x)
-    du .*= ℋ / Mpcfac  # account for dx/dη
+    du .*= ℋ  # account for dx/dη
     return nothing
 end
 
@@ -238,8 +234,8 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
-    Mpcfac = hierarchy.bg.H₀*299792.458/100.
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)/Mpcfac, ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    ℋₓ, ℋₓ′, ηₓ  = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)
+    τₓ′, τₓ′′ = ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
