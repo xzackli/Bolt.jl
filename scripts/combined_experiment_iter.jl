@@ -37,6 +37,7 @@ bg = Background(𝕡; x_grid=ret[1,1]:round(dx,digits=3):ret[end,1], nq=n_q);
 ih = IonizationHistory(𝕣, 𝕡, bg);
 Mpcfac = bg.H₀*299792.458/100.
 k = Mpcfac*kclass #get k in our units
+kclass
 # Hierarchy for comparison purposes
 ℓᵧ=50
 ℓ_mν=20
@@ -107,7 +108,6 @@ cie_0 = ConformalIEγν(ie_0,η2x_late);
 u0_ie = get_switch_u0(η_switch_use,hierarchy_conf,reltol);
 M = 2048*4
 
-
 xx_k,Θ₂,Π,𝒳₀_k,𝒳₂_k,perturb_k = itersolve(N_iters,cie_0,M,bg.x_grid[switch_idx],0.0,u0_ie;reltol=reltol);
 
 #Accuracy/timing
@@ -146,7 +146,7 @@ xlims!(η_switch,bg.η[end])
 ylabel!("Θ₂(η)")
 xlabel!("η")
 
-plot(perturb_conf.t,results_conf[1,:],color=:black,xscale=:log10)
+plot!(perturb_conf.t,results_conf[1,:],color=:blue,xscale=:log10)
 plot!(bg.η(xx_k),perturb_k(bg.η(xx_k))[1,:],ls=:dash)
 xlims!(1,1e4)
 #--------------------------------

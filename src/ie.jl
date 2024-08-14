@@ -354,7 +354,6 @@ end
 function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
-    println("h_boltsolve_conformal_flex. η_ini = ",η_ini,", η_fin = ",η_fin)
     prob = ODEProblem{true}(Bolt.hierarchy_conformal!, u₀, 
                             (η_ini , η_fin),
                             confhierarchy)
