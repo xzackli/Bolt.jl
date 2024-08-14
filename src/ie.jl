@@ -682,8 +682,9 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
 
     N = length(xgi)
     Φ′,Ψ,Θ₀,Π,v_b = zeros(N),zeros(N),zeros(N),zeros(N),zeros(N)
-    u_all = perturb_k(bg.η(xgi))
-
+    u_all =Array(perturb_k(bg.η(xgi)))
+    # println("axes(u_all,1) = ", axes(u_all,1))
+    println("size(u_all) = ", size(u_all))
     for (j,u) in enumerate( eachcol(u_all) )
             Φ′[j],Ψ[j],Θ₀[j],Π[j],v_b[j] = get_perts(u,ie_k,xgi[j])
     end
