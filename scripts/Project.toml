@@ -1,0 +1,5 @@
+[deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+Bolt = "d94d39b4-3f51-4e5a-bfd8-f3b08e8f2b62"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+NumericalIntegration = "e7bfaba1-d571-5449-8927-abc22e82249b"

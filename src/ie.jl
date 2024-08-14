@@ -108,7 +108,7 @@ function ie!(du, u, ie::IEγν{T, BasicNewtonian}, x) where T
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
-    Ω_r, Ω_b, Ω_m, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    Ω_r, Ω_b, Ω_c, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
     Mpcfac = ie.bg.H₀*299792.458/100. 
     ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x)/Mpcfac, ih.τ′(x), ih.τ′′(x)
     #FIXME drop the unused things
@@ -142,7 +142,7 @@ function ie!(du, u, ie::IEγν{T, BasicNewtonian}, x) where T
                                   )
 
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩₀ 
         + a^(-2) * ρℳ / bg.ρ_crit
@@ -297,7 +297,7 @@ end
 function get_Φ′_Ψ(u,hierarchy::Hierarchy{T},x) where T
     #TODO: can streamline hierarchy and source funcs with this helper function also
     k, par, bg, nq = hierarchy.k, hierarchy.par, hierarchy.bg,hierarchy.nq
-    Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
+    Ω_r, Ω_b, Ω_c, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
     ℋₓ =  bg.ℋ(x)
     a = x2a(x)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
@@ -308,7 +308,7 @@ function get_Φ′_Ψ(u,hierarchy::Hierarchy{T},x) where T
                                   + σℳ / bg.ρ_crit /4
                                   )
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0]
         + a^(-2) * ρℳ / bg.ρ_crit
@@ -362,6 +362,7 @@ function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME 
     η_ini,η_fin,u₀,ode_alg=KenCarp4(); reltol=1e-6) where T
     hierarchy = confhierarchy.hierarchy
     # Mpcfac = hierarchy.bg.H₀*299792.458/100.
+    println("h_boltsolve_conformal_flex. η_ini = ",η_ini,", η_fin = ",η_fin)
     prob = ODEProblem{true}(Bolt.hierarchy_conformal!, u₀, 
                             # (η_ini*Mpcfac , η_fin*Mpcfac),
                             (η_ini , η_fin),
@@ -594,7 +595,7 @@ end
 
 function get_perts(u,ie::IEγν{T},x) where T
     k, par, bg, nq = ie.k, ie.par, ie.bg,ie.nq
-    Ω_r, Ω_b, Ω_m, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_m, par.N_ν, bg.H₀^2 
+    Ω_r, Ω_b, Ω_c, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, bg.H₀^2 
     ℋₓ =  bg.ℋ(x)
     a = x2a(x)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
@@ -612,7 +613,7 @@ function get_perts(u,ie::IEγν{T},x) where T
                                   + σℳ / bg.ρ_crit /4
                                   )
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_m * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩₀
         + a^(-2) * ρℳ / bg.ρ_crit
@@ -730,7 +731,8 @@ function get_switch_u0(η,hierarchy_conf,reltol)
     ℓᵧ,ℓ_ν,ℓ_mν,n_q = hierarchy.ℓᵧ,hierarchy.ℓ_ν,hierarchy.ℓ_mν, hierarchy.nq
     pertlen=2(ℓᵧ+1) + (ℓ_ν+1) + (ℓ_mν+1)*n_q + 5
     # \/ we want to report this timing to get a full picture of total time (early+late)
-    sol_early_c = h_boltsolve_conformal_flex(hierarchy_conf, bg.η(bg.x_grid[1]), bg.η(bg.x_grid[switch_idx]),  initial_conditions(bg.x_grid[1], hierarchy),reltol=reltol);
+    # sol_early_c = h_boltsolve_conformal_flex(hierarchy_conf, bg.η(bg.x_grid[1]), bg.η(bg.x_grid[switch_idx]),  initial_conditions(bg.x_grid[1], hierarchy),reltol=reltol);
+    sol_early_c = h_boltsolve_conformal_flex(hierarchy_conf, bg.η[1], bg.η[switch_idx],  initial_conditions(bg.x_grid[1], hierarchy),reltol=reltol);
     # Get the new initial conditions
     u0_ie = zeros(2(2) + (0+1) + (0+1)*n_q + 5);
     # The first split for photons

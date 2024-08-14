@@ -45,8 +45,8 @@ function ρP_0(a,par::AbstractCosmoParams,quad_pts,quad_wts)
     # IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
     xq,wq =quad_pts,quad_wts
     ρ = 4π * a^(-4) * sum(Iρ.(xq).*wq)
-    P = 4π/3 * a^(-4) *sum(IP.(xq).*wq) # I don't think this is ever used
-    return ρ,P
+    # P = 4π/3 * a^(-4) *sum(IP.(xq).*wq) # I don't think this is ever used
+    return ρ,nothing #P
 end
 
 #neglect neutrinos, this is for ionization debugging purposes only
