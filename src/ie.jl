@@ -189,9 +189,9 @@ function initial_conditions(xᵢ, ie::IEγν{T, BasicNewtonian}) where T
     f_ν = 1/(1 + 1/(7*(3/3)*par.N_ν/8 *(4/11)^(4/3)))
 
     # metric and matter perturbations
-    Φ = 1.0
-    #choosing Φ=1 forces the following value for C, the rest of the ICs follow
-    C = -( (15 + 4f_ν)/(20 + 8f_ν) )
+    ℛ = 1.0  # set curvature perturbation to 1
+    Φ = (4f_ν + 10) / (4f_ν + 15) * ℛ  # for a mode outside the horizon in radiation era
+    C = -( (15 + 4f_ν)/(20 + 8f_ν) ) * Φ
 
     #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4
@@ -670,7 +670,7 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
     Φ′,Ψ,Θ₀,Π,v_b = zeros(N),zeros(N),zeros(N),zeros(N),zeros(N)
     u_all =Array(perturb_k(bg.η(xgi)))
     # println("axes(u_all,1) = ", axes(u_all,1))
-    println("size(u_all) = ", size(u_all))
+    # println("size(u_all) = ", size(u_all))
     for (j,u) in enumerate( eachcol(u_all) )
             Φ′[j],Ψ[j],Θ₀[j],Π[j],v_b[j] = get_perts(u,ie_k,xgi[j])
     end

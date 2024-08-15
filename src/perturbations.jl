@@ -245,7 +245,6 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     # metric and matter perturbations
     ℛ = 1.0  # set curvature perturbation to 1
     Φ = (4f_ν + 10) / (4f_ν + 15) * ℛ  # for a mode outside the horizon in radiation era
-    #choosing Φ=1 forces the following value for C, the rest of the ICs follow
     C = -( (15 + 4f_ν)/(20 + 8f_ν) ) * Φ
 
     #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
