@@ -10,7 +10,7 @@ struct IEγν{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
     k::Tk
     sΘ2::IT #This is kept separate from the neutrino interpolators for convenience rn, but need not be
     sΠ::IT
-    s𝒳₀::AbstractArray{IT,1}
+    s𝒳₀::AbstractArray{IT,1} # array of interpolators - first entry is massless neutrinos, then rest ascending q
     s𝒳₂::AbstractArray{IT,1}
     Nᵧ₁::Int #pre-entry
     Nᵧ₂::Int #recomb
@@ -167,6 +167,7 @@ function ie!(du, u, ie::IEγν{T, BasicNewtonian}, x) where T
     Θᵖ₂ = Π - Θᵖ[0] - Θ₂ #could drop this line but it makes things clearer
     Θᵖ′[1] = k / (3ℋₓ) * Θᵖ[0] - 2k / (3ℋₓ) * Θᵖ₂ + τₓ′ * Θᵖ[1] 
 
+    du[2(ℓᵧ+1)+1] = 𝒩′ #dipole is now a scalar
     du[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5] .= Φ′, δ′, v′, δ_b′, v_b′  # put non-photon perturbations back in
     return nothing
 end
@@ -215,6 +216,7 @@ function initial_conditions(xᵢ, ie::IEγν{T, BasicNewtonian}) where T
         ℳ[1+i_q] = -ϵ/q * 𝒩 *df0
     end
 
+    u[2(ℓᵧ+1)+1] = 𝒩
     u[2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+1:(2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)] .= Φ, δ, v, δ_b, v_b  # write u with our variables
     return u
 end
@@ -245,7 +247,7 @@ end
 # KERNELS
 function _IΘ2(x, x′,k,
     Π, Θ0, v_b, Φ′, Ψ,
-    ih, bg) #for testing
+    ih, bg) 
     τ′,η = ih.τ′,bg.η #all splines of x
     y = k*( η(x)-η(x′) ) #Bessel argument
     IΘ2 = ( Θ0 - Φ′/ (-τ′(x′))  )*j2(y) - ( v_b   - ( k/bg.ℋ(x′) )*Ψ / (-τ′(x′)) )*j2′(y)  - Π*R2(y) / 2 
@@ -270,11 +272,7 @@ j0′(x) = -j1(x)
 #ℓ=1
 j1(x) =  (x > 0.01) ?  (sin(x) - x*cos(x))/x^2 : x/3 - x^3 /30 + x^5 /840
 R1(x) =  (x > 0.01) ? j1(x) - 3j2(x)/x : 2x/15 - 2x^3 /105 + x^5 /1260
-#ℓ=2
-# j2(x) = (x > 0.01) ? -( 3x*cos(x) + (x^2 - 3)*sin(x) ) / x^3 : x^2 /15 - x^4 /210 + x^6 /7560
-# j2′(x) = (x > 0.01) ? ( -x*(x^2 -9)*cos(x) + (4x^2 -9)*sin(x) ) / x^4 : 2x /15 - 2x^3 /105 + x^5 /1260
-# j2′′(x) = (x > 0.2) ? ( x*(5x^2 -36)*cos(x) + (x^4 - 17x^2 +36)*sin(x) ) / x^5 : 2/15 - 2x^2 /35 + x^4 /252 - x^6 /8910
-# R2(x) = (x > 0.2) ? -( j2(x) + 3j2′′(x) ) / 2 : -1/5 + 11x^2 /210 -x^4 /280 +17x^4 /166320
+#ℓ=2 - above
 # The W coupling kernel (sum truncated at ℓ=2)
 W00(x) = j0(x)
 W01(x) = j1(x)
@@ -287,27 +285,27 @@ function Wsum(x,𝒳ᵢ₀,𝒳ᵢ₁,𝒳ᵢ₂)
     return 𝒳ₛ₀, 𝒳ₛ₂
 end
 
-function get_Φ′_Ψ(u,hierarchy::Hierarchy{T},x) where T
-    #TODO: can streamline hierarchy and source funcs with this helper function also
-    k, par, bg, nq = hierarchy.k, hierarchy.par, hierarchy.bg,hierarchy.nq
-    Ω_r, Ω_b, Ω_c, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ =  bg.ℋ(x)
-    a = x2a(x)
-    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]
-                                  + σℳ / bg.ρ_crit /4
-                                  )
-    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-        + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0]
-        + a^(-2) * ρℳ / bg.ρ_crit
-        )
-    return Φ′,Ψ
-end
+# function get_Φ′_Ψ(u,hierarchy::Hierarchy{T},x) where T
+#     #TODO: can streamline hierarchy and source funcs with this helper function also
+#     k, par, bg, nq = hierarchy.k, hierarchy.par, hierarchy.bg,hierarchy.nq
+#     Ω_r, Ω_b, Ω_c, N_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, bg.H₀^2 #add N_ν≡N_eff
+#     ℋₓ =  bg.ℋ(x)
+#     a = x2a(x)
+#     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+#     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+#     ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+#     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+#                                   Ω_ν * 𝒩[2]
+#                                   + σℳ / bg.ρ_crit /4
+#                                   )
+#     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+#         Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+#         + 4Ω_r * a^(-2) * Θ[0]
+#         + 4Ω_ν * a^(-2) * 𝒩[0]
+#         + a^(-2) * ρℳ / bg.ρ_crit
+#         )
+#     return Φ′,Ψ
+# end
 
 function fft_funcs(x, y, Φ′,Ψ, k,ℋ,q,m,𝕡)
     ϵ = (q^2 .+ exp.(2x)*m^2 ).^(1/2) #sqrt syntax doesn't work w/ bcast but put it back when undo bcast...
@@ -358,7 +356,7 @@ function h_boltsolve_conformal_flex(confhierarchy::ConformalHierarchy{T},#FIXME 
                             (η_ini , η_fin),
                             confhierarchy)
     sol = solve(prob, ode_alg, reltol=reltol,
-    dense=true
+    dense=false
     )
     return sol
 end
@@ -585,7 +583,7 @@ function get_perts(u,ie::IEγν{T},x) where T
     ℋₓ =  bg.ℋ(x)
     a = x2a(x)
     Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, ie) 
+    Θ, Θᵖ, _, _, Φ, δ, _, δ_b, v_b = unpack(u, ie) 
     Θ₂ = ie.sΘ2(x)
     𝒩₀,𝒩₂  = ie.s𝒳₀[1](x),ie.s𝒳₂[1](x)
     ℳ₀,ℳ₂ = zeros(T,nq),zeros(T,nq)
@@ -615,7 +613,7 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
                  ie::IEγν{T},
                  M,x_ini, x_fin,u0,reltol) where T
     𝕡, bg, ih, k, n_q,Nᵧ₁,Nᵧ₂,Nᵧ₃ = ie.par,ie.bg,ie.ih,ie.k,ie.nq,ie.Nᵧ₁,ie.Nᵧ₂,ie.Nᵧ₃ #FIXME get rid of this line
-    ie_k = IEγν(BasicNewtonian(), 𝕡, bg, ih, k,
+    ie_k = IEγν(BasicNewtonian(), 𝕡, bg, ih, k, #FIXME creating another one of these structs when we pass one is probably unnecessary?
             Θ₂_km1,Π_km1,
             𝒳₀_km1,𝒳₂_km1,
             Nᵧ₁,Nᵧ₂,Nᵧ₃,
@@ -638,6 +636,7 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
 
     #photons
     aΘ₂_k,aΠ_k = zeros(N),zeros(N)
+    #FIXME is it okay that the first to elements of the photon arrays are zero?
     for i in 3:N
         aΘ₂_k[i],aΠ_k[i] = g_weight_trapz_ie(i,xgi,ie_k,Φ′,Ψ,Θ₀,Π,v_b)
     end
@@ -647,11 +646,13 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
     #neutrinos
     xx,𝒳₀_k,𝒳₂_k = fft_ie(ie_k,M,u0,perturb_k.t,sΦ′,sΨ) 
     return xx,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k
+    #FIXME all notes in here same for ctime funcs
 end
 
 function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1, 
             cie::ConformalIEγν{T},
              M,x_ini, x_fin,u0,reltol) where T
+    # Set up the structs holding data 
     ie = cie.ie
     𝕡, bg, ih, k, n_q,Nᵧ₁,Nᵧ₂,Nᵧ₃ = ie.par,ie.bg,ie.ih,ie.k,ie.nq,ie.Nᵧ₁,ie.Nᵧ₂,ie.Nᵧ₃ #FIXME get rid of this line
     ie_k = IEγν(BasicNewtonian(), 𝕡, bg, ih, k,
@@ -659,23 +660,38 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
                     𝒳₀_km1,𝒳₂_km1,
                     Nᵧ₁,Nᵧ₂,Nᵧ₃,
                     n_q)
-
     cie_k = ConformalIEγν(ie_k,cie.η2x)
-    perturb_k = boltsolve_conformal_flex(cie_k, bg.η(x_ini), bg.η(x_fin), u0, reltol=reltol)
-    # xgi = x_grid_ie(ie_k,x_ini,x_fin)
+    # Array of time points from the switch up to the final time (ini here means the switch)
     xgi = cie_k.η2x(η_grid_ie(ie_k,bg.η(x_ini),bg.η(x_fin),cie_k.η2x)) #FIXME HACK
     # xgi = cie_k.η2x(range(bg.η(x_ini),bg.η(x_fin),2048)) #Manual uniform eta grid
 
+
+    # solve the truncated hierarchy (in ctime) from the switch time (u0) to the final time
+    perturb_k = boltsolve_conformal_flex(cie_k, bg.η(x_ini), bg.η(x_fin), u0, reltol=reltol)
+
+    # Get metric and photon-relevant perturbation variables
     N = length(xgi)
     Φ′,Ψ,Θ₀,Π,v_b = zeros(N),zeros(N),zeros(N),zeros(N),zeros(N)
     u_all =Array(perturb_k(bg.η(xgi)))
-    # println("axes(u_all,1) = ", axes(u_all,1))
-    # println("size(u_all) = ", size(u_all))
     for (j,u) in enumerate( eachcol(u_all) )
             Φ′[j],Ψ[j],Θ₀[j],Π[j],v_b[j] = get_perts(u,ie_k,xgi[j])
     end
+    println("u_all initial = ", u_all[:,1], ", η = ", bg.η(xgi[1]))
+    println("Φ' initial = ", Φ′[1])
+    println("Φ' 2 = ", Φ′[2])
+    println("Φ' 3 = ", Φ′[3])
 
-    #photons
+    Θi, _, 𝒩i, ℳi, Φi, δi, _, δ_bi, _ = unpack(u_all[:,1], ie_k)  
+
+    println("\nΦ initial = ", Φi)
+    println("δ initial = ", δi)
+    println("δ_b initial = ", δ_bi)
+    println("Θ₀ initial = ", Θi, " ret = ", Θ₀[1])
+    println("Ψ initial = ", Ψ[1])
+    # for neutrinos we have no monopole/quadrupole data
+    # and actually need the spline values
+
+    #Do the IE integral(K trapz scheme) for photon temp. quad and polzn Π; update interpolators
     aΘ₂_k,aΠ_k = zeros(N),zeros(N)
     for i in 3:N
             aΘ₂_k[i],aΠ_k[i] = g_weight_trapz_ie(i,xgi,ie_k,Φ′,Ψ,Θ₀,Π,v_b)
@@ -683,7 +699,7 @@ function iterate(Θ₂_km1,Π_km1, 𝒳₀_km1,𝒳₂_km1,
     Θ₂_k,Π_k = linear_interpolation(xgi,aΘ₂_k), linear_interpolation(xgi,aΠ_k)
     sΦ′,sΨ = linear_interpolation(xgi,Φ′),linear_interpolation(xgi,Ψ)
 
-    #neutrinos
+    #Do the IE integral for the neutrinos (FFT scheme); update interpolators
     xx,𝒳₀_k,𝒳₂_k = fft_ie(ie_k,M,u0,xgi,sΦ′,sΨ)
 
     return xx,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k
@@ -699,7 +715,7 @@ function itersolve(Nₖ::Int,
     xx_k,perturb_k = nothing,nothing
     for k in 1:Nₖ
         xx_k,Θ₂_k,Π_k,𝒳₀_k,𝒳₂_k,perturb_k = iterate(Θ₂_k,Π_k, 𝒳₀_k,𝒳₂_k,
-                                                    cie_0,# ie_0,
+                                                    cie_0,
                                                     M,x_ini,x_fin,u0,
                                                     reltol)
     end
@@ -712,7 +728,7 @@ end
 function get_switch_u0(η,hierarchy_conf,reltol) 
     # This function assumes truncated hierarchies for all neutrinos (but not yet photons)
     hierarchy = hierarchy_conf.hierarchy
-    bg =hierarchy.bg
+    bg,nq =hierarchy.bg, hierarchy.nq
     switch_idx = argmin(abs.(bg.η .-η)) #for now we use the bg to find the switch
     #solve the split ode
     ℓᵧ,ℓ_ν,ℓ_mν,n_q = hierarchy.ℓᵧ,hierarchy.ℓ_ν,hierarchy.ℓ_mν, hierarchy.nq
@@ -723,10 +739,10 @@ function get_switch_u0(η,hierarchy_conf,reltol)
     # Get the new initial conditions
     u0_ie = zeros(2(2) + (0+1) + (0+1)*n_q + 5);
     # The first split for photons
-    u0_ie[1] = sol_early_c.u[end][1]
-    u0_ie[2] = sol_early_c.u[end][2]
-    u0_ie[3] = sol_early_c.u[end][(ℓᵧ+1)+1]
-    u0_ie[4] = sol_early_c.u[end][(ℓᵧ+1)+3]
+    u0_ie[1] = sol_early_c.u[end][1] #T monopole
+    u0_ie[2] = sol_early_c.u[end][2] #T dipole 
+    u0_ie[3] = sol_early_c.u[end][(ℓᵧ+1)+1] #P monopole
+    u0_ie[4] = sol_early_c.u[end][(ℓᵧ+1)+3] #P quadrupole #FIXME is this wrong?
     #set the massless neutrino dipole
     u0_ie[2(2)+1] = sol_early_c.u[end][2(ℓᵧ+1)+2]
 
@@ -739,6 +755,45 @@ function get_switch_u0(η,hierarchy_conf,reltol)
     for i in 1:5 #skip the higher massless hierarchy multipoles
         u0_ie[2(2)+1+n_q+i] = sol_early_c.u[end][pertlen-5+i]
     end
+
+    # Debug:
+    # dummy_spl = 
+    # dummy_sΘ2 = linear_interpolation([0.0,η],[0.0,u0_ie[2]])
+    # dummy_sΠ = dummy_spl
+    # dummy_s𝒳₀ = [dummy_spl for i in 1:hierarchy.nq+1]
+    # dummy_s𝒳₂ = [dummy_spl for i in 1:hierarchy.nq+1]
+    # dummy_ie = IEγν(BasicNewtonian(), hierarchy.par, hierarchy.bg, hierarchy.ih, hierarchy.k, 
+    #                 dummy_sΘ2,dummy_sΠ,
+    #                 dummy_s𝒳₀,dummy_s𝒳₂,
+    #                 300,300,800,
+    #                 hierarchy.nq)
+
+    du0_1,du0_2,du0_3 = zeros(pertlen), zeros(pertlen), zeros(pertlen)
+    hierarchy_conformal!(du0_1, sol_early_c.u[end-1], hierarchy_conf, sol_early_c.t[end-1])
+    # ie_conformal!(du0_2, u0_ie, dummy_ie, η)
+    hierarchy_conformal!(du0_3, sol_early_c.u[end], hierarchy_conf, sol_early_c.t[end])
+
+    Φ′em1= du0_1[end-4] #get_perts(sol_early_c.u[end-1],dummy_ie,sol_early_c.t[end-1])
+    # Φ′e = du0_2[end-4]#get_perts(u0_ie,dummy_ie,η)
+    Φ′e2 = du0_3[end-4]#get_perts(sol_early_c.u[end],dummy_ie,sol_early_c.t[end])
+    println("switching Φ′[end-1] = ", Φ′em1)
+    println("switching Φ′[end] = ", Φ′e2)
+    # println("switching Φ′[end_switch] = ", Φ′e)
+
+    println("\n u0'_pre_switch ", vcat([du0_3[1:2], [du0_3[(ℓᵧ+1)+1],(ℓᵧ+1)+3],
+                                        [du0_3[2(ℓᵧ+1)+2]], 
+                                        du0_3[2(ℓᵧ+1)+(ℓ_ν+1)+n_q+1:2(ℓᵧ+1)+(ℓ_ν+1)+n_q+n_q],
+                                        du0_3[pertlen-4:end]]...) )
+    println("\n u0_pre_switch ", u0_ie, ", η = ", sol_early_c.t[end])
+    println("\n Φ' components:")
+    Θe, _, 𝒩e, ℳe, Φe, δe, _, δ_be, _ = unpack(sol_early_c.u[end], hierarchy)
+    ρℳe, _  =  @views ρ_σ(ℳe[0:nq-1], ℳe[2*nq:3*nq-1], bg, x2a(hierarchy_conf.η2x(sol_early_c.t[end])), hierarchy.par)
+    println("Φ[end] = ", Φe)
+    println("δ[end] = ", δe)
+    println("δ_b[end] = ", δ_be)
+    println("Θ₀[end] = ", Θe[0])
+    println("𝒩₀[end] = ", 𝒩e[0])
+    println("ρℳ[end]/ρ_crit = ", ρℳe/bg.ρ_crit)
+
     return u0_ie
 end
-
