@@ -3,6 +3,7 @@
 abstract type PerturbationIntegrator end
 struct BasicNewtonian <: PerturbationIntegrator end
 
+
 # a container for everything needed to integrate a hierarchy at wavenumber k
 struct Hierarchy{T<:Real, PI<:PerturbationIntegrator, CP<:AbstractCosmoParams{T},
                  BG<:AbstractBackground, IH<:AbstractIonizationHistory, Tk<:Real}
@@ -20,6 +21,11 @@ end
 Hierarchy(integrator::PerturbationIntegrator, par::AbstractCosmoParams, bg::AbstractBackground,
     ih::AbstractIonizationHistory, k::Real, ℓᵧ=8, ℓ_ν=8, ℓ_mν=10, nq=15) = Hierarchy(integrator, par, bg, ih, k, ℓᵧ, ℓ_ν,ℓ_mν, nq)
 
+# wrapper for hierarchy that includes ctime conversion (and enforces type stability on η2x)
+struct ConformalHierarchy{T<:Real,  H <: Hierarchy{T}, IT <: AbstractInterpolation{T}}
+    hierarchy::H
+    η2x::IT
+end
 
 
 function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abstol=1e-6) where T
@@ -32,81 +38,19 @@ function boltsolve(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abs
     return sol
 end
 
-function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
-    #redundant code for what we need to compute RSA perts in place in u
-    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
-    Ω_r, Ω_b, Ω_c, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
-    a = x2a(x)
-    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
-    csb² = ih.csb²(x)
-    ℓ_ν = hierarchy.ℓ_ν
-    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
-    # Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
-
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
-    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
-                                  Ω_ν * 𝒩[2]
-                                  + σℳ / bg.ρ_crit /4
-                                  )
-    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
-        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
-        + 4Ω_r * a^(-2) * Θ[0]
-        + 4Ω_ν * a^(-2) * 𝒩[0]
-        + a^(-2) * ρℳ / bg.ρ_crit
-        )
-
-    #fixed RSA
-    Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-    Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
-                     + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
-    Θ[2] = 0
-    #massless neutrinos
-    𝒩[0] = Φ
-    𝒩[1] = -2ℋₓ/k *Φ′
-    𝒩[2] = 0
-
-    u[1] = Θ[0]
-    u[2] = Θ[1]
-    u[3] = Θ[2]
-
-    u[2(ℓᵧ+1)+1] = 𝒩[0]
-    u[2(ℓᵧ+1)+2] = 𝒩[1]
-    u[2(ℓᵧ+1)+3] = 𝒩[2]
-
-    #zero the rest to avoid future confusion
-    for ℓ in 3:(ℓᵧ)
-        u[ℓ] = 0
-        u[(ℓᵧ+1)+ℓ] = 0
-    end
-    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
-    return nothing
-end
-
-function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6, abstol=1e-6) where T
-    #call solve as usual first
-    perturb = boltsolve(hierarchy, reltol=reltol, abstol=abstol)
-    x_grid = hierarchy.bg.x_grid
-    pertlen = 2(hierarchy.ℓᵧ+1)+(hierarchy.ℓ_ν+1)+(hierarchy.ℓ_mν+1)*hierarchy.nq+5
-    results=zeros(pertlen,length(x_grid))
-    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
-    #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
-    #this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
-
-    xrsa_hor = findfirst(>(240), @. hierarchy.k * hierarchy.bg.η)
-    xrsa_od = findfirst(>(100), @. -hierarchy.ih.τ′*hierarchy.bg.ℋ/hierarchy.bg.η)
-    xrsa_hor = isnothing(xrsa_hor) ? length(x_grid) : xrsa_hor
-    xrsa_od = isnothing(xrsa_hor) ? length(x_grid) : xrsa_od
-
-    this_rsa_switch = x_grid[max(xrsa_hor,xrsa_od)]
-    x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
-    results_rsa = results[:,x_grid.>this_rsa_switch]
-    #(re)-compute the RSA perts so we can write them to the output vector
-    for i in 1:length(x_grid_rsa)
-        rsa_perts!(view(results_rsa,:,i),hierarchy,x_grid_rsa[i]) #to mutate need to use view...
-    end
-    results[:,x_grid.>this_rsa_switch] = results_rsa
-    sol = results
+function boltsolve_conformal(confhierarchy::ConformalHierarchy{T},#FIXME we do't need this? {Hierarchy{T},AbstractInterpolation{T}},
+                         ode_alg=KenCarp4(); reltol=1e-6,abstol=1e-6) where T
+    hierarchy = confhierarchy.hierarchy
+    xᵢ = hierarchy.bg.x_grid[1]#confhierarchy.η2x( hierarchy.bg.η(hierarchy.bg.x_grid[1]) )#η[1] ) #to be consistent
+    u₀ = initial_conditions(xᵢ, hierarchy)
+    prob = ODEProblem{true}(hierarchy_conformal!, u₀, 
+                            (max(hierarchy.bg.η[1],hierarchy.bg.η(hierarchy.bg.x_grid[1])), 
+                            min(hierarchy.bg.η[end],hierarchy.bg.η(hierarchy.bg.x_grid[end]))),
+                            confhierarchy)
+    sol = solve(prob, ode_alg, reltol=reltol,abstol=abstol,
+                # saveat=hierarchy.bg.η, 
+                dense=true
+                )
     return sol
 end
 
@@ -124,37 +68,13 @@ function unpack(u, hierarchy::Hierarchy{T, BasicNewtonian}) where T
     return Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b
 end
 
-function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
-    #Do q integrals to get the massive neutrino metric perturbations
-    #MB eqn (55)
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
-    #^Replace this with bg.ρ_crit? I think it is using an imported function ρ_crit
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-
-    #FIXME: avoid repeating code? and maybe put general integrals in utils?
-    m = par.Σm_ν
-    nq = length(ℳ0) #assume we got this right
-    ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
-    Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    Iσ(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    xq,wq = bg.quad_pts,bg.quad_wts
-    ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
-    σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
-    # #a-dependence has been moved into Einstein eqns, as have consts in σ
-    return ρ,σ
-end
-
-#need a separate function for θ (really(ρ̄+P̄)θ) for plin gauge change
-function θ(ℳ1,bg,a,par::AbstractCosmoParams) #a mess
-    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *bg.ρ_crit *par.Ω_r)^(1/4)
-    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    m = par.Σm_ν
-    nq = length(ℳ1) #assume we got this right
-    Iθ(x) = xq2q(x,logqmin,logqmax)^3  * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    xq,wq = bg.quad_pts,bg.quad_wts
-    θ = 4π*sum(Iθ.(xq).*ℳ1.*wq)
-    #Note that this still needs to be multiplied with ka^-4 prefactor
-    return θ
+function hierarchy_conformal!(du, u, confhierarchy::ConformalHierarchy{T}, η) where T
+    hierarchy = confhierarchy.hierarchy
+    x = confhierarchy.η2x(η)
+    ℋ = hierarchy.bg.ℋ(x)
+    hierarchy!(du, u, hierarchy, x)
+    du .*= ℋ  # account for dx/dη
+    return nothing
 end
 
 # BasicNewtonian comes from Callin+06 and the Dodelson textbook (dispatches on hierarchy.integrator)
@@ -177,21 +97,48 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
 
-
+    # If using RSA, need to update the mono/quadrupole since they feed into metric perts
+    τc = 1/(-τₓ′*ℋₓ)
+    rsa_on = false#(k*ηₓ > 240) &&  (τc/ηₓ>100)
+    if rsa_on
+        Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+        Θ[2] = 0
+        𝒩[0] = Φ
+        𝒩[2] = 0
+    end
+    
     #do the q integrals for massive neutrino perts (monopole and quadrupole)
-    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    ρℳ, σℳ  =  @views ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
     # metric perturbations (00 and ij FRW Einstein eqns)
     Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
                                   Ω_ν * 𝒩[2]#add rel quadrupole
                                   + σℳ / bg.ρ_crit /4
-                                  )
+                                  ) 
 
     Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
         Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
         + 4Ω_r * a^(-2) * Θ[0]
         + 4Ω_ν * a^(-2) * 𝒩[0] #add rel monopole on this line
         + a^(-2) * ρℳ / bg.ρ_crit
-        )
+        ) 
+
+
+    # if ((x<=-19.99 || x>=-0.01) &&  ~(typeof(Φ′) <: ForwardDiff.Dual))
+    #     println("x = ", x)
+    #     println("Φ′ = ", Φ′)
+    #     println("𝒩[0] = ", 𝒩[0])
+    #     println("Θ[0] = ", Θ[0])
+    #     println("𝒩[2] = ", 𝒩[2])
+    #     println("Ψ = ", Ψ)
+    #     println("Ψ components: Θ₂ = $(Θ[2]), 𝒩₂ = $(𝒩[2]), σℳ = $(σℳ)")
+    # end
+
+    # RSA needs to come on first for baryons
+    if rsa_on
+        Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+                         + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
+        𝒩[1] = -2ℋₓ/k *Φ′
+    end
 
     # matter
     δ′ = k / ℋₓ * v - 3Φ′
@@ -200,7 +147,9 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     v_b′ = -v_b - k / ℋₓ * ( Ψ + csb² *  δ_b) + τₓ′ * R * (3Θ[1] + v_b)
 
     # neutrinos (massive, MB 57)
-    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+    # for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+    for i_q in 0:nq-1
+        q = xq2q(bg.quad_pts[i_q+1],logqmin,logqmax)
         ϵ = √(q^2 + (a*m_ν)^2)
         df0 = dlnf0dlnq(q,par)
         #need these factors of 4 on Φ, Ψ terms due to MB pert defn
@@ -213,18 +162,24 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
     end
 
     # RSA equations (implementation of CLASS default switches)
-    rsa_on = (k*ηₓ > 240) &&  (-τₓ′*ℋₓ / ηₓ > 100)
+    # rsa_on = (k*ηₓ > 240) &&  (-τₓ′*ηₓ*ℋₓ<100)
+    #*sqrt(H₀²)< 1) #is this ℋ or H0?
     if rsa_on
         #photons
-        Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
-        Θ[1] = -2Φ′/k + (k^-2)*( τₓ′′ * v_b + τₓ′ * (ℋₓ*v_b - csb² *δ_b/k + k*Φ) )
-        Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
-                         + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
-        Θ[2] = 0
+        # Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+        # Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+        #                  + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
+        # Θ[2] = 0
+
         #massless neutrinos
-        𝒩[0] = Φ
-        𝒩[1] = -2ℋₓ/k *Φ′
-        𝒩[2] = 0
+        # 𝒩[0] = Φ
+        # 𝒩[1] = -2ℋₓ/k *Φ′
+        # 𝒩[2] = 0
+
+        #set polarization to zero
+        Θᵖ[0] = 0
+        Θᵖ[1] = 0
+        Θᵖ[2] = 0
 
         # manual zeroing to avoid saving garbage
         𝒩′[:] = zeros(ℓ_ν+1)
@@ -239,7 +194,7 @@ function hierarchy!(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) where T
         for ℓ in 2:(ℓ_ν-1)
             𝒩′[ℓ] =  k / ((2ℓ+1) * ℋₓ) * ( ℓ*𝒩[ℓ-1] - (ℓ+1)*𝒩[ℓ+1] )
         end
-        #truncation (same between MB and Callin06/Dodelson)
+        #truncation (MB/Dodelson)
         𝒩′[ℓ_ν] =  k / ℋₓ  * 𝒩[ℓ_ν-1] - (ℓ_ν+1)/(ℋₓ *ηₓ) *𝒩[ℓ_ν]
 
 
@@ -275,30 +230,31 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih, hierarchy.nq
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    # q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     ℓ_ν = hierarchy.ℓ_ν
     ℓ_mν =  hierarchy.ℓ_mν
     u = zeros(T, 2(ℓᵧ+1)+(ℓ_ν+1)+(ℓ_mν+1)*nq+5)
-    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ), ih.τ′(xᵢ), ih.τ′′(xᵢ)
+    ℋₓ, ℋₓ′, ηₓ  = bg.ℋ(xᵢ), bg.ℋ′(xᵢ), bg.η(xᵢ)
+    τₓ′, τₓ′′ = ih.τ′(xᵢ), ih.τ′′(xᵢ)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     H₀²,aᵢ² = bg.H₀^2,exp(xᵢ)^2
     aᵢ = sqrt(aᵢ²)
     #These get a 3/3 since massive neutrinos behave as massless at time of ICs
-    Ω_ν =  7*(3/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     f_ν = 1/(1 + 1/(7*(3/3)*par.N_ν/8 *(4/11)^(4/3)))
 
     # metric and matter perturbations
     ℛ = 1.0  # set curvature perturbation to 1
     Φ = (4f_ν + 10) / (4f_ν + 15) * ℛ  # for a mode outside the horizon in radiation era
-    #choosing Φ=1 forces the following value for C, the rest of the ICs follow
     C = -( (15 + 4f_ν)/(20 + 8f_ν) ) * Φ
 
     #trailing (redundant) factors are for converting from MB to Dodelson convention for clarity
     Θ[0] = -40C/(15 + 4f_ν) / 4
-    Θ[1] = 10C/(15 + 4f_ν) * (k^2 * ηₓ) / (3*k)
-    Θ[2] = -8k / (15ℋₓ * τₓ′) * Θ[1]
+    Θ[1] = 10C/(15 + 4f_ν) * (k * ηₓ) / 3 # this was for clarity but wastes  (k^2 * ηₓ) / (3*k)
+    Θ[2] = -8k / (15ℋₓ * τₓ′) * Θ[1] #This is not in MB (and is not strictly consistent)...idea is should be effectively zero since tau' huge early on...
+    
+    #^Numerically this is irrelevant at superhorizon (it is 10⁻⁸𝒩[2]), but allegedly helps with numerics...
     Θᵖ[0] = (5/4) * Θ[2]
-    Θᵖ[1] = -k / (4ℋₓ * τₓ′) * Θ[2]
+    Θᵖ[1] = -k / (4ℋₓ * τₓ′) * Θ[2] 
     Θᵖ[2] = (1/4) * Θ[2]
     for ℓ in 3:ℓᵧ
         Θ[ℓ] = -ℓ/(2ℓ+1) * k/(ℋₓ * τₓ′) * Θ[ℓ-1]
@@ -306,11 +262,12 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
     end
 
     δ = 3/4 *(4Θ[0]) #the 4 converts δγ_MB -> Dodelson convention
-    δ_b = δ
+    δ_b = δ  
     #we have that Θc = Θb = Θγ = Θν, but need to convert Θ = - k v (i absorbed in v)
     v = -3k*Θ[1]
     v_b = v
 
+    
     # neutrino hierarchy
     # we need xᵢ to be before neutrinos decouple, as always
     𝒩[0] = Θ[0]
@@ -322,7 +279,9 @@ function initial_conditions(xᵢ, hierarchy::Hierarchy{T, BasicNewtonian}) where
 
     #massive neutrino hierarchy
     #It is confusing to use Ψℓ bc Ψ is already the metric pert, so will use ℳ
-    for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+    # for (i_q, q) in zip(Iterators.countfrom(0), q_pts)
+    for i_q in 0:nq-1
+        q = xq2q(bg.quad_pts[i_q+1],logqmin,logqmax)
         ϵ = √(q^2 + (aᵢ*par.Σm_ν)^2)
         df0 = dlnf0dlnq(q,par)
         ℳ[0* nq+i_q] = -𝒩[0]  *df0
@@ -352,7 +311,7 @@ function source_function(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wher
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
-    q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    # q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
@@ -394,11 +353,142 @@ function source_function_P(du, u, hierarchy::Hierarchy{T, BasicNewtonian}, x) wh
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     Ω_ν =  7*(2/3)*par.N_ν/8 *(4/11)^(4/3) *par.Ω_r
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    # # q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
+    # Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
+    # Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
+    
     q_pts = xq2q.(bg.quad_pts,logqmin,logqmax)
     Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ are mutable views (see unpack)
     Θ′, Θᵖ′, 𝒩′, ℳ′, Φ′, δ′, v′, δ_b′, v_b′ = unpack(du, hierarchy)
 
-    y = k*(bg.η(bg.x_grid[end]) - bg.η(x))
+    # y = k*(bg.η(bg.x_grid[end]) - bg.η(x))
+    # Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
+    # return (3/(4y^2)) * g̃ₓ * Π 
+    #^jms3 not sure what this is - was in the IE branch...
+
     Π = Θ[2] + Θᵖ[2] + Θᵖ[0]
-    return (3/(4y^2)) * g̃ₓ * Π 
+    return (3/(4k^2)) * g̃ₓ * Π 
+end
+
+function ρ_σ(ℳ0,ℳ2,bg,a,par::AbstractCosmoParams) #a mess
+    #Do q integrals to get the massive neutrino metric perturbations
+    #MB eqn (55)
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    #^Replace this with bg.ρ_crit? I think it is using an imported function ρ_crit
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+
+    #FIXME: avoid repeating code? and maybe put general integrals in utils?
+    m = par.Σm_ν
+    nq = length(ℳ0) #assume we got this right
+    ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
+    Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    Iσ(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    xq,wq = bg.quad_pts,bg.quad_wts
+    # ρ = 4π*sum(Iρ.(xq).*ℳ0.*wq)
+    # σ = 4π*sum(Iσ.(xq).*ℳ2.*wq)
+    ρ,σ=0.0,0.0
+    for i in 1:length(xq)
+        ρ+=Iρ(xq[i])*ℳ0[i]*wq[i] #confusingly, since ℳ0 is a view it starts at 1, not actually offset array...
+        σ+=Iσ(xq[i])*ℳ2[i]*wq[i]
+    end
+
+    # #a-dependence has been moved into Einstein eqns, as have consts in σ
+    return 4π*ρ,4π*σ
+end
+
+#need a separate function for θ (really(ρ̄+P̄)θ) for plin gauge change
+function θ(ℳ1,bg,a,par::AbstractCosmoParams) #a mess
+    Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *bg.ρ_crit *par.Ω_r)^(1/4)
+    logqmin,logqmax=log10(Tν/30),log10(Tν*30)
+    m = par.Σm_ν
+    nq = length(ℳ1) #assume we got this right
+    Iθ(x) = xq2q(x,logqmin,logqmax)^3  * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    xq,wq = bg.quad_pts,bg.quad_wts
+    θ = 4π*sum(Iθ.(xq).*ℳ1.*wq)
+    #Note that this still needs to be multiplied with ka^-4 prefactor
+    return θ
+end
+
+function rsa_perts!(u, hierarchy::Hierarchy{T},x) where T
+    #redundant code for what we need to compute RSA perts in place in u
+    k, ℓᵧ, par, bg, ih, nq = hierarchy.k, hierarchy.ℓᵧ, hierarchy.par, hierarchy.bg, hierarchy.ih,hierarchy.nq
+    Ω_r, Ω_b, Ω_c, N_ν, m_ν, H₀² = par.Ω_r, par.Ω_b, par.Ω_c, par.N_ν, par.Σm_ν, bg.H₀^2 #add N_ν≡N_eff
+    ℋₓ, ℋₓ′, ηₓ, τₓ′, τₓ′′ = bg.ℋ(x), bg.ℋ′(x), bg.η(x), ih.τ′(x), ih.τ′′(x)
+    a = x2a(x)
+    Ω_ν =  7*(2/3)*N_ν/8 *(4/11)^(4/3) *Ω_r
+    csb² = ih.csb²(x)
+    ℓ_ν = hierarchy.ℓ_ν
+    Θ, Θᵖ, 𝒩, ℳ, Φ, δ, v, δ_b, v_b = unpack(u, hierarchy)  # the Θ, Θᵖ, 𝒩 are views (see unpack)
+    # Θ′, Θᵖ′, 𝒩′, ℳ′, _, _, _, _, _ = unpack(du, hierarchy)  # will be sweetened by .. syntax in 1.6
+
+    ρℳ, σℳ  =  ρ_σ(ℳ[0:nq-1], ℳ[2*nq:3*nq-1], bg, a, par) #monopole (energy density, 00 part),quadrupole (shear stress, ij part)
+    Ψ = -Φ - 12H₀² / k^2 / a^2 * (Ω_r * Θ[2]+
+                                  Ω_ν * 𝒩[2]
+                                  + σℳ / bg.ρ_crit /4
+                                  )
+    Φ′ = Ψ - k^2 / (3ℋₓ^2) * Φ + H₀² / (2ℋₓ^2) * (
+        Ω_c * a^(-1) * δ + Ω_b * a^(-1) * δ_b
+        + 4Ω_r * a^(-2) * Θ[0]
+        + 4Ω_ν * a^(-2) * 𝒩[0]
+        + a^(-2) * ρℳ / bg.ρ_crit
+        )
+
+    #fixed RSA
+    Θ[0] = Φ - ℋₓ/k *τₓ′ * v_b
+    Θ[1] = ℋₓ/k * (  -2Φ′ + τₓ′*( Φ - csb²*δ_b  )
+                     + ℋₓ/k*( τₓ′′ - τₓ′ )*v_b  )
+    Θ[2] = 0
+    #massless neutrinos
+    𝒩[0] = Φ
+    𝒩[1] = -2ℋₓ/k *Φ′
+    𝒩[2] = 0
+
+    #set polarization to zero
+    Θᵖ[0] = 0
+    Θᵖ[1] = 0
+    Θᵖ[2] = 0
+
+    u[1] = Θ[0]
+    u[2] = Θ[1]
+    u[3] = Θ[2]
+
+    u[(ℓᵧ+1)+1] = Θᵖ[0]
+    u[(ℓᵧ+1)+2] = Θᵖ[1]
+    u[(ℓᵧ+1)+3] = Θᵖ[2]
+
+    u[2(ℓᵧ+1)+1] = 𝒩[0]
+    u[2(ℓᵧ+1)+2] = 𝒩[1]
+    u[2(ℓᵧ+1)+3] = 𝒩[2]
+
+    #zero the rest to avoid future confusion
+    for ℓ in 3:(ℓᵧ)
+        u[ℓ] = 0
+        u[(ℓᵧ+1)+ℓ] = 0
+    end
+    for ℓ in 3:(ℓ_ν) u[2(ℓᵧ+1)+ℓ] = 0 end
+    return nothing
+end
+
+function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6) where T
+    #call solve as usual first
+    perturb = boltsolve(hierarchy, reltol=reltol)
+    x_grid = hierarchy.bg.x_grid
+    pertlen = 2(hierarchy.ℓᵧ+1)+(hierarchy.ℓ_ν+1)+(hierarchy.ℓ_mν+1)*hierarchy.nq+5
+    results=zeros(pertlen,length(x_grid))
+    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
+    #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
+    # this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
+    #⬇check if we are always outside horizon, if so, then never turn on rsa
+    xrsa_hor =  sum((@. hierarchy.k*hierarchy.bg.η .> 240)) > 0  ? minimum(x_grid[(@. hierarchy.k*hierarchy.bg.η .> 240)]) : x_grid[end]
+    xrsa_od = minimum(x_grid[(@. -hierarchy.ih.τ′*hierarchy.bg.η*hierarchy.bg.ℋ .<100)])
+    this_rsa_switch = max(xrsa_hor,xrsa_od)
+    x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
+    results_rsa = results[:,x_grid.>this_rsa_switch]
+    #(re)-compute the RSA perts so we can write them to the output vector
+    for i in 1:length(x_grid_rsa)
+        rsa_perts!(view(results_rsa,:,i),hierarchy,x_grid_rsa[i]) #to mutate need to use view...
+    end
+    results[:,x_grid.>this_rsa_switch] = results_rsa
+    sol = results
+    return sol
 end

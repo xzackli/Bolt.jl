@@ -15,7 +15,6 @@ struct IonizationHistory{T, IT} <: AbstractIonizationHistory{T, IT}
     g̃′′::IT
     Tmat::IT
     csb²::IT
-    # Trad::IT #This is never used
 end
 
 
@@ -672,7 +671,7 @@ RECFASTredshifts(Nz, zinitial, zfinal) =
     range(zinitial, stop=zfinal, length=Nz+1)[2:end]
 
 function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::AbstractBackground{T}) where
-                           T#{T, ACP<:AbstractCosmoParams, AB<:AbstractBackground}
+                           T
     x_grid = bg.x_grid
     # GRAFT RECFAST ONTO BOLT. TODO: MEGA-REFACTOR ==============
     # Nz = 100000 #add extra two zero for reion otherwise too low res, get wiggles (was spacing of Δz=1)
@@ -701,7 +700,6 @@ function IonizationHistory(𝕣::RECFAST{T}, par::AbstractCosmoParams{T}, bg::Ab
 	ℋ_function = bg.ℋ
     τ, τ′ = τ_functions(x_grid, Xₑ_function, par, ℋ_function)
     g̃ = g̃_function(τ, τ′)
-
     Xₑ_ = spline(Xₑ_function.(x_grid), x_grid)
     τ_ = spline(τ.(x_grid), x_grid)
     g̃_ = spline(g̃.(x_grid), x_grid)

@@ -20,6 +20,7 @@ end
 #background FD phase space
 function f0(q,par::AbstractCosmoParams)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+    # Tν =  (par.N_ν/3)^(1/4) * 0.7166 * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
     gs =  2 #should be 2 for EACH neutrino family (mass eigenstate)
     return gs / (2π)^3 / ( exp(q/Tν) +1)
 end
@@ -34,17 +35,18 @@ function ρP_0(a,par::AbstractCosmoParams,quad_pts,quad_wts)
     #Do q integrals to get the massive neutrino metric perturbations
     #MB eqn (55)
     Tν =  (par.N_ν/3)^(1/4) *(4/11)^(1/3) * (15/ π^2 *ρ_crit(par) *par.Ω_r)^(1/4)
+
     #Not allowed to set Neff=0 o.w. breaks this #FIXME add an error message
     logqmin,logqmax=log10(Tν/30),log10(Tν*30)
     #FIXME: avoid repeating code? and maybe put general integrals in utils?
     m = par.Σm_ν
     ϵx(x, am) = √(xq2q(x,logqmin,logqmax)^2 + (am)^2)
     Iρ(x) = xq2q(x,logqmin,logqmax)^2  * ϵx(x, a*m) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
-    IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
+    # IP(x) = xq2q(x,logqmin,logqmax)^2  * (xq2q(x,logqmin,logqmax)^2 /ϵx(x, a*m)) * f0(xq2q(x,logqmin,logqmax),par) / dxdq(xq2q(x,logqmin,logqmax),logqmin,logqmax)
     xq,wq =quad_pts,quad_wts
     ρ = 4π * a^(-4) * sum(Iρ.(xq).*wq)
-    P = 4π/3 * a^(-4) *sum(IP.(xq).*wq)
-    return ρ,P
+    # P = 4π/3 * a^(-4) *sum(IP.(xq).*wq) # I don't think this is ever used
+    return ρ,nothing #P
 end
 
 #neglect neutrinos, this is for ionization debugging purposes only
@@ -60,7 +62,8 @@ function H_a(a, par::AbstractCosmoParams,quad_pts,quad_wts)
     return H₀(par) * √((par.Ω_c + par.Ω_b ) * a^(-3)
                         + ρ_ν/ρ_crit(par)
                         + par.Ω_r* a^(-4)*(1+(2/3)*(7par.N_ν/8)*(4/11)^(4/3))
-                        + Ω_Λ(par))
+                        + Ω_Λ(par)
+                        )
 end
 # conformal time Hubble parameter, aH
 ℋ_a(a, par::AbstractCosmoParams,quad_pts,quad_wts) = a * H_a(a, par,quad_pts,quad_wts)
@@ -76,21 +79,31 @@ function η(x, par::AbstractCosmoParams,quad_pts,quad_wts)
     return sum(Iη.(quad_pts).*quad_wts)
 end
 
+# neutrino horizon
+function χν(x, q, m, par::AbstractCosmoParams,quad_pts,quad_wts) 
+    # adding m here is a bit annoying but we need the ability to use massless neutrinos
+    logamin,logamax=-13.75,log10(x2a(x)) #0,x2a(x)
+    ϵ(a,q) = √(q^2 + (a*m)^2 )
+    Iχν(y) = 1.0 / (xq2q(y,logamin,logamax) * ℋ_a(xq2q(y,logamin,logamax), par,quad_pts,quad_wts) * ϵ(xq2q(y,logamin,logamax),q)
+                   )/ dxdq(xq2q(y,logamin,logamax),logamin,logamax)
+    return q*sum(Iχν.(quad_pts).*quad_wts)
+end
+
 # now build a Background with these functions
 
 # a background is parametrized on the scalar type T, the interpolator type IT,
 # and a type for the grid GT
-abstract type AbstractBackground{T, IT<:AbstractInterpolation{T,1}, GT} end
+abstract type AbstractBackground{T<:Real, IT<:AbstractInterpolation{T,1}, GT, S<:Real} end
 
-struct Background{T, IT, GT} <: AbstractBackground{T, IT, GT}
+struct Background{T, IT, GT,S} <: AbstractBackground{T, IT, GT, S}
     H₀::T
     η₀::T
     ρ_crit::T
     Ω_Λ::T
 
     x_grid::GT
-    quad_pts::Array{T,1}
-    quad_wts::Array{T,1}
+    quad_pts::AbstractArray{S ,1} #FIXME there is no need for these to have Dual type?
+    quad_wts::AbstractArray{S ,1}
 
     ℋ::IT
     ℋ′::IT
@@ -113,8 +126,10 @@ function Background(par::AbstractCosmoParams{T}; x_grid=-20.0:0.01:0.0, nq=15) w
         T(Ω_Λ(par)),
 
         x_grid,
-        convert(Array{T,1},quad_pts), #explicit call to convert instead of constructor for arrays
-        convert(Array{T,1},quad_wts),
+        # convert(Array{T,1},quad_pts), #explicit call to convert instead of constructor for arrays
+        # convert(Array{T,1},quad_wts),
+        quad_pts,
+        quad_wts,
 
         ℋ_,
         spline_∂ₓ(ℋ_, x_grid),

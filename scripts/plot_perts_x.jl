@@ -9,10 +9,10 @@ using DelimitedFiles
 𝕡 = CosmoParams()
 n_q=15
 logqmin,logqmax = -6,-1
-bg = Background(𝕡; x_grid=-20.0:0.004:0.0, nq=n_q)
+bg = Background(𝕡; x_grid=-20.0:0.01:0.0, nq=n_q)
 𝕣 = Bolt.RECFAST(bg=bg, Yp=𝕡.Y_p, OmegaB=𝕡.Ω_b)
 ih = IonizationHistory(𝕣, 𝕡, bg)
-x_grid = collect(-20:0.004:0.0)
+x_grid = collect(-20:0.01:0.0)
 
 # Choose a k-mode to compare to saved class perturbations at
 k_options = ["p03", "p3", "1p0"] #choose from k = [0.03h/Mpc, 0.3h/Mpc, 1.0h/Mpc]
@@ -71,6 +71,7 @@ end
 #I don't know how to do the DE.jl splining over all the perts at once so this is just an array...
 results_with_rsa = boltsolve_rsa(hierarchy; reltol=reltol)
 
+# writedlm("./test/data/bolt_px_kp03.dat",hcat(x_grid, results_with_rsa'))
 
 #Look at the massless species to check RSA
 

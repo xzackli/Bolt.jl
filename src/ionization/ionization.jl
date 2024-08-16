@@ -124,8 +124,6 @@ end
 function τ′(x, Xₑ_function, par, ℋ_function)
     a = x2a(x)
     return -Xₑ_function(x) * n_H(a, par) * a * σ_T / ℋ_function(x)
-    #FIXME: n_H should include helium??
-    #why not use bg spline? this is the only place "pure" ℋ_a is actually used outside of bg...
 end
 function oldτ′(x, Xₑ_function, par)
     a = x2a(x)
