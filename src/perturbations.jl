@@ -89,7 +89,7 @@ function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,
     x_grid = hierarchy.bg.x_grid
     pertlen = 2(hierarchy.ℓᵧ+1)+(hierarchy.ℓ_ν+1)+(hierarchy.ℓ_mν+1)*hierarchy.nq+5
     results=zeros(pertlen,length(x_grid))
-    for i in 1:length(x_grid) results[:,i] = perturb(x_grid[i]) end
+    for i in eachindex(x_grid) results[:,i] = perturb(x_grid[i]) end
     #replace the late-time perts with RSA approx (assuming we don't change rsa switch)
     #this_rsa_switch = x_grid[argmin(abs.(hierarchy.k .* hierarchy.bg.η.(x_grid) .- 45))]
 
@@ -102,7 +102,7 @@ function boltsolve_rsa(hierarchy::Hierarchy{T}, ode_alg=KenCarp4(); reltol=1e-6,
     x_grid_rsa = x_grid[x_grid.>this_rsa_switch]
     results_rsa = results[:,x_grid.>this_rsa_switch]
     #(re)-compute the RSA perts so we can write them to the output vector
-    for i in 1:length(x_grid_rsa)
+    for i in eachindex(x_grid_rsa)
         rsa_perts!(view(results_rsa,:,i),hierarchy,x_grid_rsa[i]) #to mutate need to use view...
     end
     results[:,x_grid.>this_rsa_switch] = results_rsa

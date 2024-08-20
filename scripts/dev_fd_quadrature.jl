@@ -125,8 +125,8 @@ function ρPold(a,par::AbstractCosmoParams)
     m = par.Σm_ν
     qmin=1e-18
     qmax=1e1
-    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q,par) ,qmin, qmax,rtol=1e-6)[1]
-    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q,par), qmin, qmax,rtol=1e-6)[1]
+    ρ = 4π * a^(-4) * quadgk(q ->  q^2 * √( q^2 + (a*m)^2 ) * f0(q) ,qmin, qmax,rtol=1e-6)[1]
+    P = 4π/3 * a^(-4) * quadgk(q -> q^2 * q^2 /√( q^2 + (a*m)^2) * f0(q), qmin, qmax,rtol=1e-6)[1]
     return ρ,P#,norm
 end
 H₀(par::AbstractCosmoParams) = par.h * km_s_Mpc_100

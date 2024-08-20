@@ -140,10 +140,10 @@ end
     class_eta = bg.η.(class_x)
 
 
-    TOL = 1e-3
-    @test all(abs.(itphibolt.(class_x) ./ itpphiclass.(class_x) .- 1) .< TOL)
-    @test all(abs.(-itdeltbbolt.(class_x) ./ itdeltbclass.(class_x) .- 1) .< TOL)
-    @test all(abs.(itpgambolt.(class_x) ./ itpgambolt.(class_x) .- 1) .< TOL)
+    reltol = 1e-3
+    @test all(abs.(itphibolt.(class_x) ./ itpphiclass.(class_x) .- 1) .< reltol)
+    @test all(abs.(-itdeltbbolt.(class_x) ./ itdeltbclass.(class_x) .- 1) .< reltol)
+    @test all(abs.(itpgambolt.(class_x) ./ itpgambolt.(class_x) .- 1) .< reltol)
 end
 
 @testset "cell_camb_1e-1" begin
@@ -177,9 +177,9 @@ end
     itpee_b = LinearInterpolation(ℓs, @.(ℓfac * Cℓee))
 
     #test line
-    TOL = 1.1e-1
+    reltol = 1.1e-1
     #FIXME should really do this on the finer of the two grids but need to rerun...
-    @test all(abs.(itptt_b.(ℓs)  ./ itptt.(ℓs) .- 1)  .< TOL)
+    @test all(abs.(itptt_b.(ℓs)  ./ itptt.(ℓs) .- 1)  .< reltol)
     # all(abs.(itpte_b.(ℓs)  .- itpte.(ℓs) .- 1)  .< TOL) # zero-crossing will be an issue here, do diff check
-    @test all(abs.(itpee_b.(ℓs)  ./ itpee.(ℓs) .- 1)  .< TOL)
+    @test all(abs.(itpee_b.(ℓs)  ./ itpee.(ℓs) .- 1)  .< reltol)
 end
