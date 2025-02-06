@@ -4,11 +4,11 @@
 # ℓᵧ is the Boltzmann hierarchy cutoff
 
 function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
-        integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
+        integrator::PerturbationIntegrator; ℓᵧ=8, ℓ_ν=8, ℓ_mν=10, nq=15, reltol=1e-11) where T
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
     @qthreads for (i_k, k) in enumerate(k_grid)
-        hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ)
+        hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν, nq)
         perturb = boltsolve(hierarchy; reltol=reltol)
         for (i_x, x) in enumerate(x_grid)
             u = perturb(x)  # this can be optimized away, save timesteps at the grid!
@@ -23,11 +23,11 @@ function source_grid(par::AbstractCosmoParams{T}, bg, ih, k_grid,
 end
 
 function source_grid_P(par::AbstractCosmoParams{T}, bg, ih, k_grid,
-    integrator::PerturbationIntegrator; ℓᵧ=8, reltol=1e-11) where T
+    integrator::PerturbationIntegrator; ℓᵧ=8, ℓ_ν=8, ℓ_mν=10, nq=15, reltol=1e-11) where T
     x_grid = bg.x_grid
     grid = zeros(T, length(x_grid), length(k_grid))
     @qthreads for (i_k, k) in enumerate(k_grid)
-        hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ)
+        hierarchy = Hierarchy(BasicNewtonian(), par, bg, ih, k, ℓᵧ, ℓ_ν, ℓ_mν, nq)
         perturb = boltsolve(hierarchy; reltol=reltol)
         for (i_x, x) in enumerate(x_grid)
             u = perturb(x)  # this can be optimized away, save timesteps at the grid!
